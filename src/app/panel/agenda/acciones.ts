@@ -7,6 +7,7 @@ import { crearSupabaseServidor } from "@/lib/supabase/server";
 import { mensajeDeError } from "@/lib/errores";
 import { localADate } from "@/lib/fechas";
 import { turnosEnRango, type TurnoConDetalle } from "@/lib/datos-panel";
+import { notificarCambioTurno } from "@/lib/email/notificar";
 import {
   datosDeForm,
   erroresDeCampo,
@@ -106,6 +107,7 @@ export async function moverTurno(entrada: z.input<typeof esquemaMoverTurno>): Pr
   if (error) return { error: mensajeDeError(error) };
   if (!data?.length) return { error: "No se pudo mover el turno." };
 
+  await notificarCambioTurno(id, "reprogramado");
   revalidatePath("/panel");
   return { ok: true, mensaje: "Turno movido." };
 }
@@ -130,6 +132,7 @@ export async function cambiarEstadoTurno(entrada: z.input<typeof esquemaEstadoTu
   }
   if (!data?.length) return { error: "No se encontró el turno." };
 
+  if (estado === "cancelado") await notificarCambioTurno(id, "cancelado");
   revalidatePath("/panel", "layout");
   return { ok: true, mensaje: "Turno actualizado." };
 }

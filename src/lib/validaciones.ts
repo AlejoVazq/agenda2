@@ -115,6 +115,7 @@ export const esquemaNegocio = z.object({
     .number()
     .refine((v) => [5, 10, 15, 20, 30, 60].includes(v), "Intervalo inválido"),
   confirmacion_automatica: checkbox,
+  recordatorio_horas: entero(0, 72, "Las horas"),
 });
 
 // --- Servicios y profesionales ---------------------------------------------------------

@@ -1,7 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
+import { enviarEmail } from "@/lib/email/enviar";
+import { emailConfirmacion } from "@/lib/email/plantillas";
+import type { TurnoPublico } from "@/lib/publico";
 import { crearSupabaseServidor } from "@/lib/supabase/server";
 import { mensajeDeError } from "@/lib/errores";
 import { datosDeForm, erroresDeCampo, esquemaConsultaHorarios, esquemaReserva } from "@/lib/validaciones";
@@ -85,6 +89,31 @@ export async function reservar(_prev: EstadoAccion, formData: FormData): Promise
 
   const fila = (data as { turno_id: string; token: string }[] | null)?.[0];
   if (error || !fila) return { error: mensajeDeError(error, "No pudimos tomar la reserva. Probá de nuevo.") };
+
+  // Mail de confirmación después de responder (no demora la reserva).
+  if (d.email) {
+    const para = d.email;
+    const { data: turno } = await supabase.rpc("ver_turno", { p_token: fila.token });
+    if (turno) {
+      const t = turno as TurnoPublico;
+      after(() =>
+        enviarEmail(
+          emailConfirmacion(para, {
+            token: fila.token,
+            inicio: t.inicio,
+            fin: t.fin,
+            cliente: t.cliente,
+            servicio: t.servicio,
+            profesional: t.profesional,
+            precio: t.precio,
+            estado: t.estado,
+            negocio: t.negocio,
+            cancelacion_min_horas: t.cancelacion_min_horas,
+          }),
+        ),
+      );
+    }
+  }
 
   redirect(`/t/${fila.token}?nueva=1`);
 }

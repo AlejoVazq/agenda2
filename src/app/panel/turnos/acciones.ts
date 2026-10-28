@@ -6,6 +6,7 @@ import { sesionParaAccion } from "@/lib/auth";
 import { crearSupabaseServidor } from "@/lib/supabase/server";
 import { mensajeDeError } from "@/lib/errores";
 import { localADate } from "@/lib/fechas";
+import { notificarCambioTurno } from "@/lib/email/notificar";
 import { datosDeForm, erroresDeCampo } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
 
@@ -40,6 +41,7 @@ export async function reprogramarTurno(id: string, _prev: EstadoAccion, formData
     .eq("id", id);
   if (error) return { error: mensajeDeError(error) };
 
+  await notificarCambioTurno(id, "reprogramado");
   revalidatePath(`/panel/turnos/${id}`);
   return { ok: true, mensaje: "Turno reprogramado." };
 }

@@ -109,6 +109,24 @@ export function FormularioNegocio({ negocio, siteUrl }: { negocio: Negocio; site
             </Select>
           </Campo>
         </div>
+        <Campo
+          etiqueta="Recordatorio por mail"
+          htmlFor="recordatorio_horas"
+          errores={e.recordatorio_horas}
+          ayuda="Se envía a los clientes que dejaron su email al reservar."
+        >
+          <Select
+            id="recordatorio_horas"
+            name="recordatorio_horas"
+            defaultValue={valor("recordatorio_horas", negocio.recordatorio_horas)}
+          >
+            {[0, 3, 6, 12, 24, 48].map((h) => (
+              <option key={h} value={h}>
+                {h === 0 ? "No enviar recordatorios" : `Hasta ${h} horas antes`}
+              </option>
+            ))}
+          </Select>
+        </Campo>
         <Casilla
           name="confirmacion_automatica"
           defaultChecked={marcado("confirmacion_automatica", negocio.confirmacion_automatica)}

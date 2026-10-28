@@ -28,6 +28,7 @@ export interface Negocio {
   anticipacion_max_dias: number;
   intervalo_min: number;
   confirmacion_automatica: boolean;
+  recordatorio_horas: number;
   activo: boolean;
 }
 

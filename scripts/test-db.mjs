@@ -453,5 +453,32 @@ await prueba("bloqueos: un bloqueo quita horarios libres", async () => {
   assert.equal(dias.length, 2); // dos lunes en 14 días
 });
 
+await prueba("recordatorios: solo service_role, marca una sola vez", async () => {
+  await como("anon", () => falla(q("select * from public.reclamar_recordatorios()"), /permission denied/, "anon"));
+  await como("ana", () => falla(q("select * from public.reclamar_recordatorios()"), /permission denied/, "dueña"));
+
+  // Turno de mañana (dentro de 24 h), con email y reservado hace rato.
+  const t = await uno(
+    `insert into public.turnos (negocio_id, profesional_id, servicio_id, cliente_id, inicio, fin, created_at)
+     select t.negocio_id, $1, t.servicio_id, t.cliente_id, now() + interval '20 hours', now() + interval '21 hours', now() - interval '2 days'
+     from public.turnos t join public.clientes c on c.id = t.cliente_id
+     where c.email is not null limit 1
+     returning id`,
+    [profEva],
+  );
+  await db.exec("set role service_role");
+  try {
+    const primera = await q("select * from public.reclamar_recordatorios()");
+    assert.ok(primera.some((r) => r.turno_id === t.id));
+    const fila = primera.find((r) => r.turno_id === t.id);
+    assert.equal(fila.email, "lucia@mail.com");
+    assert.equal(fila.negocio, "Salón Ana");
+    const segunda = await q("select * from public.reclamar_recordatorios()");
+    assert.ok(!segunda.some((r) => r.turno_id === t.id));
+  } finally {
+    await db.exec("reset role");
+  }
+});
+
 console.log(`\n${pruebas} pruebas OK`);
 await db.close();
