@@ -39,47 +39,12 @@ input[type="datetime-local"] {
   min-height: 2.75rem;
 }
 
-/* FullCalendar: integración con la paleta. */
-.fc {
-  --fc-border-color: #ece9f3;
-  --fc-today-bg-color: #f6f3ff;
-  --fc-button-bg-color: #ffffff;
-  --fc-button-border-color: #e4e0ee;
-  --fc-button-text-color: #1d1830;
-  --fc-button-hover-bg-color: #f6f3ff;
-  --fc-button-hover-border-color: #dcd3ff;
-  --fc-button-active-bg-color: #7434ee;
-  --fc-button-active-border-color: #7434ee;
-  --fc-now-indicator-color: #f4694c;
-  font-size: 0.875rem;
-}
-.fc .fc-button {
-  border-radius: 0.6rem;
-  font-weight: 600;
-  text-transform: capitalize;
-  box-shadow: none !important;
-}
-.fc .fc-button-primary:not(:disabled).fc-button-active {
-  color: #fff;
-}
-.fc .fc-toolbar-title {
-  font-size: 1.05rem;
-  font-weight: 700;
-  text-transform: capitalize;
-}
-.fc .fc-event {
-  border-radius: 0.45rem;
-  cursor: pointer;
-}
-.fc .fc-col-header-cell-cushion {
-  text-transform: capitalize;
-}
-@media (max-width: 640px) {
-  .fc .fc-toolbar {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-  .fc .fc-toolbar-title {
-    font-size: 0.95rem;
-  }
+/* FullCalendar (tema "forma"): colores de la marca. Más específico que la paleta importada. */
+html:root {
+  --fc-forma-primary: #6322d6;
+  --fc-forma-primary-over: #521db0;
+  --fc-forma-primary-down: #451a8f;
+  --fc-forma-event: #7434ee;
+  --fc-forma-highlight: #7434ee33;
+  --fc-forma-background-event: #a1a1aa;
 }
