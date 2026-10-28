@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { enviarEmail } from "@/lib/email/enviar";
 import { emailConfirmacion } from "@/lib/email/plantillas";
+import { notificarNuevaReserva } from "@/lib/email/notificar";
 import type { TurnoPublico } from "@/lib/publico";
 import { crearSupabaseServidor } from "@/lib/supabase/server";
 import { mensajeDeError } from "@/lib/errores";
@@ -89,6 +90,8 @@ export async function reservar(_prev: EstadoAccion, formData: FormData): Promise
 
   const fila = (data as { turno_id: string; token: string }[] | null)?.[0];
   if (error || !fila) return { error: mensajeDeError(error, "No pudimos tomar la reserva. Probá de nuevo.") };
+
+  notificarNuevaReserva(fila.turno_id);
 
   // Mail de confirmación después de responder (no demora la reserva).
   if (d.email) {

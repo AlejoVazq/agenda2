@@ -42,6 +42,6 @@ function redirigirConCookies(url: URL, base: NextResponse) {
 export const config = {
   matcher: [
     // Todo menos archivos estáticos e imágenes.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

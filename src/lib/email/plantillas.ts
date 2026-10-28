@@ -117,6 +117,36 @@ export function emailCambioPorNegocio(para: string, d: DatosTurnoEmail, tipo: "c
   };
 }
 
+export function emailNuevaReserva(
+  para: string,
+  d: { turnoId: string; inicio: string; cliente: string; telefono: string; servicio: string; profesional: string; pendiente: boolean; negocio: string; zona_horaria: string },
+): Email {
+  const cuando = formatFechaHora(d.inicio, d.zona_horaria);
+  const link = `${env.siteUrl}/panel/turnos/${d.turnoId}`;
+  const filas: [string, string][] = [
+    ["Cliente", d.cliente],
+    ["Celular", d.telefono],
+    ["Servicio", d.servicio],
+    ["Cuándo", cuando],
+    ["Con", d.profesional],
+  ];
+  const html = `<!doctype html><html lang="es"><body style="font-family:Arial,Helvetica,sans-serif;color:#1d1830;background:#f6f3ff;padding:24px 12px">
+  <div style="max-width:480px;margin:auto;background:#fff;border-radius:20px;padding:24px">
+    <p style="margin:0;font-size:13px;font-weight:bold;color:#6322d6">${escapar(d.negocio)}</p>
+    <h1 style="margin:6px 0 16px;font-size:20px">${d.pendiente ? "Nueva reserva para confirmar" : "Nueva reserva online"}</h1>
+    <table style="font-size:14px;width:100%">${filas
+      .map(([k, v]) => `<tr><td style="padding:6px 0;color:#71717a;width:80px">${escapar(k)}</td><td style="padding:6px 0;font-weight:bold">${escapar(v)}</td></tr>`)
+      .join("")}</table>
+    <p style="margin:20px 0 0"><a href="${link}" style="display:inline-block;background:#6322d6;color:#fff;text-decoration:none;font-weight:bold;padding:11px 18px;border-radius:12px">Ver en el panel</a></p>
+  </div></body></html>`;
+  return {
+    para,
+    asunto: `${d.pendiente ? "Reserva para confirmar" : "Nueva reserva"}: ${d.cliente}, ${cuando}`,
+    html,
+    texto: [`${d.negocio}: nueva reserva`, ...filas.map(([k, v]) => `${k}: ${v}`), "", link].join("\n"),
+  };
+}
+
 export function emailRecordatorio(para: string, d: DatosTurnoEmail): Email {
   const { html, texto } = plantilla({
     titulo: "Te recordamos tu turno",
