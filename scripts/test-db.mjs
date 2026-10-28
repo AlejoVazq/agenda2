@@ -5,6 +5,7 @@
 // Uso: npm run test:db
 import { PGlite } from "@electric-sql/pglite";
 import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
+import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -480,5 +481,39 @@ await prueba("recordatorios: solo service_role, marca una sola vez", async () =>
   }
 });
 
-console.log(`\n${pruebas} pruebas OK`);
 await db.close();
+
+// --- seed.sql en una base nueva (con las columnas de auth que usa) ----------------
+await prueba("seed: carga datos demo y el negocio queda reservable", async () => {
+  const s = new PGlite({ extensions: { btree_gist, pgcrypto } });
+  await s.exec(`
+    create schema auth;
+    create schema extensions;
+    create extension pgcrypto with schema extensions;
+    create table auth.users (
+      instance_id uuid, id uuid primary key, aud text, role text, email text, encrypted_password text,
+      email_confirmed_at timestamptz, raw_app_meta_data jsonb, raw_user_meta_data jsonb,
+      created_at timestamptz, updated_at timestamptz, confirmation_token text, recovery_token text,
+      email_change_token_new text, email_change text
+    );
+    create table auth.identities (
+      id uuid primary key, user_id uuid references auth.users, provider_id text, identity_data jsonb,
+      provider text, last_sign_in_at timestamptz, created_at timestamptz, updated_at timestamptz
+    );
+    create function auth.uid() returns uuid language sql stable as
+      $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+    create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
+  `);
+  for (const archivo of readdirSync(MIGRACIONES).filter((f) => f.endsWith(".sql")).sort()) {
+    await s.exec(readFileSync(join(MIGRACIONES, archivo), "utf8"));
+  }
+  await s.exec(readFileSync(join(MIGRACIONES, "..", "seed.sql"), "utf8"));
+  const neg = (await s.query("select public.negocio_publico('estudio-luna') as d")).rows[0].d;
+  assert.equal(neg.servicios.length, 4);
+  assert.equal(neg.profesionales.length, 2);
+  const { ok } = (await s.query("select extensions.crypt('demo1234', encrypted_password) = encrypted_password as ok from auth.users")).rows[0];
+  assert.equal(ok, true);
+  await s.close();
+});
+
+console.log(`\n${pruebas} pruebas OK`);
