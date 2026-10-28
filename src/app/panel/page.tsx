@@ -1,0 +1,170 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Aviso, BotonLink, EncabezadoPagina, Insignia, Tarjeta, Vacio } from "@/components/ui";
+import { BotonCopiar } from "@/components/copiar";
+import { requerirPanel } from "@/lib/auth";
+import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { turnosEnRango } from "@/lib/datos-panel";
+import { env } from "@/lib/env";
+import { fechaLocalISO, formatFechaLarga, formatHora, localADate, sumarDias } from "@/lib/fechas";
+import { ESTADOS_TURNO } from "@/lib/tipos";
+
+export const metadata: Metadata = { title: "Panel" };
+
+export default async function InicioPanel({ searchParams }: PageProps<"/panel">) {
+  const { bienvenida } = await searchParams;
+  const { perfil, negocio, esDueno } = await requerirPanel();
+  const tz = negocio.zona_horaria;
+  const hoy = fechaLocalISO(new Date(), tz);
+
+  const turnosHoy = await turnosEnRango(localADate(hoy, "00:00", tz), localADate(sumarDias(hoy, 1), "00:00", tz));
+  const proximos = await turnosEnRango(localADate(sumarDias(hoy, 1), "00:00", tz), localADate(sumarDias(hoy, 8), "00:00", tz));
+
+  const linkPublico = `${env.siteUrl}/n/${negocio.slug}`;
+
+  // Checklist de configuración (solo dueño).
+  let pasos: { texto: string; hecho: boolean; href: string }[] = [];
+  if (esDueno) {
+    const supabase = await crearSupabaseServidor();
+    const [servicios, profesionales, horarios, asignaciones] = await Promise.all([
+      supabase.from("servicios").select("id", { count: "exact", head: true }).eq("activo", true),
+      supabase.from("profesionales").select("id", { count: "exact", head: true }).eq("activo", true),
+      supabase.from("horarios_profesional").select("id", { count: "exact", head: true }),
+      supabase.from("profesional_servicio").select("servicio_id", { count: "exact", head: true }),
+    ]);
+    pasos = [
+      { texto: "Cargá tus servicios con duración y precio", hecho: (servicios.count ?? 0) > 0, href: "/panel/servicios" },
+      { texto: "Agregá a las personas que atienden", hecho: (profesionales.count ?? 0) > 0, href: "/panel/profesionales" },
+      { texto: "Asigná qué servicios hace cada profesional", hecho: (asignaciones.count ?? 0) > 0, href: "/panel/profesionales" },
+      { texto: "Definí los horarios de atención", hecho: (horarios.count ?? 0) > 0, href: "/panel/profesionales" },
+    ];
+  }
+  const pendientes = pasos.filter((p) => !p.hecho);
+
+  return (
+    <>
+      <EncabezadoPagina
+        titulo={`¡Hola, ${perfil.nombre.split(" ")[0]}!`}
+        descripcion={<span className="capitalize">{formatFechaLarga(new Date(), tz)}</span>}
+        acciones={<BotonLink href="/panel/agenda?nuevo=1">+ Nuevo turno</BotonLink>}
+      />
+
+      {bienvenida ? (
+        <Aviso tipo="exito" className="mb-6">
+          ¡Listo! Tu negocio ya está creado. Completá estos pasos y compartí tu link de reservas.
+        </Aviso>
+      ) : null}
+
+      {esDueno && pendientes.length > 0 ? (
+        <Tarjeta className="mb-6 border-marca-200 bg-marca-50/50">
+          <h2 className="font-bold">Terminá de configurar tu agenda</h2>
+          <p className="mt-0.5 text-sm text-zinc-600">
+            {pasos.length - pendientes.length} de {pasos.length} pasos completos
+          </p>
+          <ul className="mt-4 space-y-2">
+            {pasos.map((p) => (
+              <li key={p.texto}>
+                <Link href={p.href} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5 text-sm hover:bg-marca-50">
+                  <span
+                    className={
+                      p.hecho
+                        ? "grid size-5 place-items-center rounded-full bg-emerald-500 text-[11px] text-white"
+                        : "size-5 rounded-full border-2 border-zinc-300"
+                    }
+                  >
+                    {p.hecho ? "✓" : null}
+                  </span>
+                  <span className={p.hecho ? "text-zinc-500 line-through" : "font-medium"}>{p.texto}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Tarjeta>
+      ) : null}
+
+      <Tarjeta className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Tu link de reservas</p>
+          <a href={linkPublico} target="_blank" className="block truncate text-sm text-marca-700 hover:underline">
+            {linkPublico.replace(/^https?:\/\//, "")}
+          </a>
+        </div>
+        <div className="flex gap-2">
+          <BotonCopiar texto={linkPublico} />
+          <a
+            className="inline-flex h-9 items-center rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700"
+            href={`https://wa.me/?text=${encodeURIComponent(`Reservá tu turno en ${negocio.nombre}: ${linkPublico}`)}`}
+            target="_blank"
+          >
+            Compartir
+          </a>
+        </div>
+      </Tarjeta>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 font-bold">
+            Hoy <Insignia color="violeta">{turnosHoy.length}</Insignia>
+          </h2>
+          {turnosHoy.length === 0 ? (
+            <Vacio titulo="No hay turnos para hoy" />
+          ) : (
+            <ListaTurnos turnos={turnosHoy} tz={tz} />
+          )}
+        </section>
+        <section>
+          <h2 className="mb-3 flex items-center gap-2 font-bold">
+            Próximos 7 días <Insignia>{proximos.length}</Insignia>
+          </h2>
+          {proximos.length === 0 ? (
+            <Vacio titulo="Sin turnos próximos" descripcion="Compartí tu link para empezar a recibir reservas." />
+          ) : (
+            <ListaTurnos turnos={proximos.slice(0, 10)} tz={tz} conFecha />
+          )}
+          {proximos.length > 10 ? (
+            <Link href="/panel/turnos" className="mt-3 inline-block text-sm font-semibold text-marca-700 hover:underline">
+              Ver todos →
+            </Link>
+          ) : null}
+        </section>
+      </div>
+    </>
+  );
+}
+
+function ListaTurnos({
+  turnos,
+  tz,
+  conFecha,
+}: {
+  turnos: Awaited<ReturnType<typeof turnosEnRango>>;
+  tz: string;
+  conFecha?: boolean;
+}) {
+  return (
+    <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+      {turnos.map((t) => (
+        <li key={t.id}>
+          <Link href={`/panel/turnos/${t.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50">
+            <span className="h-10 w-1 shrink-0 rounded-full" style={{ background: t.profesional?.color ?? "#7434ee" }} />
+            <div className="w-14 shrink-0">
+              <p className="font-bold tabular-nums">{formatHora(t.inicio, tz)}</p>
+              {conFecha ? (
+                <p className="text-xs capitalize text-zinc-500">
+                  {new Intl.DateTimeFormat("es-AR", { weekday: "short", day: "numeric", timeZone: tz }).format(new Date(t.inicio))}
+                </p>
+              ) : null}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{t.cliente?.nombre ?? "Cliente"}</p>
+              <p className="truncate text-sm text-zinc-500">
+                {t.servicio?.nombre} · {t.profesional?.nombre}
+              </p>
+            </div>
+            {t.estado === "pendiente" ? <Insignia color="ambar">{ESTADOS_TURNO[t.estado]}</Insignia> : null}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}

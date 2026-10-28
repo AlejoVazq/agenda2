@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+
+  /* Marca: violeta ciruela + acento coral. */
+  --color-marca-50: #f6f3ff;
+  --color-marca-100: #ede8ff;
+  --color-marca-200: #dcd3ff;
+  --color-marca-300: #c2b0ff;
+  --color-marca-400: #a283fd;
+  --color-marca-500: #8656f8;
+  --color-marca-600: #7434ee;
+  --color-marca-700: #6322d6;
+  --color-marca-800: #521db0;
+  --color-marca-900: #451a8f;
+  --color-marca-950: #2a0d61;
+
+  --color-coral-400: #fb8a72;
+  --color-coral-500: #f4694c;
+
+  --color-fondo: #faf9fc;
+  --color-tinta: #1d1830;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-fondo);
+  color: var(--color-tinta);
+}
+
+/* Inputs nativos de fecha/hora un poco más prolijos en móviles. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  min-height: 2.75rem;
+}
+
+/* FullCalendar: integración con la paleta. */
+.fc {
+  --fc-border-color: #ece9f3;
+  --fc-today-bg-color: #f6f3ff;
+  --fc-button-bg-color: #ffffff;
+  --fc-button-border-color: #e4e0ee;
+  --fc-button-text-color: #1d1830;
+  --fc-button-hover-bg-color: #f6f3ff;
+  --fc-button-hover-border-color: #dcd3ff;
+  --fc-button-active-bg-color: #7434ee;
+  --fc-button-active-border-color: #7434ee;
+  --fc-now-indicator-color: #f4694c;
+  font-size: 0.875rem;
+}
+.fc .fc-button {
+  border-radius: 0.6rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  box-shadow: none !important;
+}
+.fc .fc-button-primary:not(:disabled).fc-button-active {
+  color: #fff;
+}
+.fc .fc-toolbar-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.fc .fc-event {
+  border-radius: 0.45rem;
+  cursor: pointer;
+}
+.fc .fc-col-header-cell-cushion {
+  text-transform: capitalize;
+}
+@media (max-width: 640px) {
+  .fc .fc-toolbar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .fc .fc-toolbar-title {
+    font-size: 0.95rem;
+  }
+}
