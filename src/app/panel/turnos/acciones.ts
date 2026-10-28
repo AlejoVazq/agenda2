@@ -35,11 +35,13 @@ export async function reprogramarTurno(id: string, _prev: EstadoAccion, formData
   const inicio = localADate(datos.data.fecha, datos.data.hora, sesion.negocio.zona_horaria);
   const fin = new Date(inicio.getTime() + duracion);
 
-  const { error } = await supabase
+  const { data: actualizados, error } = await supabase
     .from("turnos")
     .update({ inicio: inicio.toISOString(), fin: fin.toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
   if (error) return { error: mensajeDeError(error) };
+  if (!actualizados?.length) return { error: "No tenés permiso para modificar este turno." };
 
   await notificarCambioTurno(id, "reprogramado");
   revalidatePath(`/panel/turnos/${id}`);

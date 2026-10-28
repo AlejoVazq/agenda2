@@ -172,7 +172,12 @@ export function Agenda(props: Props) {
           editable
           selectable
           longPressDelay={350}
-          eventOverlap={(fijo) => fijo.display === "background"}
+          // Solo impide superponer turnos del mismo profesional (la base lo valida igual).
+          eventOverlap={(fijo, movido) =>
+            fijo.display === "background" ||
+            (fijo.extendedProps.evento as EventoAgenda | undefined)?.profesional_id !==
+              (movido?.extendedProps.evento as EventoAgenda | undefined)?.profesional_id
+          }
           events={cargarEventos}
           eventClick={(info) => {
             const ev = info.event.extendedProps.evento as EventoAgenda | undefined;

@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { env } from "@/lib/env";
 
 /**
  * Refresca la sesión de Supabase (si hace falta) y devuelve la respuesta con
@@ -8,9 +9,14 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function actualizarSesion(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  if (!env.supabaseAnonKey) {
+    console.warn("[proxy] Falta NEXT_PUBLIC_SUPABASE_ANON_KEY: copiá .env.example a .env.local (ver README).");
+    return { response, userId: null };
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    env.supabaseUrl,
+    env.supabaseAnonKey,
     {
       cookies: {
         getAll() {
