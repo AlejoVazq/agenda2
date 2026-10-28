@@ -42,6 +42,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
   // Cargar días con disponibilidad al elegir servicio/profesional.
   useEffect(() => {
     if (paso !== "horario" || !servicio) return;
+    let vigente = true; // descarta respuestas de selecciones anteriores
     iniciarDias(async () => {
       const disponibles = await consultarDias({
         negocio_id: negocio.id,
@@ -50,26 +51,32 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
         desde: hoy,
         dias: horizonte,
       });
+      if (!vigente) return;
       setDias(disponibles);
       setFecha((actual) => (actual && disponibles.includes(actual) ? actual : (disponibles[0] ?? null)));
     });
+    return () => {
+      vigente = false;
+    };
   }, [paso, servicio, profesionalId, negocio.id, hoy, horizonte]);
 
   // Cargar horarios del día elegido.
   useEffect(() => {
     if (paso !== "horario" || !servicio || !fecha) return;
+    let vigente = true;
     iniciarHorarios(async () => {
-      setHorarios(
-        await consultarHorarios({
-          negocio_id: negocio.id,
-          servicio_id: servicio.id,
-          profesional_id: profesionalId === CUALQUIERA ? null : profesionalId,
-          fecha,
-        }),
-      );
+      const lista = await consultarHorarios({
+        negocio_id: negocio.id,
+        servicio_id: servicio.id,
+        profesional_id: profesionalId === CUALQUIERA ? null : profesionalId,
+        fecha,
+      });
+      if (vigente) setHorarios(lista);
     });
+    return () => {
+      vigente = false;
+    };
   }, [paso, servicio, profesionalId, fecha, negocio.id]);
-
 
   function elegirServicio(s: ServicioPublico) {
     setServicio(s);
