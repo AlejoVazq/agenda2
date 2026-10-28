@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useTransition, useState } from "react";
-import { BotonEnviar, MensajeAccion } from "@/components/formularios";
+import { useTransition, useState } from "react";
+import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { Boton, Campo, Casilla, Input, Textarea, Aviso } from "@/components/ui";
 import type { EstadoAccion, Servicio } from "@/lib/tipos";
 import { eliminarServicio, guardarServicio } from "./acciones";
@@ -9,13 +9,13 @@ import { eliminarServicio, guardarServicio } from "./acciones";
 const DURACIONES = [15, 20, 30, 45, 60, 75, 90, 120, 150, 180];
 
 export function FormularioServicio({ servicio }: { servicio?: Servicio }) {
-  const [estado, accion] = useActionState(guardarServicio.bind(null, servicio?.id ?? null), {});
+  const { estado, accion, valor, marcado, intento } = useFormulario(guardarServicio.bind(null, servicio?.id ?? null));
 
   return (
-    <form action={accion} className="space-y-5" noValidate>
+    <form key={intento} action={accion} className="space-y-5" noValidate>
       <MensajeAccion estado={estado} />
       <Campo etiqueta="Nombre" htmlFor="nombre" errores={estado.errores?.nombre}>
-        <Input id="nombre" name="nombre" defaultValue={servicio?.nombre} placeholder="Ej: Corte y brushing" required />
+        <Input id="nombre" name="nombre" defaultValue={valor("nombre", servicio?.nombre)} placeholder="Ej: Corte y brushing" required />
       </Campo>
       <div className="grid gap-5 sm:grid-cols-2">
         <Campo etiqueta="Duración (minutos)" htmlFor="duracion_min" errores={estado.errores?.duracion_min}>
@@ -28,7 +28,7 @@ export function FormularioServicio({ servicio }: { servicio?: Servicio }) {
             max={600}
             step={5}
             list="duraciones"
-            defaultValue={servicio?.duracion_min ?? 60}
+            defaultValue={valor("duracion_min", servicio?.duracion_min ?? 60)}
             required
           />
           <datalist id="duraciones">
@@ -45,17 +45,17 @@ export function FormularioServicio({ servicio }: { servicio?: Servicio }) {
             inputMode="decimal"
             min={0}
             step="any"
-            defaultValue={servicio?.precio ?? ""}
+            defaultValue={valor("precio", servicio?.precio)}
             placeholder="10000"
           />
         </Campo>
       </div>
       <Campo etiqueta="Descripción" htmlFor="descripcion" errores={estado.errores?.descripcion} ayuda="Opcional.">
-        <Textarea id="descripcion" name="descripcion" defaultValue={servicio?.descripcion ?? ""} rows={3} />
+        <Textarea id="descripcion" name="descripcion" defaultValue={valor("descripcion", servicio?.descripcion)} rows={3} />
       </Campo>
       <Casilla
         name="activo"
-        defaultChecked={servicio?.activo ?? true}
+        defaultChecked={marcado("activo", servicio?.activo ?? true)}
         etiqueta="Disponible para reservar online"
         descripcion="Si lo desactivás, deja de aparecer en tu página pero se conservan los turnos."
       />

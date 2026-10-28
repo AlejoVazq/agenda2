@@ -1,19 +1,18 @@
 "use client";
 
-import { useActionState } from "react";
 import Link from "next/link";
-import { BotonEnviar, MensajeAccion } from "@/components/formularios";
+import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { Campo, Input } from "@/components/ui";
 import { definirPassword, iniciarSesion, pedirRecuperacion, registrarse } from "./acciones";
 
 export function FormularioLogin({ next }: { next?: string }) {
-  const [estado, accion] = useActionState(iniciarSesion, {});
+  const { estado, accion, valor, intento } = useFormulario(iniciarSesion);
   return (
-    <form action={accion} className="space-y-4" noValidate>
+    <form key={intento} action={accion} className="space-y-4" noValidate>
       <input type="hidden" name="next" value={next ?? "/panel"} />
       <MensajeAccion estado={estado} />
       <Campo etiqueta="Email" htmlFor="email" errores={estado.errores?.email}>
-        <Input id="email" name="email" type="email" autoComplete="email" inputMode="email" required />
+        <Input id="email" name="email" type="email" autoComplete="email" inputMode="email" defaultValue={valor("email")} required />
       </Campo>
       <Campo etiqueta="Contraseña" htmlFor="password" errores={estado.errores?.password}>
         <Input id="password" name="password" type="password" autoComplete="current-password" required />
@@ -31,16 +30,16 @@ export function FormularioLogin({ next }: { next?: string }) {
 }
 
 export function FormularioRegistro() {
-  const [estado, accion] = useActionState(registrarse, {});
+  const { estado, accion, valor, intento } = useFormulario(registrarse);
   if (estado.ok) return <MensajeAccion estado={estado} />;
   return (
-    <form action={accion} className="space-y-4" noValidate>
+    <form key={intento} action={accion} className="space-y-4" noValidate>
       <MensajeAccion estado={estado} />
       <Campo etiqueta="Tu nombre" htmlFor="nombre" errores={estado.errores?.nombre}>
-        <Input id="nombre" name="nombre" autoComplete="name" required />
+        <Input id="nombre" name="nombre" autoComplete="name" defaultValue={valor("nombre")} required />
       </Campo>
       <Campo etiqueta="Email" htmlFor="email" errores={estado.errores?.email}>
-        <Input id="email" name="email" type="email" autoComplete="email" inputMode="email" required />
+        <Input id="email" name="email" type="email" autoComplete="email" inputMode="email" defaultValue={valor("email")} required />
       </Campo>
       <Campo
         etiqueta="Contraseña"
@@ -58,7 +57,7 @@ export function FormularioRegistro() {
 }
 
 export function FormularioPassword() {
-  const [estado, accion] = useActionState(definirPassword, {});
+  const { estado, accion } = useFormulario(definirPassword);
   return (
     <form action={accion} className="space-y-4" noValidate>
       <MensajeAccion estado={estado} />
@@ -76,7 +75,7 @@ export function FormularioPassword() {
 }
 
 export function FormularioRecuperar() {
-  const [estado, accion] = useActionState(pedirRecuperacion, {});
+  const { estado, accion } = useFormulario(pedirRecuperacion);
   if (estado.ok) return <MensajeAccion estado={estado} />;
   return (
     <form action={accion} className="space-y-4" noValidate>

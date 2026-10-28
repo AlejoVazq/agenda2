@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
-import { BotonEnviar, MensajeAccion } from "@/components/formularios";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { Aviso, Campo, Input, cx } from "@/components/ui";
 import { formatDuracion, formatFechaISO, formatFechaLarga, formatHora, formatPrecio, sumarDias } from "@/lib/fechas";
 import type { NegocioPublico, ServicioPublico } from "@/lib/publico";
@@ -23,7 +23,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
   const [cargandoDias, iniciarDias] = useTransition();
   const [cargandoHorarios, iniciarHorarios] = useTransition();
   const [avisoHorario, setAvisoHorario] = useState<string | null>(null);
-  const [estado, accion] = useActionState(async (prev: EstadoAccion, formData: FormData) => {
+  const { estado, accion, valor, intento } = useFormulario(async (prev: EstadoAccion, formData: FormData) => {
     const resultado = await reservar(prev, formData);
     // Si otro cliente tomó el horario un instante antes, volver a elegir.
     if (resultado.error?.includes("horario")) {
@@ -33,7 +33,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
       setPaso("horario");
     }
     return resultado;
-  }, {});
+  });
 
   const nombresProf = useMemo(() => new Map(negocio.profesionales.map((p) => [p.id, p.nombre])), [negocio]);
   const profesionalesDelServicio = (servicio?.profesional_ids ?? []).filter((id) => nombresProf.has(id));
@@ -261,14 +261,14 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
             Tus datos
           </h2>
           <p className="mb-4 text-sm text-zinc-600">No hace falta crear una cuenta.</p>
-          <form action={accion} className="space-y-4" noValidate>
+          <form key={intento} action={accion} className="space-y-4" noValidate>
             <input type="hidden" name="negocio_id" value={negocio.id} />
             <input type="hidden" name="servicio_id" value={servicio.id} />
             <input type="hidden" name="profesional_id" value={profesionalId} />
             <input type="hidden" name="inicio" value={horario.inicio} />
             {estado.error?.includes("horario") ? null : <MensajeAccion estado={estado} />}
             <Campo etiqueta="Nombre y apellido" htmlFor="nombre" errores={estado.errores?.nombre}>
-              <Input id="nombre" name="nombre" autoComplete="name" required />
+              <Input id="nombre" name="nombre" autoComplete="name" defaultValue={valor("nombre")} required />
             </Campo>
             <Campo
               etiqueta="Celular"
@@ -276,7 +276,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
               errores={estado.errores?.telefono}
               ayuda="Con código de área, sin 0 ni 15. Ej: 341 555 1234"
             >
-              <Input id="telefono" name="telefono" type="tel" inputMode="tel" autoComplete="tel" required />
+              <Input id="telefono" name="telefono" type="tel" inputMode="tel" autoComplete="tel" defaultValue={valor("telefono")} required />
             </Campo>
             <Campo
               etiqueta="Email"
@@ -284,7 +284,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
               errores={estado.errores?.email}
               ayuda="Opcional. Para enviarte la confirmación y recordatorios."
             >
-              <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" />
+              <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" defaultValue={valor("email")} />
             </Campo>
             <BotonEnviar tamano="lg" className="w-full" pendiente="Reservando…">
               Confirmar turno

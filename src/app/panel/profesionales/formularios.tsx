@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { BotonEnviar, MensajeAccion } from "@/components/formularios";
+import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { Aviso, Boton, Campo, Casilla, Input, cx } from "@/components/ui";
 import { formatDuracion } from "@/lib/fechas";
 import { DIAS_SEMANA, type EstadoAccion, type Horario, type Profesional, type Servicio } from "@/lib/tipos";
@@ -10,17 +10,17 @@ import { eliminarProfesional, guardarHorarios, guardarProfesional, guardarServic
 const COLORES = ["#7434ee", "#0d9488", "#e11d48", "#ea580c", "#2563eb", "#ca8a04", "#9333ea", "#16a34a"];
 
 export function FormularioProfesional({ profesional }: { profesional?: Profesional }) {
-  const [estado, accion] = useActionState(guardarProfesional.bind(null, profesional?.id ?? null), {});
+  const { estado, accion, valor, marcado, intento } = useFormulario(guardarProfesional.bind(null, profesional?.id ?? null));
   const [color, setColor] = useState(profesional?.color ?? COLORES[0]);
 
   return (
-    <form action={accion} className="space-y-5" noValidate>
+    <form key={intento} action={accion} className="space-y-5" noValidate>
       <MensajeAccion estado={estado} />
       <Campo etiqueta="Nombre" htmlFor="nombre" errores={estado.errores?.nombre}>
-        <Input id="nombre" name="nombre" defaultValue={profesional?.nombre} placeholder="Ej: Mica" required />
+        <Input id="nombre" name="nombre" defaultValue={valor("nombre", profesional?.nombre)} placeholder="Ej: Mica" required />
       </Campo>
       <Campo etiqueta="Email" htmlFor="email" errores={estado.errores?.email} ayuda="Opcional. Para avisos internos.">
-        <Input id="email" name="email" type="email" inputMode="email" defaultValue={profesional?.email ?? ""} />
+        <Input id="email" name="email" type="email" inputMode="email" defaultValue={valor("email", profesional?.email)} />
       </Campo>
       <fieldset>
         <legend className="mb-2 text-sm font-medium text-zinc-700">Color en la agenda</legend>
@@ -44,7 +44,7 @@ export function FormularioProfesional({ profesional }: { profesional?: Profesion
       </fieldset>
       <Casilla
         name="activo"
-        defaultChecked={profesional?.activo ?? true}
+        defaultChecked={marcado("activo", profesional?.activo ?? true)}
         etiqueta="Recibe turnos online"
         descripcion="Si lo desactivás, no aparece en tu página de reservas."
       />

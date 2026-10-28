@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
-import { BotonEnviar, MensajeAccion } from "@/components/formularios";
+import { useTransition } from "react";
+import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { Campo, Input, Select } from "@/components/ui";
 import type { Profesional } from "@/lib/tipos";
 import { crearBloqueo, eliminarBloqueo } from "./acciones";
@@ -15,16 +15,16 @@ export function FormularioBloqueo({
   fijo?: string;
   hoy: string;
 }) {
-  const [estado, accion] = useActionState(crearBloqueo, {});
+  const { estado, accion, valor, intento } = useFormulario(crearBloqueo);
   const e = estado.errores ?? {};
   return (
-    <form action={accion} className="space-y-4" noValidate>
+    <form key={intento} action={accion} className="space-y-4" noValidate>
       <MensajeAccion estado={estado} />
       {fijo ? (
         <input type="hidden" name="profesional_id" value={fijo} />
       ) : (
         <Campo etiqueta="Profesional" htmlFor="profesional_id" errores={e.profesional_id}>
-          <Select id="profesional_id" name="profesional_id" required>
+          <Select id="profesional_id" name="profesional_id" defaultValue={valor("profesional_id", profesionales[0]?.id)} required>
             {profesionales.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.nombre}
@@ -35,14 +35,14 @@ export function FormularioBloqueo({
       )}
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo etiqueta="Desde" htmlFor="desde" errores={e.desde}>
-          <Input id="desde" name="desde" type="datetime-local" defaultValue={`${hoy}T09:00`} required />
+          <Input id="desde" name="desde" type="datetime-local" defaultValue={valor("desde", `${hoy}T09:00`)} required />
         </Campo>
         <Campo etiqueta="Hasta" htmlFor="hasta" errores={e.hasta}>
-          <Input id="hasta" name="hasta" type="datetime-local" defaultValue={`${hoy}T20:00`} required />
+          <Input id="hasta" name="hasta" type="datetime-local" defaultValue={valor("hasta", `${hoy}T20:00`)} required />
         </Campo>
       </div>
       <Campo etiqueta="Motivo" htmlFor="motivo" errores={e.motivo} ayuda="Opcional. No lo ven los clientes.">
-        <Input id="motivo" name="motivo" placeholder="Vacaciones, trámite, capacitación…" />
+        <Input id="motivo" name="motivo" defaultValue={valor("motivo")} placeholder="Vacaciones, trámite, capacitación…" />
       </Campo>
       <BotonEnviar>Guardar ausencia</BotonEnviar>
     </form>

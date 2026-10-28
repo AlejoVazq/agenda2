@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { BotonEnviar, MensajeAccion } from "@/components/formularios";
+import { useState } from "react";
+import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { Campo, Casilla, Input, Select } from "@/components/ui";
 import { RUBROS } from "@/lib/tipos";
 import { crearNegocio } from "./acciones";
@@ -9,7 +9,7 @@ import { crearNegocio } from "./acciones";
 export function slugDesde(texto: string) {
   return texto
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
@@ -17,13 +17,13 @@ export function slugDesde(texto: string) {
 }
 
 export function FormularioOnboarding({ nombreUsuario, siteUrl }: { nombreUsuario: string; siteUrl: string }) {
-  const [estado, accion] = useActionState(crearNegocio, {});
+  const { estado, accion, valor, marcado, intento } = useFormulario(crearNegocio);
   const [nombre, setNombre] = useState("");
   const [slug, setSlug] = useState("");
   const [slugEditado, setSlugEditado] = useState(false);
 
   return (
-    <form action={accion} className="space-y-5" noValidate>
+    <form key={intento} action={accion} className="space-y-5" noValidate>
       <MensajeAccion estado={estado} />
 
       <Campo etiqueta="Nombre del negocio" htmlFor="nombre" errores={estado.errores?.nombre}>
@@ -70,7 +70,7 @@ export function FormularioOnboarding({ nombreUsuario, siteUrl }: { nombreUsuario
       </Campo>
 
       <Campo etiqueta="Rubro" htmlFor="rubro" errores={estado.errores?.rubro}>
-        <Select id="rubro" name="rubro" defaultValue="peluqueria">
+        <Select id="rubro" name="rubro" defaultValue={valor("rubro", "peluqueria")}>
           {Object.entries(RUBROS).map(([valor, texto]) => (
             <option key={valor} value={valor}>
               {texto}
@@ -81,20 +81,20 @@ export function FormularioOnboarding({ nombreUsuario, siteUrl }: { nombreUsuario
 
       <div className="grid gap-5 sm:grid-cols-2">
         <Campo etiqueta="Teléfono / WhatsApp" htmlFor="telefono" errores={estado.errores?.telefono} ayuda="Opcional">
-          <Input id="telefono" name="telefono" type="tel" inputMode="tel" placeholder="341 555 1234" />
+          <Input id="telefono" name="telefono" type="tel" inputMode="tel" placeholder="341 555 1234" defaultValue={valor("telefono")} />
         </Campo>
         <Campo etiqueta="Dirección" htmlFor="direccion" errores={estado.errores?.direccion} ayuda="Opcional">
-          <Input id="direccion" name="direccion" placeholder="Calle 123" />
+          <Input id="direccion" name="direccion" placeholder="Calle 123" defaultValue={valor("direccion")} />
         </Campo>
       </div>
 
       <Campo etiqueta="Tu nombre" htmlFor="nombre_dueno" errores={estado.errores?.nombre_dueno}>
-        <Input id="nombre_dueno" name="nombre_dueno" defaultValue={nombreUsuario} required />
+        <Input id="nombre_dueno" name="nombre_dueno" defaultValue={valor("nombre_dueno", nombreUsuario)} required />
       </Campo>
 
       <Casilla
         name="dueno_atiende"
-        defaultChecked
+        defaultChecked={marcado("dueno_atiende", true)}
         etiqueta="Yo también atiendo clientes"
         descripcion="Te agregamos como profesional para que puedas recibir turnos. Lo podés cambiar después."
       />

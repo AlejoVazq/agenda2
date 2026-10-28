@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
-import { BotonEnviar, MensajeAccion } from "@/components/formularios";
+import { useState, useTransition } from "react";
+import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { BotonCopiar } from "@/components/copiar";
 import { Aviso, Boton, Campo, Input, Select } from "@/components/ui";
 import type { Profesional } from "@/lib/tipos";
@@ -29,17 +29,17 @@ function LinkGenerado({ estado }: { estado: EstadoInvitacion }) {
 }
 
 export function FormularioInvitacion({ profesionales }: { profesionales: Pick<Profesional, "id" | "nombre">[] }) {
-  const [estado, accion] = useActionState(invitarEmpleado, {});
+  const { estado, accion, valor, intento } = useFormulario(invitarEmpleado);
   const e = estado.errores ?? {};
   return (
-    <form action={accion} className="space-y-4" noValidate>
+    <form key={intento} action={accion} className="space-y-4" noValidate>
       <LinkGenerado estado={estado} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo etiqueta="Nombre" htmlFor="inv-nombre" errores={e.nombre}>
-          <Input id="inv-nombre" name="nombre" required />
+          <Input id="inv-nombre" name="nombre" defaultValue={valor("nombre")} required />
         </Campo>
         <Campo etiqueta="Email" htmlFor="inv-email" errores={e.email}>
-          <Input id="inv-email" name="email" type="email" inputMode="email" required />
+          <Input id="inv-email" name="email" type="email" inputMode="email" defaultValue={valor("email")} required />
         </Campo>
       </div>
       <Campo
