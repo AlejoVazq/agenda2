@@ -481,6 +481,188 @@ await prueba("recordatorios: solo service_role, marca una sola vez", async () =>
   }
 });
 
+// --- Fases 5 y 6: seña, integraciones, Google, límites, estadísticas, WhatsApp ---
+async function comoServicio(fn) {
+  await db.exec("set role service_role");
+  try {
+    return await fn();
+  } finally {
+    await db.exec("reset role");
+  }
+}
+const servicio = (sql, params) => comoServicio(() => q(sql, params));
+const libresAna = () =>
+  como("anon", () => q("select * from public.horarios_libres($1, $2, $3::date, $4)", [negA, servA, lunes, profAna]));
+
+await prueba("seña: sin Mercado Pago conectado no se pide seña", async () => {
+  await q("update public.negocios set sena_tipo = 'porcentaje', sena_valor = 50 where id = $1", [negA]);
+  const data = await como("anon", async () => (await uno("select public.negocio_publico('salon-ana') as d")).d);
+  assert.equal(data.servicios[0].sena, null);
+});
+
+let mpA;
+await prueba("seña: con Mercado Pago, la reserva queda retenida y se confirma al pagar", async () => {
+  mpA = (
+    await uno("insert into public.integraciones (negocio_id, proveedor, estado) values ($1, 'mercadopago', 'activa') returning id", [negA])
+  ).id;
+  const data = await como("anon", async () => (await uno("select public.negocio_publico('salon-ana') as d")).d);
+  assert.equal(Number(data.servicios[0].sena), 4000);
+
+  const slot = (await libresAna()).at(-1);
+  const r = await como("anon", () =>
+    uno("select * from public.crear_reserva($1, $2, $3, $4, 'Pagadora', '1150001111', null)", [negA, servA, profAna, slot.inicio]),
+  );
+  assert.equal(Number(r.sena), 4000);
+  const t = await uno("select * from public.turnos where id = $1", [r.turno_id]);
+  assert.equal(t.estado, "pendiente");
+  assert.equal(t.pago_estado, "pendiente");
+  assert.ok(t.pago_vence_at);
+
+  await como("anon", () => falla(q("select public.registrar_pago($1, 'x', true, 4000)", [r.turno_id]), /permission denied/, "anon"));
+  await como("ana", () => falla(q("select public.registrar_pago($1, 'x', true, 4000)", [r.turno_id]), /permission denied/, "dueña"));
+  assert.equal((await servicio("select public.registrar_pago($1, 'p1', true, 4000) as r", [r.turno_id]))[0].r, "confirmado");
+  assert.equal((await servicio("select public.registrar_pago($1, 'p1', true, 4000) as r", [r.turno_id]))[0].r, "ya_procesado");
+  const pagado = await uno("select estado, pago_estado, pago_id from public.turnos where id = $1", [r.turno_id]);
+  assert.deepEqual({ ...pagado }, { estado: "confirmado", pago_estado: "aprobado", pago_id: "p1" });
+});
+
+await prueba("seña: si vence se libera el horario; un pago tardío lo recupera si sigue libre", async () => {
+  const slot = (await libresAna()).at(-1);
+  const r = await como("anon", () =>
+    uno("select * from public.crear_reserva($1, $2, $3, $4, 'Tardía', '1150002222', null)", [negA, servA, profAna, slot.inicio]),
+  );
+  assert.ok(!(await libresAna()).some((s) => +s.inicio === +slot.inicio));
+  await q("update public.turnos set pago_vence_at = now() - interval '1 minute' where id = $1", [r.turno_id]);
+  assert.ok((await libresAna()).some((s) => +s.inicio === +slot.inicio), "el horario vencido vuelve a estar libre");
+  const visto = await como("anon", async () => (await uno("select public.ver_turno($1) as d", [r.token])).d);
+  assert.equal(visto.pago_estado, "vencido");
+
+  assert.equal((await servicio("select public.vencer_pagos_pendientes() as n"))[0].n, 1);
+  const vencido = await uno("select estado, cancelado_por, pago_estado from public.turnos where id = $1", [r.turno_id]);
+  assert.deepEqual({ ...vencido }, { estado: "cancelado", cancelado_por: "sistema", pago_estado: "vencido" });
+
+  assert.equal((await servicio("select public.registrar_pago($1, 'p2', true, 4000) as r", [r.turno_id]))[0].r, "confirmado");
+  const recuperado = await uno("select estado, pago_estado from public.turnos where id = $1", [r.turno_id]);
+  assert.deepEqual({ ...recuperado }, { estado: "confirmado", pago_estado: "aprobado" });
+});
+
+await prueba("seña: pago tardío con el horario ya tomado queda para reembolsar; monto menor también", async () => {
+  const slot = (await libresAna()).at(-1);
+  const r = await como("anon", () =>
+    uno("select * from public.crear_reserva($1, $2, $3, $4, 'Lenta', '1150003333', null)", [negA, servA, profAna, slot.inicio]),
+  );
+  await q("update public.turnos set pago_vence_at = now() - interval '1 minute' where id = $1", [r.turno_id]);
+  // Otra persona reserva el mismo horario (crear_reserva libera la retención vencida).
+  const otra = await como("anon", () =>
+    uno("select * from public.crear_reserva($1, $2, $3, $4, 'Rápida', '1150004444', null)", [negA, servA, profAna, slot.inicio]),
+  );
+  assert.ok(otra.turno_id);
+  assert.equal((await servicio("select public.registrar_pago($1, 'p3', true, 4000) as r", [r.turno_id]))[0].r, "reembolsar");
+  assert.equal((await servicio("select public.registrar_pago($1, 'p4', true, 100) as r", [otra.turno_id]))[0].r, "reembolsar");
+  assert.equal((await servicio("select public.registrar_pago($1, 'p5', false, 4000) as r", [otra.turno_id]))[0].r, "ya_procesado");
+  await q("update public.negocios set sena_tipo = 'ninguna' where id = $1", [negA]);
+});
+
+await prueba("integraciones: secretos inaccesibles; empleada ve solo su Google", async () => {
+  const gEva = (
+    await uno(
+      "insert into public.integraciones (negocio_id, profesional_id, proveedor, estado) values ($1, $2, 'google_calendar', 'activa') returning id",
+      [negA, profEva],
+    )
+  ).id;
+  await q("insert into public.integraciones_secretos (integracion_id, datos) values ($1, 'cifrado'), ($2, 'cifrado')", [gEva, mpA]);
+  for (const u of ["ana", "eva", "anon"]) {
+    await como(u, () => falla(q("select * from public.integraciones_secretos"), /permission denied/, `secretos ${u}`));
+  }
+  const deEva = await como("eva", () => q("select proveedor from public.integraciones"));
+  assert.deepEqual(deEva.map((i) => i.proveedor), ["google_calendar"]);
+  const deAna = await como("ana", () => q("select proveedor from public.integraciones order by proveedor"));
+  assert.deepEqual(deAna.map((i) => i.proveedor), ["google_calendar", "mercadopago"]);
+  assert.equal((await como("beto", () => q("select * from public.integraciones"))).length, 0);
+  await como("ana", () =>
+    falla(q("insert into public.integraciones (negocio_id, proveedor) values ($1, 'whatsapp')", [negA]), /permission denied/, "insert"),
+  );
+  await falla(
+    q("insert into public.integraciones (negocio_id, proveedor, profesional_id) values ($1, 'google_calendar', $2)", [negA, profEva]),
+    /integraciones_unica/,
+    "duplicada",
+  );
+});
+
+await prueba("google: cola de sincronización por versión", async () => {
+  const cola = await servicio("select * from public.turnos_para_sincronizar()");
+  const deEva = await q("select id from public.turnos where profesional_id = $1 and fin > now()", [profEva]);
+  assert.ok(deEva.length > 0);
+  for (const t of deEva) assert.ok(cola.some((c) => c.turno_id === t.id));
+  const turnosAna = (await q("select id from public.turnos where profesional_id = $1", [profAna])).map((t) => t.id);
+  assert.ok(!cola.some((c) => turnosAna.includes(c.turno_id)), "Ana no tiene Google conectado");
+
+  const [primero] = cola;
+  await servicio("select public.marcar_sincronizado_google($1, $2, 'ev1', $3)", [primero.turno_id, primero.version, profEva]);
+  let nueva = await servicio("select * from public.turnos_para_sincronizar()");
+  assert.ok(!nueva.some((c) => c.turno_id === primero.turno_id));
+
+  await q("update public.turnos set notas = 'cambio' where id = $1", [primero.turno_id]);
+  nueva = await servicio("select * from public.turnos_para_sincronizar()");
+  assert.ok(nueva.some((c) => c.turno_id === primero.turno_id));
+  // Versión vieja: guarda el evento pero sigue en la cola.
+  await servicio("select public.marcar_sincronizado_google($1, $2, 'ev2', $3)", [primero.turno_id, primero.version, profEva]);
+  nueva = await servicio("select * from public.turnos_para_sincronizar()");
+  assert.ok(nueva.some((c) => c.turno_id === primero.turno_id));
+  assert.equal((await uno("select google_event_id from public.turnos where id = $1", [primero.turno_id])).google_event_id, "ev2");
+  await como("ana", () => falla(q("select * from public.turnos_para_sincronizar()"), /permission denied/, "dueña"));
+});
+
+await prueba("google: ocupados importados reemplazan solo los de Google", async () => {
+  const manuales = Number((await uno("select count(*) as n from public.bloqueos where profesional_id = $1", [profEva])).n);
+  const base = (await uno("select (($1::date + 2 + time '10:00') at time zone 'America/Argentina/Buenos_Aires') as t", [lunes])).t;
+  const h = (n) => new Date(+base + n * 3_600_000).toISOString();
+  const ocupados = JSON.stringify([
+    { inicio: h(0), fin: h(1) },
+    { inicio: h(3), fin: h(4) },
+    { inicio: h(5), fin: h(5) },
+  ]);
+  const desde = new Date(+base - 86_400_000).toISOString();
+  const hasta = new Date(+base + 86_400_000).toISOString();
+  assert.equal((await servicio("select public.reemplazar_bloqueos_google($1, $2, $3, $4) as n", [profEva, desde, hasta, ocupados]))[0].n, 2);
+  await servicio("select public.reemplazar_bloqueos_google($1, $2, $3, $4)", [
+    profEva,
+    desde,
+    hasta,
+    JSON.stringify([{ inicio: h(0), fin: h(2) }]),
+  ]);
+  const google = await q("select * from public.bloqueos where profesional_id = $1 and origen = 'google'", [profEva]);
+  assert.equal(google.length, 1);
+  const quedan = Number((await uno("select count(*) as n from public.bloqueos where profesional_id = $1 and origen = 'manual'", [profEva])).n);
+  assert.equal(quedan, manuales);
+});
+
+await prueba("límites de uso: corta al superar el máximo de la ventana", async () => {
+  const r = [];
+  for (let i = 0; i < 3; i++) r.push((await servicio("select public.consumir_limite('ip:1', 2, 60) as ok"))[0].ok);
+  assert.deepEqual(r, [true, true, false]);
+  await como("anon", () => falla(q("select public.consumir_limite('x', 1, 60)"), /permission denied/, "anon"));
+});
+
+await prueba("estadísticas: solo la dueña, con totales del período", async () => {
+  const e = await como("ana", async () =>
+    (await uno("select public.estadisticas_negocio(now() - interval '30 days', now() + interval '60 days') as e")).e,
+  );
+  assert.ok(e.total > 0);
+  assert.ok(Number(e.ingresos) > 0);
+  assert.ok(e.por_servicio.length >= 1);
+  assert.equal(Number(e.senas), 8000);
+  await como("eva", () => falla(q("select public.estadisticas_negocio(now(), now())"), /SIN_PERMISO/, "empleada"));
+});
+
+await prueba("whatsapp: recordatorios con marca propia", async () => {
+  await q("update public.negocios set whatsapp_avisos = true where id = $1", [negA]);
+  const primera = await servicio("select * from public.reclamar_recordatorios_whatsapp()");
+  assert.ok(primera.length >= 1);
+  assert.match(primera[0].telefono, /^\d+$/);
+  assert.equal((await servicio("select * from public.reclamar_recordatorios_whatsapp()")).length, 0);
+});
+
 await db.close();
 
 // --- seed.sql en una base nueva (con las columnas de auth que usa) ----------------
