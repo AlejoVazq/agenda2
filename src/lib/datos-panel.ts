@@ -1,6 +1,6 @@
 import "server-only";
 import { crearSupabaseServidor } from "@/lib/supabase/server";
-import type { EstadoTurno } from "@/lib/tipos";
+import type { EstadoPago, EstadoTurno } from "@/lib/tipos";
 
 export type TurnoConDetalle = {
   id: string;
@@ -10,6 +10,7 @@ export type TurnoConDetalle = {
   precio: number | null;
   notas: string | null;
   origen: "online" | "panel";
+  pago_estado: EstadoPago | null;
   profesional_id: string;
   servicio_id: string;
   servicio: { nombre: string; duracion_min: number } | null;
@@ -18,7 +19,7 @@ export type TurnoConDetalle = {
 };
 
 const SELECT_TURNO =
-  "id, inicio, fin, estado, precio, notas, origen, profesional_id, servicio_id, servicio:servicios(nombre, duracion_min), profesional:profesionales(nombre, color), cliente:clientes(id, nombre, telefono, email)";
+  "id, inicio, fin, estado, precio, notas, origen, pago_estado, profesional_id, servicio_id, servicio:servicios(nombre, duracion_min), profesional:profesionales(nombre, color), cliente:clientes(id, nombre, telefono, email)";
 
 /**
  * Turnos en un rango [desde, hasta). RLS ya restringe: el dueño ve todo su

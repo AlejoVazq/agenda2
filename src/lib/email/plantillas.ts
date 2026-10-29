@@ -13,6 +13,8 @@ export type DatosTurnoEmail = {
   profesional: string;
   precio?: number | null;
   estado?: string;
+  /** Seña ya cobrada (si hubo). */
+  sena?: number | null;
   negocio: { nombre: string; direccion: string | null; telefono: string | null; zona_horaria: string };
   cancelacion_min_horas: number;
 };
@@ -31,6 +33,7 @@ function plantilla({ titulo, intro, d, boton }: { titulo: string; intro: string;
     ["Con", d.profesional],
   ];
   if (d.precio !== null && d.precio !== undefined) filas.push(["Precio", formatPrecio(d.precio) ?? ""]);
+  if (d.sena) filas.push(["Seña abonada", formatPrecio(d.sena) ?? ""]);
   if (d.negocio.direccion) filas.push(["Dónde", d.negocio.direccion]);
 
   const politica =
@@ -119,7 +122,18 @@ export function emailCambioPorNegocio(para: string, d: DatosTurnoEmail, tipo: "c
 
 export function emailNuevaReserva(
   para: string,
-  d: { turnoId: string; inicio: string; cliente: string; telefono: string; servicio: string; profesional: string; pendiente: boolean; negocio: string; zona_horaria: string },
+  d: {
+    turnoId: string;
+    inicio: string;
+    cliente: string;
+    telefono: string;
+    servicio: string;
+    profesional: string;
+    pendiente: boolean;
+    negocio: string;
+    zona_horaria: string;
+    sena?: number | null;
+  },
 ): Email {
   const cuando = formatFechaHora(d.inicio, d.zona_horaria);
   const link = `${env.siteUrl}/panel/turnos/${d.turnoId}`;
@@ -130,6 +144,7 @@ export function emailNuevaReserva(
     ["Cuándo", cuando],
     ["Con", d.profesional],
   ];
+  if (d.sena) filas.push(["Seña", `${formatPrecio(d.sena)} (pagada por Mercado Pago)`]);
   const html = `<!doctype html><html lang="es"><body style="font-family:Arial,Helvetica,sans-serif;color:#1d1830;background:#f6f3ff;padding:24px 12px">
   <div style="max-width:480px;margin:auto;background:#fff;border-radius:20px;padding:24px">
     <p style="margin:0;font-size:13px;font-weight:bold;color:#6322d6">${escapar(d.negocio)}</p>

@@ -27,8 +27,9 @@ alter table public.turnos
   -- aprobado:  seña cobrada (online o marcada a mano)
   -- vencido:   no se pagó a tiempo y el turno se liberó
   -- reembolsar: se cobró pero el turno ya no existe (devolver la seña)
+  -- devuelta: el negocio registró que devolvió la seña
   add constraint turnos_pago_estado_check
-    check (pago_estado is null or pago_estado in ('pendiente', 'aprobado', 'vencido', 'reembolsar')),
+    check (pago_estado is null or pago_estado in ('pendiente', 'aprobado', 'vencido', 'reembolsar', 'devuelta')),
   add constraint turnos_pago_pendiente_check
     check (pago_estado is distinct from 'pendiente' or pago_vence_at is not null);
 
@@ -174,7 +175,7 @@ begin
     return 'rechazado';
   end if;
 
-  if v_turno.pago_estado in ('aprobado', 'reembolsar') then
+  if v_turno.pago_estado in ('aprobado', 'reembolsar', 'devuelta') then
     return 'ya_procesado';
   end if;
   if not p_aprobado then

@@ -29,6 +29,10 @@ export interface Negocio {
   intervalo_min: number;
   confirmacion_automatica: boolean;
   recordatorio_horas: number;
+  sena_tipo: "ninguna" | "porcentaje" | "fijo";
+  sena_valor: number;
+  pago_plazo_min: number;
+  whatsapp_avisos: boolean;
   activo: boolean;
 }
 
@@ -75,6 +79,7 @@ export interface Bloqueo {
   inicio: string;
   fin: string;
   motivo: string | null;
+  origen: "manual" | "google";
 }
 
 export interface Cliente {
@@ -97,7 +102,19 @@ export interface Turno {
   precio: number | null;
   notas: string | null;
   origen: "online" | "panel";
+  sena_monto: number | null;
+  pago_estado: EstadoPago | null;
 }
+
+export type EstadoPago = "pendiente" | "aprobado" | "vencido" | "reembolsar" | "devuelta";
+
+export const ESTADOS_PAGO: Record<EstadoPago, string> = {
+  pendiente: "Seña pendiente",
+  aprobado: "Seña pagada",
+  vencido: "Seña vencida",
+  reembolsar: "Seña a devolver",
+  devuelta: "Seña devuelta",
+};
 
 export const DIAS_SEMANA = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"] as const;
 

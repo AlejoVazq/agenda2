@@ -24,14 +24,17 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
 
   // Checklist de configuración (solo dueño).
   let pasos: { texto: string; hecho: boolean; href: string }[] = [];
+  let aDevolver: { id: string; inicio: string; cliente: { nombre: string } | null }[] = [];
   if (esDueno) {
     const supabase = await crearSupabaseServidor();
-    const [servicios, profesionales, horarios, asignaciones] = await Promise.all([
+    const [servicios, profesionales, horarios, asignaciones, devoluciones] = await Promise.all([
       supabase.from("servicios").select("id", { count: "exact", head: true }).eq("activo", true),
       supabase.from("profesionales").select("id", { count: "exact", head: true }).eq("activo", true),
       supabase.from("horarios_profesional").select("id", { count: "exact", head: true }),
       supabase.from("profesional_servicio").select("servicio_id", { count: "exact", head: true }),
+      supabase.from("turnos").select("id, inicio, cliente:clientes(nombre)").eq("pago_estado", "reembolsar").limit(10),
     ]);
+    aDevolver = (devoluciones.data ?? []) as unknown as typeof aDevolver;
     pasos = [
       { texto: "Cargá tus servicios con duración y precio", hecho: (servicios.count ?? 0) > 0, href: "/panel/servicios" },
       { texto: "Agregá a las personas que atienden", hecho: (profesionales.count ?? 0) > 0, href: "/panel/profesionales" },
@@ -52,6 +55,24 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
       {bienvenida ? (
         <Aviso tipo="exito" className="mb-6">
           ¡Listo! Tu negocio ya está creado. Completá estos pasos y compartí tu link de reservas.
+        </Aviso>
+      ) : null}
+
+      {aDevolver.length ? (
+        <Aviso tipo="alerta" className="mb-6">
+          <p className="font-semibold">
+            {aDevolver.length === 1 ? "Hay una seña para devolver" : `Hay ${aDevolver.length} señas para devolver`}
+          </p>
+          <p className="mt-0.5">Se cobraron pero el turno no quedó vigente (por ejemplo, se pagó fuera de plazo).</p>
+          <ul className="mt-2 space-y-1">
+            {aDevolver.map((t) => (
+              <li key={t.id}>
+                <Link href={`/panel/turnos/${t.id}`} className="font-semibold underline">
+                  {t.cliente?.nombre ?? "Cliente"} · {formatFechaLarga(t.inicio, tz)}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </Aviso>
       ) : null}
 
@@ -161,7 +182,11 @@ function ListaTurnos({
                 {t.servicio?.nombre} · {t.profesional?.nombre}
               </p>
             </div>
-            {t.estado === "pendiente" ? <Insignia color="ambar">{ESTADOS_TURNO[t.estado]}</Insignia> : null}
+            {t.pago_estado === "pendiente" ? (
+              <Insignia color="ambar">Falta seña</Insignia>
+            ) : t.estado === "pendiente" ? (
+              <Insignia color="ambar">{ESTADOS_TURNO[t.estado]}</Insignia>
+            ) : null}
           </Link>
         </li>
       ))}

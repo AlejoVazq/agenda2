@@ -118,6 +118,24 @@ export const esquemaNegocio = z.object({
   recordatorio_horas: entero(0, 72, "Las horas"),
 });
 
+export const esquemaSena = z
+  .object({
+    sena_tipo: z.enum(["ninguna", "porcentaje", "fijo"], { error: "Elegí un tipo de seña" }),
+    sena_valor: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() !== "" ? parsearPrecio(v.trim()) : 0),
+      z.number({ error: "Monto inválido" }).min(0, "No puede ser negativo").max(99_999_999),
+    ),
+    pago_plazo_min: entero(10, 1440, "El plazo"),
+  })
+  .refine((d) => d.sena_tipo !== "porcentaje" || (d.sena_valor >= 1 && d.sena_valor <= 100), {
+    path: ["sena_valor"],
+    message: "El porcentaje tiene que estar entre 1 y 100",
+  })
+  .refine((d) => d.sena_tipo !== "fijo" || d.sena_valor >= 1, {
+    path: ["sena_valor"],
+    message: "Ingresá el monto de la seña",
+  });
+
 // --- Servicios y profesionales ---------------------------------------------------------
 
 export const esquemaServicio = z.object({
@@ -212,6 +230,13 @@ export const esquemaMoverTurno = z.object({
 export const esquemaEstadoTurno = z.object({
   id: z.uuid(),
   estado: z.enum(["pendiente", "confirmado", "cancelado", "completado"]),
+});
+
+export const esquemaCliente = z.object({
+  nombre: texto(2, 80, "El nombre"),
+  telefono,
+  email: emailOpcional,
+  notas: textoOpcional(500),
 });
 
 export const token = z.string().regex(/^[0-9a-f]{64}$/);

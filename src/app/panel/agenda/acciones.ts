@@ -8,6 +8,7 @@ import { mensajeDeError } from "@/lib/errores";
 import { localADate } from "@/lib/fechas";
 import { turnosEnRango, type TurnoConDetalle } from "@/lib/datos-panel";
 import { notificarCambioTurno } from "@/lib/email/notificar";
+import { sincronizarGoogleDespues } from "@/lib/google";
 import {
   datosDeForm,
   erroresDeCampo,
@@ -108,6 +109,7 @@ export async function moverTurno(entrada: z.input<typeof esquemaMoverTurno>): Pr
   if (!data?.length) return { error: "No se pudo mover el turno." };
 
   await notificarCambioTurno(id, "reprogramado");
+  sincronizarGoogleDespues(id);
   revalidatePath("/panel");
   return { ok: true, mensaje: "Turno movido." };
 }
@@ -119,12 +121,19 @@ export async function cambiarEstadoTurno(entrada: z.input<typeof esquemaEstadoTu
   if (!datos.success) return { error: "Datos inválidos." };
   const { id, estado } = datos.data;
 
-  const cambios =
+  const supabase = await crearSupabaseServidor();
+  const { data: actual } = await supabase.from("turnos").select("pago_estado").eq("id", id).maybeSingle();
+
+  const cambios: Record<string, string | null> =
     estado === "cancelado"
       ? { estado, cancelado_at: new Date().toISOString(), cancelado_por: "negocio" }
       : { estado, cancelado_at: null, cancelado_por: null };
+  // Confirmar o reactivar a mano un turno que esperaba la seña: el negocio
+  // decide tomarlo igual, así que deja de vencer.
+  if (estado !== "cancelado" && (actual?.pago_estado === "pendiente" || actual?.pago_estado === "vencido")) {
+    cambios.pago_estado = null;
+  }
 
-  const supabase = await crearSupabaseServidor();
   const { data, error } = await supabase.from("turnos").update(cambios).eq("id", id).select("id");
   if (error) {
     // Reactivar un turno cancelado puede chocar con otro que tomó ese horario.
@@ -133,6 +142,7 @@ export async function cambiarEstadoTurno(entrada: z.input<typeof esquemaEstadoTu
   if (!data?.length) return { error: "No se encontró el turno." };
 
   if (estado === "cancelado") await notificarCambioTurno(id, "cancelado");
+  sincronizarGoogleDespues(id);
   revalidatePath("/panel", "layout");
   return { ok: true, mensaje: "Turno actualizado." };
 }
@@ -150,7 +160,7 @@ export async function crearTurnoPanel(_prev: EstadoAccion, formData: FormData): 
   }
 
   const supabase = await crearSupabaseServidor();
-  const { error } = await supabase.rpc("crear_turno_panel", {
+  const { data: nuevoId, error } = await supabase.rpc("crear_turno_panel", {
     p_profesional_id: d.profesional_id,
     p_servicio_id: d.servicio_id,
     p_inicio: localADate(d.fecha, d.hora, sesion.negocio.zona_horaria).toISOString(),
@@ -161,6 +171,7 @@ export async function crearTurnoPanel(_prev: EstadoAccion, formData: FormData): 
   });
   if (error) return { error: mensajeDeError(error) };
 
+  if (typeof nuevoId === "string") sincronizarGoogleDespues(nuevoId);
   revalidatePath("/panel", "layout");
   return { ok: true, mensaje: "Turno agendado." };
 }

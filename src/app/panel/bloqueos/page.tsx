@@ -18,8 +18,10 @@ export default async function PaginaBloqueos() {
     // RLS: el empleado solo recibe los suyos.
     supabase
       .from("bloqueos")
-      .select("id, profesional_id, inicio, fin, motivo")
+      .select("id, profesional_id, inicio, fin, motivo, origen")
       .eq("negocio_id", negocio.id)
+      // Los ocupados que vienen de Google se administran desde el propio calendario.
+      .eq("origen", "manual")
       .gte("fin", new Date().toISOString())
       .order("inicio"),
   ]);

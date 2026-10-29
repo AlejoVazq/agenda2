@@ -293,8 +293,22 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
             >
               <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" defaultValue={valor("email")} />
             </Campo>
-            <BotonEnviar tamano="lg" className="w-full" pendiente="Reservando…">
-              Confirmar turno
+            {servicio.sena ? (
+              <div className="flex gap-3 rounded-2xl border border-sky-100 bg-sky-50 p-4 text-sm text-sky-950">
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-sky-600 text-white" aria-hidden>
+                  <svg viewBox="0 0 24 24" fill="none" className="size-5">
+                    <rect x="3" y="6" width="18" height="13" rx="2" stroke="currentColor" strokeWidth="2" />
+                    <path d="M3 10h18M7 15h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <p>
+                  Para confirmar el turno se pide una <strong>seña de {formatPrecio(servicio.sena)}</strong> con Mercado Pago.
+                  Te guardamos el horario {negocio.pago_plazo_min} minutos mientras pagás.
+                </p>
+              </div>
+            ) : null}
+            <BotonEnviar tamano="lg" className="w-full" pendiente={servicio.sena ? "Preparando el pago…" : "Reservando…"}>
+              {servicio.sena ? "Continuar al pago" : "Confirmar turno"}
             </BotonEnviar>
             <p className="text-center text-xs text-zinc-500">
               {negocio.cancelacion_min_horas > 0
@@ -341,6 +355,7 @@ function Resumen({
           {formatDuracion(servicio.duracion_min)}
           {servicio.precio !== null ? ` · ${formatPrecio(servicio.precio)}` : ""} · {profesional}
         </p>
+        {servicio.sena ? <p className="text-marca-900/80">Seña: {formatPrecio(servicio.sena)}</p> : null}
         {horario ? (
           <p className="mt-1 font-semibold capitalize text-marca-900">
             {formatFechaLarga(horario.inicio, tz)} · {formatHora(horario.inicio, tz)} h

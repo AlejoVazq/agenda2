@@ -1,12 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { after } from "next/server";
 import { z } from "zod";
-import { enviarEmail } from "@/lib/email/enviar";
-import { emailConfirmacion } from "@/lib/email/plantillas";
-import { notificarNuevaReserva } from "@/lib/email/notificar";
-import type { TurnoPublico } from "@/lib/publico";
+import { trasReservaFirme } from "@/lib/eventos";
+import { sincronizarGoogleDespues } from "@/lib/google";
+import { dentroDelLimite } from "@/lib/limites";
+import { crearPagoSena } from "@/lib/mercadopago";
 import { crearSupabaseServidor } from "@/lib/supabase/server";
 import { mensajeDeError } from "@/lib/errores";
 import { datosDeForm, erroresDeCampo, esquemaConsultaHorarios, esquemaReserva } from "@/lib/validaciones";
@@ -30,6 +29,7 @@ export async function consultarDias(entrada: {
     .safeParse(entrada);
   if (!datos.success) return [];
   const d = datos.data;
+  if (!(await dentroDelLimite("consultar", 240, 600))) return [];
 
   const supabase = await crearSupabaseServidor();
   const { data } = await supabase.rpc("dias_disponibles", {
@@ -51,6 +51,7 @@ export async function consultarHorarios(entrada: {
   const datos = esquemaConsultaHorarios.safeParse(entrada);
   if (!datos.success) return [];
   const d = datos.data;
+  if (!(await dentroDelLimite("consultar", 240, 600))) return [];
 
   const supabase = await crearSupabaseServidor();
   const { data } = await supabase.rpc("horarios_libres", {
@@ -77,6 +78,10 @@ export async function reservar(_prev: EstadoAccion, formData: FormData): Promise
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
   const d = datos.data;
 
+  if (!(await dentroDelLimite("reservar", 8, 3600))) {
+    return { error: "Hiciste muchas reservas seguidas. Esperá un rato o comunicate con el negocio." };
+  }
+
   const supabase = await crearSupabaseServidor();
   const { data, error } = await supabase.rpc("crear_reserva", {
     p_negocio_id: d.negocio_id,
@@ -88,35 +93,20 @@ export async function reservar(_prev: EstadoAccion, formData: FormData): Promise
     p_email: d.email,
   });
 
-  const fila = (data as { turno_id: string; token: string }[] | null)?.[0];
+  const fila = (data as { turno_id: string; token: string; sena: number | null }[] | null)?.[0];
   if (error || !fila) return { error: mensajeDeError(error, "No pudimos tomar la reserva. Probá de nuevo.") };
 
-  notificarNuevaReserva(fila.turno_id);
-
-  // Mail de confirmación después de responder (no demora la reserva).
-  if (d.email) {
-    const para = d.email;
-    const { data: turno } = await supabase.rpc("ver_turno", { p_token: fila.token });
-    if (turno) {
-      const t = turno as TurnoPublico;
-      after(() =>
-        enviarEmail(
-          emailConfirmacion(para, {
-            token: fila.token,
-            inicio: t.inicio,
-            fin: t.fin,
-            cliente: t.cliente,
-            servicio: t.servicio,
-            profesional: t.profesional,
-            precio: t.precio,
-            estado: t.estado,
-            negocio: t.negocio,
-            cancelacion_min_horas: t.cancelacion_min_horas,
-          }),
-        ),
-      );
-    }
+  if (Number(fila.sena) > 0) {
+    // Turno retenido hasta que se pague la seña: los avisos salen al confirmarse el pago.
+    sincronizarGoogleDespues(fila.turno_id);
+    const urlPago = await crearPagoSena(fila.turno_id).catch((e) => {
+      console.error("[reserva] no se pudo crear el pago", e);
+      return null;
+    });
+    // Si Mercado Pago no respondió, la página del turno ofrece reintentar el pago.
+    redirect(urlPago ?? `/t/${fila.token}?nueva=1`);
   }
 
+  trasReservaFirme(fila.turno_id);
   redirect(`/t/${fila.token}?nueva=1`);
 }

@@ -14,6 +14,8 @@ const ITEMS: Item[] = [
   { href: "/panel/profesionales", texto: "Profesionales", icono: "equipo", soloDueno: true },
   { href: "/panel/bloqueos", texto: "Ausencias", icono: "bloqueo" },
   { href: "/panel/clientes", texto: "Clientes", icono: "clientes", soloDueno: true },
+  { href: "/panel/estadisticas", texto: "Estadísticas", icono: "grafico", soloDueno: true },
+  { href: "/panel/integraciones", texto: "Integraciones", icono: "enchufe" },
   { href: "/panel/equipo", texto: "Accesos", icono: "llave", soloDueno: true },
   { href: "/panel/negocio", texto: "Mi negocio", icono: "ajustes", soloDueno: true },
 ];
@@ -29,6 +31,8 @@ const ICONOS = {
   llave: "M15 7a4 4 0 1 1-3.9 4.9L3 20v-3h3v-3h3l1.1-1.1A4 4 0 0 1 15 7zM16 9h.01",
   ajustes: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
   mas: "M5 12h.01M12 12h.01M19 12h.01",
+  grafico: "M3 3v18h18M8 17v-5M13 17V8M18 17v-8",
+  enchufe: "M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0zM12 17v5",
 };
 
 function Icono({ nombre, className }: { nombre: keyof typeof ICONOS; className?: string }) {

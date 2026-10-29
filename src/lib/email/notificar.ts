@@ -3,7 +3,7 @@ import { after } from "next/server";
 import { crearSupabaseServidor } from "@/lib/supabase/server";
 import { crearSupabaseAdmin } from "@/lib/supabase/admin";
 import { enviarEmail } from "./enviar";
-import { emailCambioPorNegocio, emailNuevaReserva } from "./plantillas";
+import { emailCambioPorNegocio, emailConfirmacion, emailNuevaReserva } from "./plantillas";
 
 /**
  * Avisa al dueño (y al empleado de esa agenda, si tiene usuario) que entró una
@@ -18,7 +18,7 @@ export function notificarNuevaReserva(turnoId: string) {
     const { data } = await admin
       .from("turnos")
       .select(
-        "id, inicio, estado, negocio_id, profesional_id, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, telefono), negocio:negocios(nombre, zona_horaria)",
+        "id, inicio, estado, negocio_id, profesional_id, sena_monto, pago_estado, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, telefono), negocio:negocios(nombre, zona_horaria)",
       )
       .eq("id", turnoId)
       .maybeSingle();
@@ -28,6 +28,8 @@ export function notificarNuevaReserva(turnoId: string) {
       estado: string;
       negocio_id: string;
       profesional_id: string;
+      sena_monto: number | null;
+      pago_estado: string | null;
       servicio: { nombre: string } | null;
       profesional: { nombre: string } | null;
       cliente: { nombre: string; telefono: string } | null;
@@ -56,9 +58,65 @@ export function notificarNuevaReserva(turnoId: string) {
           pendiente: t.estado === "pendiente",
           negocio: t.negocio.nombre,
           zona_horaria: t.negocio.zona_horaria,
+          sena: t.pago_estado === "aprobado" ? t.sena_monto : null,
         }),
       );
     }
+  });
+}
+
+/**
+ * Mail de confirmación al cliente que reservó online (si dejó email). Se lee con
+ * service role porque el cliente es anónimo; el id viene de la propia reserva.
+ */
+export function notificarConfirmacionCliente(turnoId: string) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return;
+
+  after(async () => {
+    const admin = crearSupabaseAdmin();
+    const { data } = await admin
+      .from("turnos")
+      .select(
+        "token_cancelacion, inicio, fin, precio, estado, sena_monto, pago_estado, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, email), negocio:negocios(nombre, direccion, telefono, zona_horaria, cancelacion_min_horas)",
+      )
+      .eq("id", turnoId)
+      .maybeSingle();
+    const t = data as unknown as {
+      token_cancelacion: string;
+      inicio: string;
+      fin: string;
+      precio: number | null;
+      estado: string;
+      sena_monto: number | null;
+      pago_estado: string | null;
+      servicio: { nombre: string } | null;
+      profesional: { nombre: string } | null;
+      cliente: { nombre: string; email: string | null } | null;
+      negocio: {
+        nombre: string;
+        direccion: string | null;
+        telefono: string | null;
+        zona_horaria: string;
+        cancelacion_min_horas: number;
+      } | null;
+    } | null;
+    if (!t?.cliente?.email || !t.negocio || t.estado === "cancelado") return;
+
+    await enviarEmail(
+      emailConfirmacion(t.cliente.email, {
+        token: t.token_cancelacion,
+        inicio: t.inicio,
+        fin: t.fin,
+        cliente: t.cliente.nombre,
+        servicio: t.servicio?.nombre ?? "",
+        profesional: t.profesional?.nombre ?? "",
+        precio: t.precio,
+        estado: t.estado,
+        sena: t.pago_estado === "aprobado" ? t.sena_monto : null,
+        negocio: t.negocio,
+        cancelacion_min_horas: t.negocio.cancelacion_min_horas,
+      }),
+    );
   });
 }
 

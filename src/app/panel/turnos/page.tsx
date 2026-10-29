@@ -117,6 +117,11 @@ export default async function PaginaTurnos({ searchParams }: PageProps<"/panel/t
                           {t.servicio?.nombre} · {t.profesional?.nombre}
                         </p>
                       </div>
+                      {t.pago_estado === "pendiente" && t.estado !== "cancelado" ? (
+                        <Insignia color="ambar">Falta seña</Insignia>
+                      ) : t.pago_estado === "reembolsar" ? (
+                        <Insignia color="ambar">Devolver seña</Insignia>
+                      ) : null}
                       <Insignia color={COLOR[t.estado]}>{ESTADOS_TURNO[t.estado]}</Insignia>
                     </Link>
                   </li>

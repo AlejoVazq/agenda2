@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { EncabezadoPagina, Input, Vacio, clasesBoton } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
 import { crearSupabaseServidor } from "@/lib/supabase/server";
@@ -34,7 +35,15 @@ export default async function PaginaClientes({ searchParams }: PageProps<"/panel
 
   return (
     <>
-      <EncabezadoPagina titulo="Clientes" descripcion="Se crean solos cuando alguien reserva o cuando agendás un turno." />
+      <EncabezadoPagina
+        titulo="Clientes"
+        descripcion="Se crean solos cuando alguien reserva o cuando agendás un turno."
+        acciones={
+          <a href="/panel/clientes/exportar" className={clasesBoton("secundario", "sm")} download>
+            Exportar CSV
+          </a>
+        }
+      />
       <form className="mb-5 flex gap-2">
         <Input name="q" defaultValue={busqueda} placeholder="Buscar por nombre o celular" aria-label="Buscar" />
         <button className={clasesBoton("secundario")}>Buscar</button>
@@ -49,14 +58,14 @@ export default async function PaginaClientes({ searchParams }: PageProps<"/panel
             const ultimo = activos.filter((t) => t.inicio < ahora).sort((a, b) => b.inicio.localeCompare(a.inicio))[0];
             return (
               <li key={c.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="min-w-0 flex-1">
+                <Link href={`/panel/clientes/${c.id}`} className="min-w-0 flex-1 rounded-lg hover:text-marca-800">
                   <p className="truncate font-semibold">{c.nombre}</p>
                   <p className="truncate text-sm text-zinc-500">
                     {activos.length} {activos.length === 1 ? "turno" : "turnos"}
                     {proximo ? ` · próximo ${formatFechaCorta(proximo.inicio, negocio.zona_horaria)}` : ""}
                     {!proximo && ultimo ? ` · último ${formatFechaCorta(ultimo.inicio, negocio.zona_horaria)}` : ""}
                   </p>
-                </div>
+                </Link>
                 <a
                   href={linkWhatsApp(c.telefono)}
                   target="_blank"

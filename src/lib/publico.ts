@@ -8,6 +8,8 @@ export type ServicioPublico = {
   descripcion: string | null;
   duracion_min: number;
   precio: number | null;
+  /** Seña que se cobra al reservar (null = sin seña). */
+  sena: number | null;
   profesional_ids: string[] | null;
 };
 
@@ -22,6 +24,7 @@ export type NegocioPublico = {
   zona_horaria: string;
   cancelacion_min_horas: number;
   anticipacion_max_dias: number;
+  pago_plazo_min: number;
   servicios: ServicioPublico[];
   profesionales: { id: string; nombre: string }[];
 };
@@ -38,6 +41,10 @@ export type TurnoPublico = {
   negocio: { nombre: string; slug: string; telefono: string | null; direccion: string | null; zona_horaria: string };
   cancelacion_min_horas: number;
   cancelable_hasta: string;
+  cancelado_por: "cliente" | "negocio" | "sistema" | null;
+  sena_monto: number | null;
+  pago_estado: "pendiente" | "aprobado" | "vencido" | "reembolsar" | "devuelta" | null;
+  pago_vence_at: string | null;
   puede_cancelar: boolean;
 };
 
