@@ -9,7 +9,7 @@ export function PagarSena({ token, monto }: { token: string; monto: string }) {
   return (
     <form action={accion} className="space-y-2">
       <MensajeAccion estado={estado} />
-      <BotonEnviar tamano="lg" className="w-full bg-sky-600 hover:bg-sky-700 active:bg-sky-800" pendiente="Abriendo Mercado Pago…">
+      <BotonEnviar tamano="lg" className="w-full bg-sky-600! hover:bg-sky-700! active:bg-sky-800!" pendiente="Abriendo Mercado Pago…">
         Pagar seña de {monto} con Mercado Pago
       </BotonEnviar>
     </form>

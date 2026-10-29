@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { sesionParaAccion } from "@/lib/auth";
+import { crearSupabaseAdmin } from "@/lib/supabase/admin";
 import { crearSupabaseServidor } from "@/lib/supabase/server";
 import { mensajeDeError } from "@/lib/errores";
 import { localADate } from "@/lib/fechas";
@@ -82,6 +83,20 @@ export async function eventosAgenda(entrada: z.input<typeof esquemaRango>): Prom
   ];
 }
 
+/**
+ * Libera retenciones de seña vencidas antes de ocupar un horario desde el panel,
+ * para que no choquen con un turno que en realidad ya no existe.
+ */
+async function liberarSenasVencidas(negocioId: string) {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return;
+  await crearSupabaseAdmin()
+    .rpc("vencer_pagos_pendientes", { p_negocio_id: negocioId })
+    .then(
+      () => null,
+      () => null,
+    );
+}
+
 /** Mover o cambiar la duración de un turno (arrastrar en el calendario). */
 export async function moverTurno(entrada: z.input<typeof esquemaMoverTurno>): Promise<EstadoAccion> {
   const sesion = await sesionParaAccion();
@@ -97,6 +112,7 @@ export async function moverTurno(entrada: z.input<typeof esquemaMoverTurno>): Pr
     cambios.profesional_id = profesional_id;
   }
 
+  await liberarSenasVencidas(sesion.negocio.id);
   const supabase = await crearSupabaseServidor();
   // RLS: el empleado solo puede modificar turnos de su agenda.
   const { data, error } = await supabase
@@ -159,6 +175,7 @@ export async function crearTurnoPanel(_prev: EstadoAccion, formData: FormData): 
     return { error: "Solo podés agendar turnos en tu propia agenda." };
   }
 
+  await liberarSenasVencidas(sesion.negocio.id);
   const supabase = await crearSupabaseServidor();
   const { data: nuevoId, error } = await supabase.rpc("crear_turno_panel", {
     p_profesional_id: d.profesional_id,

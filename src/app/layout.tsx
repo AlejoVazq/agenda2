@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { env } from "@/lib/env";
 import { MARCA } from "@/lib/marca";
 import "./globals.css";
 
@@ -9,6 +10,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(env.siteUrl),
   title: { default: `${MARCA.nombre} · ${MARCA.lema}`, template: `%s · ${MARCA.nombre}` },
   description: MARCA.descripcion,
 };
