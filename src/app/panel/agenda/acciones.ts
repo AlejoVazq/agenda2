@@ -7,7 +7,6 @@ import { crearSupabaseAdmin } from "@/lib/supabase/admin";
 import { crearSupabaseServidor } from "@/lib/supabase/server";
 import { mensajeDeError } from "@/lib/errores";
 import { localADate } from "@/lib/fechas";
-import { turnosEnRango, type TurnoConDetalle } from "@/lib/datos-panel";
 import { notificarCambioTurno } from "@/lib/email/notificar";
 import { sincronizarGoogleDespues } from "@/lib/google";
 import {
@@ -18,70 +17,6 @@ import {
   esquemaTurnoPanel,
 } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
-
-export type EventoAgenda = {
-  id: string;
-  tipo: "turno" | "bloqueo";
-  inicio: string;
-  fin: string;
-  profesional_id: string;
-  titulo: string;
-  color: string;
-  turno?: TurnoConDetalle;
-};
-
-const esquemaRango = z.object({
-  desde: z.iso.datetime({ offset: true }),
-  hasta: z.iso.datetime({ offset: true }),
-  profesional_id: z.uuid().nullable(),
-});
-
-/** Turnos y ausencias de un rango, para el calendario. RLS limita por rol. */
-export async function eventosAgenda(entrada: z.input<typeof esquemaRango>): Promise<EventoAgenda[]> {
-  const sesion = await sesionParaAccion();
-  if (!sesion) return [];
-  const datos = esquemaRango.safeParse(entrada);
-  if (!datos.success) return [];
-  const { desde, hasta, profesional_id } = datos.data;
-
-  // Máximo ~6 semanas por consulta.
-  if (new Date(hasta).getTime() - new Date(desde).getTime() > 45 * 86_400_000) return [];
-
-  const supabase = await crearSupabaseServidor();
-  let consultaBloqueos = supabase
-    .from("bloqueos")
-    .select("id, profesional_id, inicio, fin, motivo")
-    .lt("inicio", hasta)
-    .gt("fin", desde);
-  if (profesional_id) consultaBloqueos = consultaBloqueos.eq("profesional_id", profesional_id);
-
-  const [turnos, { data: bloqueos }] = await Promise.all([
-    turnosEnRango(new Date(desde), new Date(hasta), { profesionalId: profesional_id ?? undefined }),
-    consultaBloqueos,
-  ]);
-
-  return [
-    ...turnos.map<EventoAgenda>((t) => ({
-      id: t.id,
-      tipo: "turno",
-      inicio: t.inicio,
-      fin: t.fin,
-      profesional_id: t.profesional_id,
-      titulo: `${t.cliente?.nombre ?? "Cliente"} · ${t.servicio?.nombre ?? ""}`,
-      color: t.profesional?.color ?? "#7434ee",
-      turno: t,
-    })),
-    ...(bloqueos ?? []).map<EventoAgenda>((b) => ({
-      id: `b-${b.id}`,
-      tipo: "bloqueo",
-      inicio: b.inicio,
-      fin: b.fin,
-      profesional_id: b.profesional_id,
-      titulo: b.motivo ?? "Ausencia",
-      color: "#a1a1aa",
-    })),
-  ];
-}
 
 /**
  * Libera retenciones de seña vencidas antes de ocupar un horario desde el panel,

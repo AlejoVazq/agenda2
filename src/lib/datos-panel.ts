@@ -43,3 +43,52 @@ export async function turnosEnRango(
   if (error) throw error;
   return (data ?? []) as unknown as TurnoConDetalle[];
 }
+
+export type EventoAgenda = {
+  id: string;
+  tipo: "turno" | "bloqueo";
+  inicio: string;
+  fin: string;
+  profesional_id: string;
+  titulo: string;
+  color: string;
+  turno?: TurnoConDetalle;
+};
+
+/** Turnos y ausencias de un rango, para el calendario. RLS limita por rol. */
+export async function eventosEnRango(desde: string, hasta: string, profesionalId: string | null): Promise<EventoAgenda[]> {
+  const supabase = await crearSupabaseServidor();
+  let consultaBloqueos = supabase
+    .from("bloqueos")
+    .select("id, profesional_id, inicio, fin, motivo")
+    .lt("inicio", hasta)
+    .gt("fin", desde);
+  if (profesionalId) consultaBloqueos = consultaBloqueos.eq("profesional_id", profesionalId);
+
+  const [turnos, { data: bloqueos }] = await Promise.all([
+    turnosEnRango(new Date(desde), new Date(hasta), { profesionalId: profesionalId ?? undefined }),
+    consultaBloqueos,
+  ]);
+
+  return [
+    ...turnos.map<EventoAgenda>((t) => ({
+      id: t.id,
+      tipo: "turno",
+      inicio: t.inicio,
+      fin: t.fin,
+      profesional_id: t.profesional_id,
+      titulo: `${t.cliente?.nombre ?? "Cliente"} · ${t.servicio?.nombre ?? ""}`,
+      color: t.profesional?.color ?? "#7434ee",
+      turno: t,
+    })),
+    ...(bloqueos ?? []).map<EventoAgenda>((b) => ({
+      id: `b-${b.id}`,
+      tipo: "bloqueo",
+      inicio: b.inicio,
+      fin: b.fin,
+      profesional_id: b.profesional_id,
+      titulo: b.motivo ?? "Ausencia",
+      color: "#a1a1aa",
+    })),
+  ];
+}

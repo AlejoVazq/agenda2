@@ -17,7 +17,8 @@ import { Aviso, Boton, Insignia, Select } from "@/components/ui";
 import { fechaLocalISO, formatFechaLarga, formatHora, formatPrecio } from "@/lib/fechas";
 import { linkWhatsAppCliente } from "@/lib/whatsapp";
 import { ESTADOS_TURNO, type EstadoTurno, type Profesional, type Servicio } from "@/lib/tipos";
-import { cambiarEstadoTurno, eventosAgenda, moverTurno, type EventoAgenda } from "./acciones";
+import type { EventoAgenda } from "@/lib/datos-panel";
+import { cambiarEstadoTurno, moverTurno } from "./acciones";
 import { FormularioTurno, type ValoresIniciales } from "./formulario-turno";
 
 type Props = {
@@ -72,11 +73,11 @@ export function Agenda(props: Props) {
 
   const cargarEventos = useCallback(
     async (info: EventSourceFuncInfo): Promise<EventInput[]> => {
-      const eventos = await eventosAgenda({
-        desde: info.start.toISOString(),
-        hasta: info.end.toISOString(),
-        profesional_id: filtro || null,
-      });
+      const parametros = new URLSearchParams({ desde: info.start.toISOString(), hasta: info.end.toISOString() });
+      if (filtro) parametros.set("profesional_id", filtro);
+      const respuesta = await fetch(`/api/agenda/eventos?${parametros}`, { cache: "no-store" });
+      if (!respuesta.ok) throw new Error(`Error ${respuesta.status} al cargar la agenda`);
+      const eventos: EventoAgenda[] = await respuesta.json();
       return eventos.map((e) => ({
         id: e.id,
         title: e.titulo,
@@ -90,6 +91,13 @@ export function Agenda(props: Props) {
     },
     [filtro, esDueno, miProfesionalId],
   );
+
+  // Se registra acá y no con la prop `events`: con la prop, FullCalendar pide los
+  // eventos al renderizar y la respuesta puede llegar antes de que se monte.
+  useEffect(() => {
+    const fuente = calendario.current?.getApi().addEventSource(cargarEventos);
+    return () => fuente?.remove();
+  }, [cargarEventos]);
 
   function cambiarEstado(id: string, estado: EstadoTurno) {
     iniciar(async () => {
@@ -178,7 +186,7 @@ export function Agenda(props: Props) {
             (fijo.extendedProps.evento as EventoAgenda | undefined)?.profesional_id !==
               (movido?.extendedProps.evento as EventoAgenda | undefined)?.profesional_id
           }
-          events={cargarEventos}
+          eventSourceFailure={() => setAviso({ tipo: "error", texto: "No pudimos cargar la agenda. Recargá la página." })}
           eventClick={(info) => {
             const ev = info.event.extendedProps.evento as EventoAgenda | undefined;
             if (ev?.tipo === "turno") setSeleccionado(ev);
