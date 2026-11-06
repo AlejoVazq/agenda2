@@ -17,7 +17,7 @@ const RANGOS = {
 } as const;
 type Rango = keyof typeof RANGOS;
 
-const COLOR = { pendiente: "ambar", confirmado: "verde", cancelado: "rojo", completado: "gris" } as const;
+const COLOR = { pendiente: "ambar", confirmado: "verde", cancelado: "rojo", completado: "gris", ausente: "rojo" } as const;
 
 export default async function PaginaTurnos({ searchParams }: PageProps<"/panel/turnos">) {
   const sp = await searchParams;

@@ -8,7 +8,7 @@ import type { EstadoAccion, EstadoTurno } from "@/lib/tipos";
 import { cambiarEstadoTurno } from "../agenda/acciones";
 import { guardarNotas, reprogramarTurno } from "./acciones";
 
-export function AccionesEstado({ id, estado }: { id: string; estado: EstadoTurno }) {
+export function AccionesEstado({ id, estado, yaEmpezo }: { id: string; estado: EstadoTurno; yaEmpezo: boolean }) {
   const router = useRouter();
   const [resultado, setResultado] = useState<EstadoAccion>();
   const [pendiente, iniciar] = useTransition();
@@ -45,6 +45,16 @@ export function AccionesEstado({ id, estado }: { id: string; estado: EstadoTurno
         {estado === "cancelado" ? (
           <Boton variante="secundario" disabled={pendiente} onClick={() => cambiar("confirmado")}>
             Reactivar turno
+          </Boton>
+        ) : null}
+        {yaEmpezo && (estado === "pendiente" || estado === "confirmado") ? (
+          <Boton variante="secundario" disabled={pendiente} onClick={() => cambiar("ausente")}>
+            No asistió
+          </Boton>
+        ) : null}
+        {estado === "ausente" ? (
+          <Boton variante="secundario" disabled={pendiente} onClick={() => cambiar("confirmado")}>
+            Deshacer “no asistió”
           </Boton>
         ) : null}
         {(estado === "pendiente" || estado === "confirmado") &&

@@ -4,7 +4,7 @@ MVP de agenda y reservas para negocios de servicios (peluquerías, barberías, u
 Los clientes reservan desde el celular sin crear cuenta y el negocio gestiona todo desde `/panel`.
 
 - **Stack:** Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + Supabase (Postgres, Auth, RLS) + FullCalendar 7 + Resend.
-- **Integraciones (opcionales):** Google Calendar, seña con Mercado Pago, avisos por WhatsApp (Cloud API).
+- **Integraciones (opcionales):** Google Calendar, avisos por WhatsApp (Cloud API) y seña con Mercado Pago (hoy oculta, ver Fase 6).
 - **Idioma/zona:** todo en es-AR. Fechas en UTC (`timestamptz`), mostradas en `America/Argentina/Buenos_Aires`.
 - **Marca:** el nombre "Turnia" está centralizado en `src/lib/marca.ts` y es fácil de cambiar.
 
@@ -124,7 +124,7 @@ src/
    - Las FK compuestas `(negocio_id, id)` impiden que un turno apunte a un profesional o servicio de otro negocio.
 4. **Turnos duplicados**: hay una restricción de exclusión `EXCLUDE USING gist (profesional_id WITH =, tstzrange(inicio, fin) WITH &&) WHERE estado <> 'cancelado'`. Aunque dos personas reserven a la vez, Postgres rechaza la segunda reserva. Con "cualquier profesional", `crear_reserva` prueba con el siguiente libre.
 5. **Token del turno**: tiene 64 caracteres hex aleatorios. La página `/t/[token]` es `noindex` y `no-referrer`.
-6. **Anti-abuso**: máximo 3 turnos futuros activos por teléfono y negocio, y límite de pedidos por IP (hash) en reservar y consultar horarios.
+6. **Anti-abuso**: la reserva online pide email y, por negocio, cuenta por email o celular: un turno por día (ni dos para la misma fecha, ni dos pedidos online el mismo día), máximo 3 turnos futuros, y uno solo a la vez si tiene una inasistencia sin perdonar. Los turnos cancelados no cuentan y desde el panel no hay límites. También hay límite de pedidos por IP (hash) en reservar y consultar horarios.
 7. **Secretos de terceros**: los tokens de Google y Mercado Pago se guardan cifrados (AES-256-GCM, `INTEGRACIONES_CLAVE`) en `integraciones_secretos`, una tabla a la que ni `anon` ni `authenticated` tienen acceso: solo el servidor.
 8. **Pagos**: nunca se confía en los parámetros que llegan del navegador ni en el cuerpo del webhook. El pago se consulta a la API de Mercado Pago con el token del negocio y solo se registra si es la seña de un turno de ese negocio, por el monto correcto.
 
@@ -179,6 +179,8 @@ src/
    - Al desconectar, se borran del calendario los turnos futuros que se habían creado y las ausencias importadas.
 
 ### Fase 6: seña con Mercado Pago
+
+> **Hoy está oculta**: `SENA_ACTIVA = false` en `src/lib/env.ts`. El código y la base siguen intactos; para volver a ofrecerla, alcanza con pasarlo a `true`.
 1. Necesitás `INTEGRACIONES_CLAVE` y `SUPABASE_SERVICE_ROLE_KEY`. No hay variables de Mercado Pago: cada negocio conecta la suya.
 2. Panel → **Integraciones** → pegá el **Access Token**. Para probar, usá las credenciales de prueba (`TEST-…`) de https://www.mercadopago.com.ar/developers/panel/app y pagá con una [tarjeta de prueba](https://www.mercadopago.com.ar/developers/es/docs/checkout-pro/additional-content/your-integrations/test/cards).
 3. Configurá la seña (porcentaje del precio o monto fijo) y el plazo para pagar.

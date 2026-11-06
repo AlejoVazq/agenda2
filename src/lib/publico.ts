@@ -31,7 +31,7 @@ export type NegocioPublico = {
 
 export type TurnoPublico = {
   id: string;
-  estado: "pendiente" | "confirmado" | "cancelado" | "completado";
+  estado: "pendiente" | "confirmado" | "cancelado" | "completado" | "ausente";
   inicio: string;
   fin: string;
   precio: number | null;

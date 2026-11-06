@@ -204,7 +204,7 @@ export async function sincronizarTurno(turnoId: string) {
   const t = data as unknown as TurnoParaGoogle | null;
   if (!t) return;
 
-  const activo = t.estado === "pendiente" || t.estado === "confirmado" || t.estado === "completado";
+  const activo = t.estado === "pendiente" || t.estado === "confirmado" || t.estado === "completado" || t.estado === "ausente";
   let eventoId = t.google_event_id;
   let profCalendario = t.google_calendar_prof_id;
 

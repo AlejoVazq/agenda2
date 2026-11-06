@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Aviso, clasesBoton, EncabezadoPagina, Insignia, Tarjeta } from "@/components/ui";
 import { requerirPanel } from "@/lib/auth";
-import { integracionesDisponibles } from "@/lib/env";
+import { integracionesDisponibles, SENA_ACTIVA } from "@/lib/env";
 import type { ConfigGoogle } from "@/lib/google";
 import type { Integracion } from "@/lib/integraciones";
 import type { ConfigMercadoPago } from "@/lib/mercadopago";
@@ -51,7 +51,11 @@ export default async function PaginaIntegraciones({ searchParams }: PageProps<"/
     <div className="max-w-3xl space-y-6">
       <EncabezadoPagina
         titulo="Integraciones"
-        descripcion={esDueno ? "Conectá tu agenda con Google Calendar, cobrá señas y avisá por WhatsApp." : "Conectá tu agenda con Google Calendar."}
+        descripcion={
+          esDueno
+            ? `Conectá tu agenda con Google Calendar${SENA_ACTIVA ? ", cobrá señas" : ""} y avisá por WhatsApp.`
+            : "Conectá tu agenda con Google Calendar."
+        }
       />
       {aviso ? <Aviso tipo={aviso.tipo}>{aviso.texto}</Aviso> : null}
 
@@ -120,34 +124,36 @@ export default async function PaginaIntegraciones({ searchParams }: PageProps<"/
       {esDueno ? (
         <>
           {/* Mercado Pago --------------------------------------------------------------- */}
-          <Seccion
-            icono={<IconoMercadoPago />}
-            titulo="Seña con Mercado Pago"
-            descripcion="Pedí una seña al reservar online para reducir los faltazos. El dinero va directo a tu cuenta."
-          >
-            {!disponibles.mercadopago ? (
-              <NoConfigurado variables="INTEGRACIONES_CLAVE y SUPABASE_SERVICE_ROLE_KEY" />
-            ) : mp ? (
-              <div className="space-y-6">
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 p-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold">{mp.config.nickname}</p>
-                    <p className="truncate text-sm text-zinc-500">{mp.config.email ?? `Cuenta ${mp.config.usuario_id}`}</p>
+          {SENA_ACTIVA ? (
+            <Seccion
+              icono={<IconoMercadoPago />}
+              titulo="Seña con Mercado Pago"
+              descripcion="Pedí una seña al reservar online para reducir los faltazos. El dinero va directo a tu cuenta."
+            >
+              {!disponibles.mercadopago ? (
+                <NoConfigurado variables="INTEGRACIONES_CLAVE y SUPABASE_SERVICE_ROLE_KEY" />
+              ) : mp ? (
+                <div className="space-y-6">
+                  <div className="flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 p-4">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold">{mp.config.nickname}</p>
+                      <p className="truncate text-sm text-zinc-500">{mp.config.email ?? `Cuenta ${mp.config.usuario_id}`}</p>
+                    </div>
+                    {mp.config.modo === "prueba" ? <Insignia color="ambar">Modo prueba</Insignia> : <Insignia color="verde">Conectado</Insignia>}
+                    <DesconectarMercadoPago />
                   </div>
-                  {mp.config.modo === "prueba" ? <Insignia color="ambar">Modo prueba</Insignia> : <Insignia color="verde">Conectado</Insignia>}
-                  <DesconectarMercadoPago />
+                  <FormularioSena negocio={negocio} conectado />
                 </div>
-                <FormularioSena negocio={negocio} conectado />
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <FormularioMercadoPago />
-                <div className="border-t border-zinc-100 pt-5">
-                  <FormularioSena negocio={negocio} conectado={false} />
+              ) : (
+                <div className="space-y-6">
+                  <FormularioMercadoPago />
+                  <div className="border-t border-zinc-100 pt-5">
+                    <FormularioSena negocio={negocio} conectado={false} />
+                  </div>
                 </div>
-              </div>
-            )}
-          </Seccion>
+              )}
+            </Seccion>
+          ) : null}
 
           {/* WhatsApp ------------------------------------------------------------------- */}
           <Seccion

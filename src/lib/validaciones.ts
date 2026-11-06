@@ -35,6 +35,11 @@ const emailOpcional = z.preprocess(
   z.email("Ingresá un email válido").max(254).nullable(),
 );
 
+const emailObligatorio = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim().toLowerCase() : ""),
+  z.email("Ingresá un email válido").max(254),
+);
+
 export const telefono = z.preprocess(
   (v) => (typeof v === "string" ? v.replace(/\D/g, "") : ""),
   z.string().regex(/^[0-9]{8,15}$/, "Ingresá un teléfono válido, con código de área (ej: 341 555 1234)"),
@@ -206,7 +211,7 @@ export const esquemaReserva = z.object({
   inicio: z.iso.datetime({ offset: true }),
   nombre: texto(2, 80, "Tu nombre"),
   telefono,
-  email: emailOpcional,
+  email: emailObligatorio,
 });
 
 export const esquemaTurnoPanel = z.object({
@@ -229,7 +234,7 @@ export const esquemaMoverTurno = z.object({
 
 export const esquemaEstadoTurno = z.object({
   id: z.uuid(),
-  estado: z.enum(["pendiente", "confirmado", "cancelado", "completado"]),
+  estado: z.enum(["pendiente", "confirmado", "cancelado", "completado", "ausente"]),
 });
 
 export const esquemaCliente = z.object({

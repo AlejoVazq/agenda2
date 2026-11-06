@@ -2,17 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { z } from "zod";
-import { BotonLink, EncabezadoPagina, Insignia, Tarjeta } from "@/components/ui";
+import { BotonAccion } from "@/components/boton-accion";
+import { Aviso, BotonLink, EncabezadoPagina, Insignia, Tarjeta } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
 import { formatFechaCorta, formatHora, formatPrecio } from "@/lib/fechas";
 import { crearSupabaseServidor } from "@/lib/supabase/server";
 import { ESTADOS_TURNO, type Cliente, type EstadoTurno } from "@/lib/tipos";
 import { linkWhatsApp } from "@/lib/whatsapp";
+import { quitarLimiteCliente } from "../acciones";
 import { FormularioCliente } from "./formulario";
 
 export const metadata: Metadata = { title: "Cliente" };
 
-const COLOR = { pendiente: "ambar", confirmado: "verde", cancelado: "rojo", completado: "gris" } as const;
+const COLOR = { pendiente: "ambar", confirmado: "verde", cancelado: "rojo", completado: "gris", ausente: "rojo" } as const;
 
 type TurnoCliente = {
   id: string;
@@ -31,7 +33,7 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
 
   const supabase = await crearSupabaseServidor();
   const [{ data: cliente }, { data: filas }] = await Promise.all([
-    supabase.from("clientes").select("id, nombre, telefono, email, notas, created_at").eq("id", id).maybeSingle(),
+    supabase.from("clientes").select("id, nombre, telefono, email, notas, created_at, ausencias_perdonadas_at").eq("id", id).maybeSingle(),
     supabase
       .from("turnos")
       .select("id, inicio, estado, precio, cancelado_por, servicio:servicios(nombre), profesional:profesionales(nombre)")
@@ -40,7 +42,7 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
       .limit(100),
   ]);
   if (!cliente) notFound();
-  const c = cliente as Cliente & { created_at: string };
+  const c = cliente as Cliente & { created_at: string; ausencias_perdonadas_at: string | null };
   const turnos = (filas ?? []) as unknown as TurnoCliente[];
   const tz = negocio.zona_horaria;
 
@@ -48,6 +50,9 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
   const atendidos = turnos.filter((t) => t.estado === "completado" || (t.estado === "confirmado" && t.inicio < ahora));
   const canceladosCliente = turnos.filter((t) => t.estado === "cancelado" && t.cancelado_por === "cliente").length;
   const gastado = atendidos.reduce((total, t) => total + Number(t.precio ?? 0), 0);
+  const ausencias = turnos.filter((t) => t.estado === "ausente");
+  // Misma regla que crear_reserva: las ausencias perdonadas ya no limitan.
+  const limitado = ausencias.some((t) => !c.ausencias_perdonadas_at || new Date(t.inicio) > new Date(c.ausencias_perdonadas_at));
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -71,11 +76,24 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
         }
       />
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Numero titulo="Visitas" valor={String(atendidos.length)} />
         <Numero titulo="Gastado" valor={formatPrecio(gastado) ?? "$ 0"} />
         <Numero titulo="Cancelaciones" valor={String(canceladosCliente)} />
+        <Numero titulo="Inasistencias" valor={String(ausencias.length)} />
       </div>
+
+      {limitado ? (
+        <Aviso tipo="alerta">
+          <p>
+            Por no asistir a un turno, solo puede tener un turno reservado a la vez desde la página de reservas. Desde el
+            panel le podés agendar los que quieras.
+          </p>
+          <BotonAccion className="mt-2" accion={quitarLimiteCliente.bind(null, c.id)} confirmar="Sí, quitar el límite" pendiente="Guardando…">
+            Quitar límite
+          </BotonAccion>
+        </Aviso>
+      ) : null}
 
       <Tarjeta>
         <h2 className="mb-4 font-bold">Datos</h2>

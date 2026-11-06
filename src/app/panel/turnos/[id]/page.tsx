@@ -15,7 +15,7 @@ import { AccionesEstado, FormularioNotas, FormularioReprogramar } from "../formu
 
 export const metadata: Metadata = { title: "Turno" };
 
-const COLOR = { pendiente: "ambar", confirmado: "verde", cancelado: "rojo", completado: "gris" } as const;
+const COLOR = { pendiente: "ambar", confirmado: "verde", cancelado: "rojo", completado: "gris", ausente: "rojo" } as const;
 
 export default async function PaginaTurno({ params }: PageProps<"/panel/turnos/[id]">) {
   const { id } = await params;
@@ -155,7 +155,7 @@ export default async function PaginaTurno({ params }: PageProps<"/panel/turnos/[
             </BotonAccion>
           </Aviso>
         ) : null}
-        <AccionesEstado id={t.id} estado={t.estado} />
+        <AccionesEstado id={t.id} estado={t.estado} yaEmpezo={new Date(t.inicio) <= new Date()} />
       </Tarjeta>
 
       {mensajes.length && t.cliente ? (

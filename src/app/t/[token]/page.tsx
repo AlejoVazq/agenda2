@@ -67,7 +67,7 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
   googleCal.searchParams.set("dates", `${fechaGoogle(turno.inicio)}/${fechaGoogle(turno.fin)}`);
   if (turno.negocio.direccion) googleCal.searchParams.set("location", turno.negocio.direccion);
 
-  const colorEstado = { pendiente: "ambar", confirmado: "verde", cancelado: "rojo", completado: "gris" } as const;
+  const colorEstado = { pendiente: "ambar", confirmado: "verde", cancelado: "rojo", completado: "gris", ausente: "rojo" } as const;
   const etiquetaEstado = esperandoSena
     ? "Falta la seña"
     : senaVencida && turno.estado !== "cancelado"

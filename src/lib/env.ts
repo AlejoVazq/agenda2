@@ -7,6 +7,13 @@ export const env = {
 };
 
 /**
+ * Seña con Mercado Pago: apagada por ahora, sin borrar la función. Con esto en false
+ * no se puede conectar Mercado Pago y, sin esa conexión, la base no pide seña y la
+ * interfaz no la muestra. Para volver a ofrecerla, alcanza con pasarlo a true.
+ */
+export const SENA_ACTIVA = false;
+
+/**
  * Qué integraciones están configuradas en este servidor. Todas son opcionales:
  * si falta una variable, la función correspondiente se oculta o se omite.
  * Solo usar del lado del servidor (lee secretos).
@@ -18,7 +25,7 @@ export function integracionesDisponibles() {
     /** Se pueden guardar credenciales de terceros (cifradas). */
     cifrado: cifrado && admin,
     google: cifrado && admin && Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-    mercadopago: cifrado && admin,
+    mercadopago: SENA_ACTIVA && cifrado && admin,
     whatsapp: admin && Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
   };
 }

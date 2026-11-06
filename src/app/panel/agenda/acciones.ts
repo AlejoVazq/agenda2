@@ -73,7 +73,10 @@ export async function cambiarEstadoTurno(entrada: z.input<typeof esquemaEstadoTu
   const { id, estado } = datos.data;
 
   const supabase = await crearSupabaseServidor();
-  const { data: actual } = await supabase.from("turnos").select("pago_estado").eq("id", id).maybeSingle();
+  const { data: actual } = await supabase.from("turnos").select("pago_estado, inicio").eq("id", id).maybeSingle();
+  if (estado === "ausente" && actual && new Date(actual.inicio) > new Date()) {
+    return { error: "Todavía no llegó la hora del turno." };
+  }
 
   const cambios: Record<string, string | null> =
     estado === "cancelado"

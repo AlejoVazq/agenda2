@@ -27,3 +27,22 @@ export async function guardarCliente(id: string, _prev: EstadoAccion, formData: 
   revalidatePath(`/panel/clientes/${id}`);
   return { ok: true, mensaje: "Cliente actualizado." };
 }
+
+/** Las inasistencias que tuvo hasta ahora dejan de limitar sus reservas online. */
+export async function quitarLimiteCliente(id: string): Promise<EstadoAccion> {
+  const sesion = await sesionParaAccion({ soloDueno: true });
+  if (!sesion) return { error: "Solo el dueño puede quitar el límite." };
+  if (!z.uuid().safeParse(id).success) return { error: "Cliente inválido." };
+
+  const supabase = await crearSupabaseServidor();
+  const { data, error } = await supabase
+    .from("clientes")
+    .update({ ausencias_perdonadas_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id");
+  if (error) return { error: mensajeDeError(error) };
+  if (!data?.length) return { error: "No se encontró el cliente." };
+
+  revalidatePath(`/panel/clientes/${id}`);
+  return { ok: true, mensaje: "Límite quitado." };
+}

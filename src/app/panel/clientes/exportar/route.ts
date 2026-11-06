@@ -27,7 +27,7 @@ export async function GET() {
   const fecha = (iso: string) =>
     new Intl.DateTimeFormat("es-AR", { dateStyle: "short", timeZone: sesion.negocio.zona_horaria }).format(new Date(iso));
   const filas = (data ?? []).map((c) => {
-    const turnos = (c.turnos as { inicio: string; estado: string }[]).filter((t) => t.estado !== "cancelado");
+    const turnos = (c.turnos as { inicio: string; estado: string }[]).filter((t) => t.estado !== "cancelado" && t.estado !== "ausente");
     const ultimo = turnos.map((t) => t.inicio).sort().at(-1);
     return [c.nombre, c.telefono, c.email, c.notas, turnos.length, ultimo ? fecha(ultimo) : "", fecha(c.created_at)];
   });

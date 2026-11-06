@@ -37,6 +37,7 @@ const COLOR_ESTADO: Record<EstadoTurno, "ambar" | "verde" | "rojo" | "gris"> = {
   confirmado: "verde",
   cancelado: "rojo",
   completado: "gris",
+  ausente: "rojo",
 };
 
 export function Agenda(props: Props) {
@@ -284,6 +285,11 @@ export function Agenda(props: Props) {
               {turno.estado === "confirmado" ? (
                 <Boton variante="secundario" disabled={pendiente} onClick={() => cambiarEstado(turno.id, "completado")}>
                   Marcar atendido
+                </Boton>
+              ) : null}
+              {(turno.estado === "pendiente" || turno.estado === "confirmado") && new Date(turno.inicio) <= new Date() ? (
+                <Boton variante="secundario" disabled={pendiente} onClick={() => cambiarEstado(turno.id, "ausente")}>
+                  No asistió
                 </Boton>
               ) : null}
               {turno.estado === "pendiente" || turno.estado === "confirmado" ? (

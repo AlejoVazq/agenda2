@@ -2,7 +2,7 @@
 // Se pueden reemplazar por los generados con `npm run db:tipos`.
 
 export type Rol = "dueno" | "empleado";
-export type EstadoTurno = "pendiente" | "confirmado" | "cancelado" | "completado";
+export type EstadoTurno = "pendiente" | "confirmado" | "cancelado" | "completado" | "ausente";
 
 export const RUBROS = {
   peluqueria: "Peluquería",
@@ -123,6 +123,7 @@ export const ESTADOS_TURNO: Record<EstadoTurno, string> = {
   confirmado: "Confirmado",
   cancelado: "Cancelado",
   completado: "Completado",
+  ausente: "No asistió",
 };
 
 /** Resultado estándar de una Server Action usada con useActionState. */

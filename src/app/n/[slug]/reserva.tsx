@@ -289,9 +289,9 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
               etiqueta="Email"
               htmlFor="email"
               errores={estado.errores?.email}
-              ayuda="Opcional. Para enviarte la confirmación y recordatorios."
+              ayuda="Para enviarte la confirmación y recordatorios."
             >
-              <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" defaultValue={valor("email")} />
+              <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" defaultValue={valor("email")} required />
             </Campo>
             {servicio.sena ? (
               <div className="flex gap-3 rounded-2xl border border-sky-100 bg-sky-50 p-4 text-sm text-sky-950">
