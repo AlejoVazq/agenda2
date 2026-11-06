@@ -54,7 +54,7 @@ function rango(periodo: Periodo, tz: string): [Date, Date] {
 export default async function PaginaEstadisticas({ searchParams }: PageProps<"/panel/estadisticas">) {
   const { negocio } = await requerirDueno();
   const { periodo: p } = await searchParams;
-  const periodo: Periodo = typeof p === "string" && p in PERIODOS ? (p as Periodo) : "mes";
+  const periodo: Periodo = typeof p === "string" && Object.hasOwn(PERIODOS, p) ? (p as Periodo) : "mes";
   const [desde, hasta] = rango(periodo, negocio.zona_horaria);
 
   const supabase = await crearSupabaseServidor();
@@ -62,7 +62,8 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
   const e = data as Estadisticas | null;
 
   const tasaCancelacion = e && e.total ? Math.round((e.cancelados / e.total) * 100) : 0;
-  const porcentajeOnline = e && e.total - e.cancelados ? Math.round((e.online / (e.total - e.cancelados)) * 100) : 0;
+  const porcentajeOnline = e && e.activos ? Math.round((e.online / e.activos) * 100) : 0;
+  const ausentes = e ? e.total - e.cancelados - e.activos : 0;
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -91,7 +92,7 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Dato titulo="Turnos" valor={String(e.total - e.cancelados)} detalle={`${e.total} reservados en total`} />
+            <Dato titulo="Turnos" valor={String(e.activos)} detalle={`${e.total} reservados en total${ausentes ? ` · ${ausentes} no asistieron` : ""}`} />
             <Dato titulo="Facturación estimada" valor={formatPrecio(e.ingresos) ?? "$ 0"} detalle="Confirmados y atendidos" />
             <Dato
               titulo="Cancelaciones"

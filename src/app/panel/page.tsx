@@ -48,7 +48,7 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
     <>
       <EncabezadoPagina
         titulo={`¡Hola, ${perfil.nombre.split(" ")[0]}!`}
-        descripcion={<span className="capitalize">{formatFechaLarga(new Date(), tz)}</span>}
+        descripcion={<span className="inline-block first-letter:uppercase">{formatFechaLarga(new Date(), tz)}</span>}
         acciones={<BotonLink href="/panel/agenda?nuevo=1">+ Nuevo turno</BotonLink>}
       />
 
@@ -171,13 +171,13 @@ function ListaTurnos({
             <div className="w-14 shrink-0">
               <p className="font-bold tabular-nums">{formatHora(t.inicio, tz)}</p>
               {conFecha ? (
-                <p className="text-xs capitalize text-zinc-500">
+                <p className="text-xs text-zinc-500 first-letter:uppercase">
                   {new Intl.DateTimeFormat("es-AR", { weekday: "short", day: "numeric", timeZone: tz }).format(new Date(t.inicio))}
                 </p>
               ) : null}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{t.cliente?.nombre ?? "Cliente"}</p>
+              <p className="truncate font-medium">{t.nombre_reserva ?? t.cliente?.nombre ?? "Cliente"}</p>
               <p className="truncate text-sm text-zinc-500">
                 {t.servicio?.nombre} · {t.profesional?.nombre}
               </p>

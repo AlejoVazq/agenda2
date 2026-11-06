@@ -18,7 +18,7 @@ export function notificarNuevaReserva(turnoId: string) {
     const { data } = await admin
       .from("turnos")
       .select(
-        "id, inicio, estado, negocio_id, profesional_id, sena_monto, pago_estado, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, telefono), negocio:negocios(nombre, zona_horaria)",
+        "id, inicio, estado, negocio_id, profesional_id, nombre_reserva, sena_monto, pago_estado, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, telefono), negocio:negocios(nombre, zona_horaria)",
       )
       .eq("id", turnoId)
       .maybeSingle();
@@ -28,6 +28,7 @@ export function notificarNuevaReserva(turnoId: string) {
       estado: string;
       negocio_id: string;
       profesional_id: string;
+      nombre_reserva: string | null;
       sena_monto: number | null;
       pago_estado: string | null;
       servicio: { nombre: string } | null;
@@ -51,7 +52,7 @@ export function notificarNuevaReserva(turnoId: string) {
         emailNuevaReserva(email, {
           turnoId: t.id,
           inicio: t.inicio,
-          cliente: t.cliente.nombre,
+          cliente: t.nombre_reserva ?? t.cliente.nombre,
           telefono: t.cliente.telefono,
           servicio: t.servicio?.nombre ?? "",
           profesional: t.profesional?.nombre ?? "",
@@ -77,11 +78,13 @@ export function notificarConfirmacionCliente(turnoId: string) {
     const { data } = await admin
       .from("turnos")
       .select(
-        "token_cancelacion, inicio, fin, precio, estado, sena_monto, pago_estado, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, email), negocio:negocios(nombre, direccion, telefono, zona_horaria, cancelacion_min_horas)",
+        "email_reserva, nombre_reserva, token_cancelacion, inicio, fin, precio, estado, sena_monto, pago_estado, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, email), negocio:negocios(nombre, direccion, telefono, zona_horaria, cancelacion_min_horas)",
       )
       .eq("id", turnoId)
       .maybeSingle();
     const t = data as unknown as {
+      email_reserva: string | null;
+      nombre_reserva: string | null;
       token_cancelacion: string;
       inicio: string;
       fin: string;
@@ -100,14 +103,15 @@ export function notificarConfirmacionCliente(turnoId: string) {
         cancelacion_min_horas: number;
       } | null;
     } | null;
-    if (!t?.cliente?.email || !t.negocio || t.estado === "cancelado") return;
+    const destino = t?.email_reserva ?? t?.cliente?.email;
+    if (!t?.cliente || !destino || !t.negocio || t.estado === "cancelado") return;
 
     await enviarEmail(
-      emailConfirmacion(t.cliente.email, {
+      emailConfirmacion(destino, {
         token: t.token_cancelacion,
         inicio: t.inicio,
         fin: t.fin,
-        cliente: t.cliente.nombre,
+        cliente: t.nombre_reserva ?? t.cliente.nombre,
         servicio: t.servicio?.nombre ?? "",
         profesional: t.profesional?.nombre ?? "",
         precio: t.precio,
@@ -121,21 +125,23 @@ export function notificarConfirmacionCliente(turnoId: string) {
 }
 
 /**
- * Avisa al cliente (si dejó email) que el negocio canceló o movió su turno.
+ * Avisa al cliente (si dejó email) que el negocio canceló, movió o confirmó su turno.
  * Lee el turno con la sesión del usuario del panel (RLS) y envía después de
  * responder, para no demorar la acción.
  */
-export async function notificarCambioTurno(turnoId: string, tipo: "cancelado" | "reprogramado") {
+export async function notificarCambioTurno(turnoId: string, tipo: "cancelado" | "reprogramado" | "confirmado") {
   const supabase = await crearSupabaseServidor();
   const { data } = await supabase
     .from("turnos")
     .select(
-      "token_cancelacion, inicio, fin, precio, estado, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, email), negocio:negocios(nombre, direccion, telefono, zona_horaria, cancelacion_min_horas)",
+      "email_reserva, nombre_reserva, token_cancelacion, inicio, fin, precio, estado, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, email), negocio:negocios(nombre, direccion, telefono, zona_horaria, cancelacion_min_horas)",
     )
     .eq("id", turnoId)
     .maybeSingle();
 
   const t = data as unknown as {
+    email_reserva: string | null;
+    nombre_reserva: string | null;
     token_cancelacion: string;
     inicio: string;
     fin: string;
@@ -152,17 +158,18 @@ export async function notificarCambioTurno(turnoId: string, tipo: "cancelado" | 
       cancelacion_min_horas: number;
     } | null;
   } | null;
-  if (!t?.cliente?.email || !t.negocio) return;
+  const destino = t?.email_reserva ?? t?.cliente?.email;
+  if (!t?.cliente || !destino || !t.negocio) return;
   // No avisar cambios de turnos que ya pasaron.
   if (new Date(t.fin) < new Date()) return;
 
   const email = emailCambioPorNegocio(
-    t.cliente.email,
+    destino,
     {
       token: t.token_cancelacion,
       inicio: t.inicio,
       fin: t.fin,
-      cliente: t.cliente.nombre,
+      cliente: t.nombre_reserva ?? t.cliente.nombre,
       servicio: t.servicio?.nombre ?? "",
       profesional: t.profesional?.nombre ?? "",
       precio: t.precio,

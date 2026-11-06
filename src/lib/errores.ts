@@ -8,11 +8,12 @@ const MENSAJES: Record<string, string> = {
   NEGOCIO_NO_DISPONIBLE: "Este negocio no está tomando reservas en este momento.",
   HORARIO_NO_DISPONIBLE: "Ese horario ya no está disponible. Elegí otro, por favor.",
   LIMITE_TURNOS:
-    "Ya tenés varios turnos reservados con estos datos. Para sacar otro, comunicate con el negocio.",
+    "Ya tenés 3 turnos reservados en este negocio. Para sacar otro, comunicate con el negocio.",
   LIMITE_DIARIO:
-    "Solo se puede pedir un turno por día con el mismo email o celular. Para sacar otro, comunicate con el negocio.",
+    "Ya tenés un turno ese día con este email. Elegí otra fecha o comunicate con el negocio.",
   LIMITE_AUSENCIAS:
-    "Como no asististe a un turno anterior, solo podés tener un turno reservado a la vez. Para sacar otro, comunicate con el negocio.",
+    "Como no asististe a varios turnos, solo podés tener un turno reservado a la vez. Para sacar otro, comunicate con el negocio.",
+  TURNO_FUTURO: "Ese turno todavía no empezó.",
   TURNO_NO_ENCONTRADO: "No encontramos el turno.",
   NO_CANCELABLE: "Este turno ya no se puede cancelar.",
   FUERA_DE_PLAZO: "Ya pasó el plazo para cancelar online. Comunicate con el negocio.",

@@ -24,11 +24,25 @@ export async function guardarServicio(
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
 
   const supabase = await crearSupabaseServidor();
-  const { error } = id
-    ? await supabase.from("servicios").update(datos.data).eq("id", id).eq("negocio_id", sesion.negocio.id)
-    : await supabase.from("servicios").insert({ ...datos.data, negocio_id: sesion.negocio.id });
+  if (id) {
+    const { error } = await supabase.from("servicios").update(datos.data).eq("id", id).eq("negocio_id", sesion.negocio.id);
+    if (error) return { error: mensajeDeError(error) };
+  } else {
+    const { data: nuevo, error } = await supabase
+      .from("servicios")
+      .insert({ ...datos.data, negocio_id: sesion.negocio.id })
+      .select("id")
+      .single();
+    if (error) return { error: mensajeDeError(error) };
 
-  if (error) return { error: mensajeDeError(error) };
+    // Con un solo profesional no hay nada que elegir: si no, el servicio no se podría reservar.
+    const { data: profesionales } = await supabase.from("profesionales").select("id").eq("activo", true).limit(2);
+    if (profesionales?.length === 1) {
+      await supabase
+        .from("profesional_servicio")
+        .insert({ negocio_id: sesion.negocio.id, profesional_id: profesionales[0].id, servicio_id: nuevo.id });
+    }
+  }
 
   revalidatePath("/panel/servicios");
   redirect("/panel/servicios");

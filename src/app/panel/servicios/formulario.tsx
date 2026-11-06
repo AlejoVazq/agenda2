@@ -15,7 +15,7 @@ export function FormularioServicio({ servicio }: { servicio?: Servicio }) {
     <form key={intento} action={accion} className="space-y-5" noValidate>
       <MensajeAccion estado={estado} />
       <Campo etiqueta="Nombre" htmlFor="nombre" errores={estado.errores?.nombre}>
-        <Input id="nombre" name="nombre" defaultValue={valor("nombre", servicio?.nombre)} placeholder="Ej: Corte y brushing" required />
+        <Input id="nombre" name="nombre" defaultValue={valor("nombre", servicio?.nombre)} placeholder="Ej: Corte y barba" required />
       </Campo>
       <div className="grid gap-5 sm:grid-cols-2">
         <Campo etiqueta="Duración (minutos)" htmlFor="duracion_min" errores={estado.errores?.duracion_min}>

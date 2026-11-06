@@ -40,7 +40,7 @@ export default function Inicio() {
         <section className="mx-auto max-w-6xl px-4 pb-16 pt-10 sm:px-6 sm:pt-20">
           <div className="max-w-2xl">
             <p className="inline-flex rounded-full bg-marca-100 px-3 py-1 text-xs font-bold text-marca-800">
-              Para peluquerías, barberías, uñas y estética
+              Para peluquerías masculinas y femeninas, barberías, uñas y estética
             </p>
             <h1 className="mt-5 text-4xl font-extrabold leading-[1.1] tracking-tight sm:text-6xl">
               Tus turnos online, <span className="text-marca-700">sin vueltas</span>.
@@ -49,9 +49,6 @@ export default function Inicio() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <BotonLink href="/registro" tamano="lg">
                 Crear mi agenda gratis
-              </BotonLink>
-              <BotonLink href="/n/estudio-luna" variante="secundario" tamano="lg">
-                Ver una página de ejemplo
               </BotonLink>
             </div>
           </div>
@@ -73,7 +70,14 @@ export default function Inicio() {
       </main>
 
       <footer className="mx-auto w-full max-w-6xl px-4 py-8 text-sm text-zinc-500 sm:px-6">
-        © {new Date().getFullYear()} {MARCA.nombre} · Hecho en Argentina
+        © {new Date().getFullYear()} {MARCA.nombre} · Hecho en Argentina ·{" "}
+        <Link href="/privacidad" className="underline">
+          Privacidad
+        </Link>{" "}
+        ·{" "}
+        <Link href="/terminos" className="underline">
+          Términos
+        </Link>
       </footer>
     </div>
   );

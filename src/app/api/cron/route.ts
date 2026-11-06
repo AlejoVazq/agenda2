@@ -54,6 +54,8 @@ function autorizado(request: NextRequest) {
 }
 
 async function recordatoriosMail() {
+  // Sin mail configurado no se reclaman: quedarían marcados como enviados.
+  if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) return { omitido: true };
   const admin = crearSupabaseAdmin();
   const { data, error } = await admin.rpc("reclamar_recordatorios", { p_limite: 100 });
   if (error) throw error;

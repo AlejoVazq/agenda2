@@ -5,7 +5,8 @@ export type Rol = "dueno" | "empleado";
 export type EstadoTurno = "pendiente" | "confirmado" | "cancelado" | "completado" | "ausente";
 
 export const RUBROS = {
-  peluqueria: "Peluquería",
+  peluqueria_masculina: "Peluquería masculina",
+  peluqueria_femenina: "Peluquería femenina",
   barberia: "Barbería",
   unas: "Uñas",
   estetica: "Estética",

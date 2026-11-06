@@ -51,6 +51,7 @@ export function Agenda(props: Props) {
   const [aviso, setAviso] = useState<{ tipo: "error" | "exito"; texto: string } | null>(null);
   const [pendiente, iniciar] = useTransition();
   const [esMovil, setEsMovil] = useState(false);
+  const [confirmarCancelar, setConfirmarCancelar] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 640px)");
@@ -86,7 +87,8 @@ export function Agenda(props: Props) {
         end: e.fin,
         color: e.color,
         display: e.tipo === "bloqueo" ? "background" : undefined,
-        editable: e.tipo === "turno" && (esDueno || e.profesional_id === miProfesionalId),
+        editable:
+          (e.turno?.estado === "pendiente" || e.turno?.estado === "confirmado") && (esDueno || e.profesional_id === miProfesionalId),
         extendedProps: { evento: e },
       }));
     },
@@ -100,7 +102,17 @@ export function Agenda(props: Props) {
     return () => fuente?.remove();
   }, [cargarEventos]);
 
+  function abrirNuevo(inicio: Date) {
+    if (!puedeAgendar) return;
+    setNuevo({
+      fecha: fechaLocalISO(inicio, tz),
+      hora: formatHora(inicio, tz),
+      profesional_id: filtro || miProfesionalId || undefined,
+    });
+  }
+
   function cambiarEstado(id: string, estado: EstadoTurno) {
+    setConfirmarCancelar(false);
     iniciar(async () => {
       const r = await cambiarEstadoTurno({ id, estado });
       setAviso(r.error ? { tipo: "error", texto: r.error } : { tipo: "exito", texto: r.mensaje ?? "Listo" });
@@ -114,6 +126,7 @@ export function Agenda(props: Props) {
   const profesionalesParaNuevo = esDueno ? profesionales : profesionales.filter((p) => p.id === miProfesionalId);
   const puedeAgendar = profesionalesParaNuevo.length > 0 && servicios.length > 0;
   const turno = seleccionado?.turno;
+  const yaEmpezo = turno ? new Date(turno.inicio) <= new Date() : false;
 
   return (
     <div>
@@ -163,7 +176,6 @@ export function Agenda(props: Props) {
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-2 sm:p-4">
         <FullCalendar
-          key={filtro}
           ref={calendario}
           plugins={[formaTheme, dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
           locale={esLocale}
@@ -192,13 +204,10 @@ export function Agenda(props: Props) {
             const ev = info.event.extendedProps.evento as EventoAgenda | undefined;
             if (ev?.tipo === "turno") setSeleccionado(ev);
           }}
+          // En pantallas táctiles, select pide mantener apretado; dateClick responde a un toque.
+          dateClick={(info) => abrirNuevo(info.date)}
           select={(info) => {
-            if (!puedeAgendar) return;
-            setNuevo({
-              fecha: fechaLocalISO(info.start, tz),
-              hora: formatHora(info.start, tz),
-              profesional_id: filtro || miProfesionalId || undefined,
-            });
+            abrirNuevo(info.start);
             calendario.current?.getApi().unselect();
           }}
           eventDrop={async (info) => {
@@ -212,6 +221,7 @@ export function Agenda(props: Props) {
               setAviso({ tipo: "error", texto: r.error });
             } else {
               setAviso({ tipo: "exito", texto: `Turno movido a las ${formatHora(info.event.start!, tz)}` });
+              refrescar();
             }
           }}
           eventResize={async (info) => {
@@ -223,6 +233,8 @@ export function Agenda(props: Props) {
             if (r.error) {
               info.revert();
               setAviso({ tipo: "error", texto: r.error });
+            } else {
+              refrescar();
             }
           }}
         />
@@ -245,7 +257,14 @@ export function Agenda(props: Props) {
         ) : null}
       </Modal>
 
-      <Modal abierto={Boolean(turno)} onCerrar={() => setSeleccionado(null)} titulo={turno?.cliente?.nombre ?? "Turno"}>
+      <Modal
+        abierto={Boolean(turno)}
+        onCerrar={() => {
+          setSeleccionado(null);
+          setConfirmarCancelar(false);
+        }}
+        titulo={turno?.nombre_reserva ?? turno?.cliente?.nombre ?? "Turno"}
+      >
         {turno ? (
           <div className="space-y-5">
             <div className="flex flex-wrap items-center gap-2">
@@ -254,7 +273,7 @@ export function Agenda(props: Props) {
             </div>
             <dl className="space-y-2 text-sm">
               <Fila titulo="Cuándo">
-                <span className="capitalize">{formatFechaLarga(turno.inicio, tz)}</span>, {formatHora(turno.inicio, tz)} a{" "}
+                <span className="inline-block first-letter:uppercase">{formatFechaLarga(turno.inicio, tz)}</span>, {formatHora(turno.inicio, tz)} a{" "}
                 {formatHora(turno.fin, tz)} h
               </Fila>
               <Fila titulo="Servicio">{turno.servicio?.nombre}</Fila>
@@ -268,7 +287,7 @@ export function Agenda(props: Props) {
               <a
                 href={linkWhatsAppCliente(
                   turno.cliente.telefono,
-                  `Hola ${turno.cliente.nombre.split(" ")[0]}! Te escribimos de ${nombreNegocio} por tu turno del ${formatFechaLarga(turno.inicio, tz)} a las ${formatHora(turno.inicio, tz)} h.`,
+                  `Hola ${(turno.nombre_reserva ?? turno.cliente.nombre).split(" ")[0]}! Te escribimos de ${nombreNegocio} por tu turno del ${formatFechaLarga(turno.inicio, tz)} a las ${formatHora(turno.inicio, tz)} h.`,
                 )}
                 target="_blank"
                 className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700"
@@ -282,20 +301,26 @@ export function Agenda(props: Props) {
                   Confirmar
                 </Boton>
               ) : null}
-              {turno.estado === "confirmado" ? (
+              {yaEmpezo && turno.estado === "confirmado" ? (
                 <Boton variante="secundario" disabled={pendiente} onClick={() => cambiarEstado(turno.id, "completado")}>
                   Marcar atendido
                 </Boton>
               ) : null}
-              {(turno.estado === "pendiente" || turno.estado === "confirmado") && new Date(turno.inicio) <= new Date() ? (
+              {yaEmpezo && (turno.estado === "pendiente" || turno.estado === "confirmado") ? (
                 <Boton variante="secundario" disabled={pendiente} onClick={() => cambiarEstado(turno.id, "ausente")}>
                   No asistió
                 </Boton>
               ) : null}
               {turno.estado === "pendiente" || turno.estado === "confirmado" ? (
-                <Boton variante="peligro" disabled={pendiente} onClick={() => cambiarEstado(turno.id, "cancelado")}>
-                  Cancelar turno
-                </Boton>
+                confirmarCancelar ? (
+                  <Boton variante="peligro" disabled={pendiente} onClick={() => cambiarEstado(turno.id, "cancelado")}>
+                    Sí, cancelar
+                  </Boton>
+                ) : (
+                  <Boton variante="peligro" disabled={pendiente} onClick={() => setConfirmarCancelar(true)}>
+                    Cancelar turno
+                  </Boton>
+                )
               ) : null}
             </div>
             <Link href={`/panel/turnos/${turno.id}`} className="block text-center text-sm font-semibold text-marca-700 hover:underline">

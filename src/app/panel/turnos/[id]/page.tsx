@@ -27,12 +27,13 @@ export default async function PaginaTurno({ params }: PageProps<"/panel/turnos/[
   const { data } = await supabase
     .from("turnos")
     .select(
-      "id, inicio, fin, estado, precio, notas, origen, profesional_id, servicio_id, cancelado_por, created_at, token_cancelacion, sena_monto, pago_estado, pago_vence_at, google_event_id, servicio:servicios(nombre, duracion_min), profesional:profesionales(nombre, color), cliente:clientes(id, nombre, telefono, email)",
+      "id, inicio, fin, estado, precio, notas, origen, nombre_reserva, email_reserva, profesional_id, servicio_id, cancelado_por, created_at, token_cancelacion, sena_monto, pago_estado, pago_vence_at, google_event_id, servicio:servicios(nombre, duracion_min), profesional:profesionales(nombre, color), cliente:clientes(id, nombre, telefono, email)",
     )
     .eq("id", id)
     .maybeSingle();
   if (!data) notFound();
   const t = data as unknown as TurnoConDetalle & {
+    email_reserva: string | null;
     cancelado_por: string | null;
     created_at: string;
     token_cancelacion: string;
@@ -45,7 +46,8 @@ export default async function PaginaTurno({ params }: PageProps<"/panel/turnos/[
   const activo = t.estado === "pendiente" || t.estado === "confirmado";
   const futuro = new Date(t.fin) > new Date();
   const linkCliente = `${env.siteUrl}/t/${t.token_cancelacion}`;
-  const nombre = t.cliente?.nombre.split(" ")[0] ?? "";
+  const nombreCliente = t.nombre_reserva ?? t.cliente?.nombre;
+  const nombre = nombreCliente?.split(" ")[0] ?? "";
   const cuando = `${formatFechaLarga(t.inicio, tz)} a las ${formatHora(t.inicio, tz)} h`;
   const mensajes =
     t.cliente?.telefono && activo && futuro
@@ -73,9 +75,9 @@ export default async function PaginaTurno({ params }: PageProps<"/panel/turnos/[
   return (
     <div className="max-w-2xl space-y-6">
       <EncabezadoPagina
-        titulo={t.cliente?.nombre ?? "Turno"}
+        titulo={nombreCliente ?? "Turno"}
         descripcion={
-          <span className="capitalize">
+          <span className="inline-block first-letter:uppercase">
             {formatFechaLarga(t.inicio, tz)} · {formatHora(t.inicio, tz)} a {formatHora(t.fin, tz)} h
           </span>
         }
@@ -121,7 +123,7 @@ export default async function PaginaTurno({ params }: PageProps<"/panel/turnos/[
               "—"
             )}
           </Dato>
-          <Dato titulo="Email">{t.cliente?.email ?? "—"}</Dato>
+          <Dato titulo="Email">{t.email_reserva ?? t.cliente?.email ?? "—"}</Dato>
         </dl>
         {t.pago_estado === "pendiente" && activo ? (
           <Aviso tipo="alerta">

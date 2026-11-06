@@ -1,15 +1,15 @@
 // Utilidades de WhatsApp que sirven tanto en el servidor como en el navegador.
 
 /**
- * Normaliza un teléfono al formato internacional que usa WhatsApp para
- * Argentina (549 + característica + número, sin 0 ni 15). Números de otros
- * países (que ya traen su código) se dejan como están.
+ * Deja un teléfono en el formato en que se guarda: en Argentina, característica
+ * + número (10 dígitos, sin 54, 9, 0 ni 15). Números de otros países (que ya traen
+ * su código) se dejan como están. Misma regla que normalizar_telefono en la base.
  */
-export function telefonoWhatsApp(telefono: string) {
+export function normalizarTelefono(telefono: string) {
   let n = telefono.replace(/\D/g, "");
   if (n.startsWith("00")) n = n.slice(2);
-  if (n.startsWith("549") && n.length === 13) return n;
-  if (n.startsWith("54") && n.length === 12) return `549${n.slice(2)}`;
+  if (n.startsWith("549") && n.length === 13) return n.slice(3);
+  if (n.startsWith("54") && n.length === 12) return n.slice(2);
   if (n.startsWith("54") && n.length > 12) n = n.slice(2).replace(/^9/, "");
   if (n.startsWith("0")) n = n.slice(1);
   // Característica de 2 a 4 dígitos seguida de "15" (forma local de los celulares).
@@ -21,8 +21,13 @@ export function telefonoWhatsApp(telefono: string) {
       }
     }
   }
-  if (n.length === 10) return `549${n}`;
   return n;
+}
+
+/** Formato internacional que usa WhatsApp para Argentina (549 + 10 dígitos). */
+export function telefonoWhatsApp(telefono: string) {
+  const n = normalizarTelefono(telefono);
+  return n.length === 10 ? `549${n}` : n;
 }
 
 /** Link de WhatsApp (click to chat) con un mensaje opcional precargado. */

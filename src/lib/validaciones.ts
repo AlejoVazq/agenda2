@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { RUBROS } from "@/lib/tipos";
+import { normalizarTelefono } from "@/lib/whatsapp";
 
 // --- Helpers para FormData ---------------------------------------------------------
 
@@ -41,7 +42,7 @@ const emailObligatorio = z.preprocess(
 );
 
 export const telefono = z.preprocess(
-  (v) => (typeof v === "string" ? v.replace(/\D/g, "") : ""),
+  (v) => (typeof v === "string" ? normalizarTelefono(v) : ""),
   z.string().regex(/^[0-9]{8,15}$/, "Ingresá un teléfono válido, con código de área (ej: 341 555 1234)"),
 );
 

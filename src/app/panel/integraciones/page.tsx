@@ -66,7 +66,7 @@ export default async function PaginaIntegraciones({ searchParams }: PageProps<"/
         descripcion="Cada turno aparece en el calendario del profesional y se actualiza solo si se mueve o se cancela."
       >
         {!disponibles.google ? (
-          <NoConfigurado variables="GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET e INTEGRACIONES_CLAVE" />
+          <NoConfigurado />
         ) : !profs?.length ? (
           <p className="text-sm text-zinc-600">
             {esDueno ? "Todavía no hay profesionales activos." : "Tu usuario no tiene una agenda asignada."}
@@ -131,7 +131,7 @@ export default async function PaginaIntegraciones({ searchParams }: PageProps<"/
               descripcion="Pedí una seña al reservar online para reducir los faltazos. El dinero va directo a tu cuenta."
             >
               {!disponibles.mercadopago ? (
-                <NoConfigurado variables="INTEGRACIONES_CLAVE y SUPABASE_SERVICE_ROLE_KEY" />
+                <NoConfigurado />
               ) : mp ? (
                 <div className="space-y-6">
                   <div className="flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 p-4">
@@ -191,12 +191,8 @@ function Seccion({ icono, titulo, descripcion, children }: { icono: ReactNode; t
   );
 }
 
-function NoConfigurado({ variables }: { variables: string }) {
-  return (
-    <Aviso tipo="alerta">
-      No está disponible en este servidor. Para activarlo hay que configurar {variables} (ver README).
-    </Aviso>
-  );
+function NoConfigurado() {
+  return <Aviso tipo="info">Todavía no está disponible. Lo vamos a habilitar más adelante.</Aviso>;
 }
 
 function IconoGoogle() {

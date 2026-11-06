@@ -124,7 +124,7 @@ src/
    - Las FK compuestas `(negocio_id, id)` impiden que un turno apunte a un profesional o servicio de otro negocio.
 4. **Turnos duplicados**: hay una restricción de exclusión `EXCLUDE USING gist (profesional_id WITH =, tstzrange(inicio, fin) WITH &&) WHERE estado <> 'cancelado'`. Aunque dos personas reserven a la vez, Postgres rechaza la segunda reserva. Con "cualquier profesional", `crear_reserva` prueba con el siguiente libre.
 5. **Token del turno**: tiene 64 caracteres hex aleatorios. La página `/t/[token]` es `noindex` y `no-referrer`.
-6. **Anti-abuso**: la reserva online pide email y, por negocio, cuenta por email o celular: un turno por día (ni dos para la misma fecha, ni dos pedidos online el mismo día), máximo 3 turnos futuros, y uno solo a la vez si tiene una inasistencia sin perdonar. Los turnos cancelados no cuentan y desde el panel no hay límites. También hay límite de pedidos por IP (hash) en reservar y consultar horarios.
+6. **Anti-abuso**: la reserva online pide email y, por negocio, permite un turno por fecha con cada email, máximo 3 turnos futuros (por email o celular) y uno solo a la vez con 3 inasistencias sin perdonar. Los turnos cancelados no cuentan y desde el panel no hay límites. También hay límite de pedidos por IP (hash) en reservar y consultar horarios.
 7. **Secretos de terceros**: los tokens de Google y Mercado Pago se guardan cifrados (AES-256-GCM, `INTEGRACIONES_CLAVE`) en `integraciones_secretos`, una tabla a la que ni `anon` ni `authenticated` tienen acceso: solo el servidor.
 8. **Pagos**: nunca se confía en los parámetros que llegan del navegador ni en el cuerpo del webhook. El pago se consulta a la API de Mercado Pago con el token del negocio y solo se registra si es la seña de un turno de ese negocio, por el monto correcto.
 
@@ -213,16 +213,21 @@ src/
 
 ---
 
-## Producción (Supabase cloud)
+## Producción (Vercel + Supabase cloud + Resend)
 
-1. Creá un proyecto en supabase.com y vinculalo: `npx supabase link --project-ref <ref>`.
-2. Subí las migraciones con `npx supabase db push`. El seed **no** se sube.
-3. En Auth → URL Configuration, cargá el `Site URL` y agregá `https://tu-dominio/**` a los redirect URLs.
-4. En Auth → Email Templates, para que los links funcionen con SSR, cambiá el link de **Confirm signup**, **Invite** y **Reset password** por:
+1. Creá un proyecto en supabase.com (región São Paulo) y vinculalo: `npx supabase link --project-ref <ref>`.
+2. Subí las migraciones con `npx supabase db push`. El seed **no** se sube. Comprobá los permisos en el SQL Editor: `select has_table_privilege('authenticated', 'public.perfiles', 'select');` tiene que dar `true`.
+3. En Resend, verificá tu dominio y creá una API key. Sin dominio propio, Resend solo entrega a tu propia dirección.
+4. En Supabase → Auth → SMTP, cargá Resend (`smtp.resend.com`, puerto 465, usuario `resend`, contraseña: la API key). El correo que trae Supabase solo llega a los miembros del proyecto, así que sin esto nadie más puede registrarse.
+5. En Auth → URL Configuration, cargá el `Site URL` y agregá `https://tu-dominio/**` a los redirect URLs.
+6. En Auth → Email Templates, para que los links funcionen con SSR, cambiá el link de **Confirm signup** y **Reset password** por:
    `{{ .SiteURL }}/auth/confirmar?token_hash={{ .TokenHash }}&type=email&next=/onboarding`
-   (usá `type=invite` y `next=/cuenta/password` para la invitación, y `type=recovery` con `next=/cuenta/password` para el reset).
-5. Configurá las variables de `.env.example` en el hosting, con `NEXT_PUBLIC_SITE_URL` en `https://…`. Es necesario para que Mercado Pago acepte el webhook y la vuelta automática.
-6. Agregá la URI `https://tu-dominio/api/google/callback` a las credenciales de Google y publicá la pantalla de consentimiento. Google pide verificar la app para el permiso de calendario si la van a usar más de 100 cuentas.
+   (usá `type=recovery` y `next=/cuenta/password` para el reset).
+7. En Vercel, creá el proyecto desde el repositorio (región `gru1`) y cargá las variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (ahora obligatoria: las reservas la usan), `NEXT_PUBLIC_SITE_URL` (`https://…`), `NEXT_PUBLIC_CONTACTO_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM` y `CRON_SECRET`. Las `NEXT_PUBLIC_*` se fijan al compilar: si cambian, hay que volver a desplegar.
+8. Programá `GET https://tu-dominio/api/cron` cada hora con el header `Authorization: Bearer <CRON_SECRET>` en un cron externo (por ejemplo cron-job.org). El plan gratuito de Vercel no permite crons cada hora y hace fallar el despliegue si `vercel.json` los pide.
+9. Hacé un respaldo con `npx supabase db dump` (esquema, y otra vez con `--data-only`): el plan gratuito de Supabase no tiene copias automáticas.
+
+Para activar más adelante: `INTEGRACIONES_CLAVE`, las variables de Google (con `https://tu-dominio/api/google/callback` como URI autorizada) y las de WhatsApp. La seña con Mercado Pago se activa además con `SENA_ACTIVA` en `src/lib/env.ts`.
 
 ---
 

@@ -32,7 +32,7 @@ export function AccionesEstado({ id, estado, yaEmpezo }: { id: string; estado: E
             Confirmar
           </Boton>
         ) : null}
-        {estado === "confirmado" ? (
+        {yaEmpezo && estado === "confirmado" ? (
           <Boton variante="secundario" disabled={pendiente} onClick={() => cambiar("completado")}>
             Marcar como atendido
           </Boton>

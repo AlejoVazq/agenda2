@@ -23,7 +23,7 @@ export function useFormulario<E extends EstadoAccion>(accion: (prev: E, formData
       if (resultado.ok) return { ...resultado, intento } as Estado;
       const valores: Record<string, string> = {};
       for (const [k, v] of formData.entries()) {
-        if (typeof v === "string" && !/password|confirmacion/i.test(k) && !(k in valores)) valores[k] = v;
+        if (typeof v === "string" && !/password|^confirmacion$/i.test(k) && !(k in valores)) valores[k] = v;
       }
       return { ...resultado, valores, intento } as Estado;
     },

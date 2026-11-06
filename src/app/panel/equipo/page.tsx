@@ -54,7 +54,7 @@ export default async function PaginaEquipo() {
           Primero creá a la persona en Profesionales; después generá su invitación acá.
         </p>
         {!adminConfigurado ? (
-          <Aviso tipo="alerta">Falta configurar SUPABASE_SERVICE_ROLE_KEY en el servidor para poder invitar.</Aviso>
+          <Aviso tipo="alerta">Las invitaciones todavía no están disponibles.</Aviso>
         ) : libres.length === 0 ? (
           <Aviso tipo="info">Todos los profesionales activos ya tienen usuario. Creá uno nuevo en Profesionales.</Aviso>
         ) : (

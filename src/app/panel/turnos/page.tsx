@@ -24,8 +24,8 @@ export default async function PaginaTurnos({ searchParams }: PageProps<"/panel/t
   const { negocio, esDueno } = await requerirPanel();
   const tz = negocio.zona_horaria;
 
-  const rango: Rango = typeof sp.rango === "string" && sp.rango in RANGOS ? (sp.rango as Rango) : "proximos";
-  const estado = typeof sp.estado === "string" && sp.estado in ESTADOS_TURNO ? (sp.estado as EstadoTurno) : null;
+  const rango: Rango = typeof sp.rango === "string" && Object.hasOwn(RANGOS, sp.rango) ? (sp.rango as Rango) : "proximos";
+  const estado = typeof sp.estado === "string" && Object.hasOwn(ESTADOS_TURNO, sp.estado) ? (sp.estado as EstadoTurno) : null;
   const profesional = typeof sp.profesional === "string" && /^[0-9a-f-]{36}$/.test(sp.profesional) ? sp.profesional : undefined;
 
   const hoy = fechaLocalISO(new Date(), tz);
@@ -100,7 +100,7 @@ export default async function PaginaTurnos({ searchParams }: PageProps<"/panel/t
         <div className="space-y-6">
           {[...porDia.entries()].map(([dia, lista]) => (
             <section key={dia}>
-              <h2 className="mb-2 text-sm font-bold capitalize text-zinc-600">
+              <h2 className="mb-2 text-sm font-bold text-zinc-600 first-letter:uppercase">
                 {formatFechaISO(dia, { weekday: "long", day: "numeric", month: "long" })}
               </h2>
               <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
@@ -111,7 +111,7 @@ export default async function PaginaTurnos({ searchParams }: PageProps<"/panel/t
                       <p className="w-12 shrink-0 font-bold tabular-nums">{formatHora(t.inicio, tz)}</p>
                       <div className="min-w-0 flex-1">
                         <p className={t.estado === "cancelado" ? "truncate font-medium text-zinc-400 line-through" : "truncate font-medium"}>
-                          {t.cliente?.nombre ?? "Cliente"}
+                          {t.nombre_reserva ?? t.cliente?.nombre ?? "Cliente"}
                         </p>
                         <p className="truncate text-sm text-zinc-500">
                           {t.servicio?.nombre} · {t.profesional?.nombre}

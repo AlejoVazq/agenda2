@@ -53,7 +53,7 @@ export default async function PaginaClientes({ searchParams }: PageProps<"/panel
       ) : (
         <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
           {clientes.map((c) => {
-            const activos = c.turnos.filter((t) => t.estado !== "cancelado");
+            const activos = c.turnos.filter((t) => t.estado !== "cancelado" && t.estado !== "ausente");
             const proximo = activos.filter((t) => t.inicio >= ahora).sort((a, b) => a.inicio.localeCompare(b.inicio))[0];
             const ultimo = activos.filter((t) => t.inicio < ahora).sort((a, b) => b.inicio.localeCompare(a.inicio))[0];
             return (

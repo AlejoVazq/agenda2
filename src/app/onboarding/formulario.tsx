@@ -12,8 +12,13 @@ export function slugDesde(texto: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
+    .replace(/^-+/, "")
     .slice(0, 50);
+}
+
+/** El guion final se deja mientras se escribe y se quita al salir del campo. */
+function slugFinal(texto: string) {
+  return slugDesde(texto).replace(/-+$/, "");
 }
 
 export function FormularioOnboarding({ nombreUsuario, siteUrl }: { nombreUsuario: string; siteUrl: string }) {
@@ -65,12 +70,13 @@ export function FormularioOnboarding({ nombreUsuario, siteUrl }: { nombreUsuario
               setSlugEditado(true);
               setSlug(slugDesde(e.target.value));
             }}
+            onBlur={() => setSlug(slugFinal(slug))}
           />
         </div>
       </Campo>
 
       <Campo etiqueta="Rubro" htmlFor="rubro" errores={estado.errores?.rubro}>
-        <Select id="rubro" name="rubro" defaultValue={valor("rubro", "peluqueria")}>
+        <Select id="rubro" name="rubro" defaultValue={valor("rubro", "peluqueria_masculina")}>
           {Object.entries(RUBROS).map(([valor, texto]) => (
             <option key={valor} value={valor}>
               {texto}

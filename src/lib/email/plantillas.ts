@@ -37,7 +37,9 @@ function plantilla({ titulo, intro, d, boton }: { titulo: string; intro: string;
   if (d.negocio.direccion) filas.push(["Dónde", d.negocio.direccion]);
 
   const politica =
-    d.cancelacion_min_horas > 0
+    d.estado === "cancelado"
+      ? ""
+      : d.cancelacion_min_horas > 0
       ? `Podés cancelar online hasta ${d.cancelacion_min_horas} ${d.cancelacion_min_horas === 1 ? "hora" : "horas"} antes del turno.`
       : "Podés cancelar online hasta el momento del turno.";
 
@@ -73,7 +75,7 @@ function plantilla({ titulo, intro, d, boton }: { titulo: string; intro: string;
     "",
     ...filas.map(([k, v]) => `${k}: ${v}`),
     "",
-    `Ver o cancelar tu turno: ${link}`,
+    `${d.estado === "cancelado" ? "Ver tu turno" : "Ver o cancelar tu turno"}: ${link}`,
     politica,
   ].join("\n");
 
@@ -98,14 +100,16 @@ export function emailConfirmacion(para: string, d: DatosTurnoEmail): Email {
   };
 }
 
-export function emailCambioPorNegocio(para: string, d: DatosTurnoEmail, tipo: "cancelado" | "reprogramado"): Email {
+export function emailCambioPorNegocio(para: string, d: DatosTurnoEmail, tipo: "cancelado" | "reprogramado" | "confirmado"): Email {
   const nombre = d.cliente.split(" ")[0];
   const { html, texto } = plantilla({
-    titulo: tipo === "cancelado" ? "Tu turno fue cancelado" : "Tu turno cambió de horario",
+    titulo: tipo === "cancelado" ? "Tu turno fue cancelado" : tipo === "confirmado" ? "Tu turno está confirmado" : "Tu turno cambió de horario",
     intro:
       tipo === "cancelado"
         ? `Hola ${nombre}, ${d.negocio.nombre} canceló tu turno. Podés reservar otro cuando quieras.`
-        : `Hola ${nombre}, ${d.negocio.nombre} movió tu turno. Estos son los nuevos datos:`,
+        : tipo === "confirmado"
+          ? `Hola ${nombre}, ${d.negocio.nombre} confirmó tu turno. Te esperamos.`
+          : `Hola ${nombre}, ${d.negocio.nombre} movió tu turno. Estos son los nuevos datos:`,
     d,
     boton: tipo === "cancelado" ? "Ver detalle" : "Ver mi turno",
   });
@@ -114,7 +118,9 @@ export function emailCambioPorNegocio(para: string, d: DatosTurnoEmail, tipo: "c
     asunto:
       tipo === "cancelado"
         ? `Turno cancelado: ${d.servicio} en ${d.negocio.nombre}`
-        : `Nuevo horario: ${formatFechaHora(d.inicio, d.negocio.zona_horaria)} en ${d.negocio.nombre}`,
+        : tipo === "confirmado"
+          ? `Turno confirmado: ${formatFechaHora(d.inicio, d.negocio.zona_horaria)} en ${d.negocio.nombre}`
+          : `Nuevo horario: ${formatFechaHora(d.inicio, d.negocio.zona_horaria)} en ${d.negocio.nombre}`,
     html,
     texto,
   };

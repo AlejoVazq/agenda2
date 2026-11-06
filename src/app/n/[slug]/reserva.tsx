@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { Aviso, Campo, Input, cx } from "@/components/ui";
 import { formatDuracion, formatFechaISO, formatFechaLarga, formatHora, formatPrecio, sumarDias } from "@/lib/fechas";
@@ -23,8 +24,10 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
   const [cargandoDias, iniciarDias] = useTransition();
   const [cargandoHorarios, iniciarHorarios] = useTransition();
   const [avisoHorario, setAvisoHorario] = useState<string | null>(null);
+  const [inicioIntentado, setInicioIntentado] = useState<string | null>(null);
   const { estado, accion, valor, intento } = useFormulario(async (prev: EstadoAccion, formData: FormData) => {
     const resultado = await reservar(prev, formData);
+    setInicioIntentado(String(formData.get("inicio")));
     // Si otro cliente tomó el horario un instante antes, volver a elegir.
     if (resultado.error?.includes("horario")) {
       setAvisoHorario(resultado.error);
@@ -88,6 +91,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
       setProfesionalId(profs[0] ?? CUALQUIERA);
       setPaso("horario");
     } else {
+      setProfesionalId(CUALQUIERA);
       setPaso("profesional");
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -211,6 +215,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
                     <button
                       disabled={!disponible}
                       onClick={() => {
+                        if (d === fecha) return;
                         setFecha(d);
                         setHorarios(null);
                       }}
@@ -242,11 +247,11 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
             ) : dias.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-600">
                 No hay horarios disponibles en los próximos días.
-                {profesionalId !== CUALQUIERA ? " Probá con otro profesional." : " Comunicate con el negocio."}
+                {profesionalId !== CUALQUIERA && profesionalesDelServicio.length > 1 ? " Probá con otro profesional." : " Comunicate con el negocio."}
               </p>
             ) : fecha ? (
               <>
-                <p className="mb-3 text-sm font-semibold capitalize text-zinc-700">
+                <p className="mb-3 text-sm font-semibold text-zinc-700 first-letter:uppercase">
                   {formatFechaISO(fecha, { weekday: "long", day: "numeric", month: "long" })}
                 </p>
                 {cargandoHorarios || horarios === null ? (
@@ -273,7 +278,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
             <input type="hidden" name="servicio_id" value={servicio.id} />
             <input type="hidden" name="profesional_id" value={profesionalId} />
             <input type="hidden" name="inicio" value={horario.inicio} />
-            {estado.error?.includes("horario") ? null : <MensajeAccion estado={estado} />}
+            {estado.error?.includes("horario") || inicioIntentado !== horario.inicio ? null : <MensajeAccion estado={estado} />}
             <Campo etiqueta="Nombre y apellido" htmlFor="nombre" errores={estado.errores?.nombre}>
               <Input id="nombre" name="nombre" autoComplete="name" defaultValue={valor("nombre")} required />
             </Campo>
@@ -313,7 +318,11 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
             <p className="text-center text-xs text-zinc-500">
               {negocio.cancelacion_min_horas > 0
                 ? `Podés cancelar online hasta ${negocio.cancelacion_min_horas} ${negocio.cancelacion_min_horas === 1 ? "hora" : "horas"} antes.`
-                : "Podés cancelar online hasta el momento del turno."}
+                : "Podés cancelar online hasta el momento del turno."}{" "}
+              Usamos tus datos para gestionar tu turno y sus avisos.{" "}
+              <Link href="/privacidad" target="_blank" className="underline">
+                Ver privacidad
+              </Link>
             </p>
           </form>
         </section>
@@ -357,7 +366,7 @@ function Resumen({
         </p>
         {servicio.sena ? <p className="text-marca-900/80">Seña: {formatPrecio(servicio.sena)}</p> : null}
         {horario ? (
-          <p className="mt-1 font-semibold capitalize text-marca-900">
+          <p className="mt-1 font-semibold text-marca-900 first-letter:uppercase">
             {formatFechaLarga(horario.inicio, tz)} · {formatHora(horario.inicio, tz)} h
           </p>
         ) : null}

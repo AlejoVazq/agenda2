@@ -16,7 +16,7 @@ import {
   esquemaMoverTurno,
   esquemaTurnoPanel,
 } from "@/lib/validaciones";
-import type { EstadoAccion } from "@/lib/tipos";
+import type { EstadoAccion, EstadoTurno } from "@/lib/tipos";
 
 /**
  * Libera retenciones de seña vencidas antes de ocupar un horario desde el panel,
@@ -65,6 +65,14 @@ export async function moverTurno(entrada: z.input<typeof esquemaMoverTurno>): Pr
   return { ok: true, mensaje: "Turno movido." };
 }
 
+const TRANSICIONES: Record<EstadoTurno, EstadoTurno[]> = {
+  pendiente: ["confirmado", "cancelado", "ausente"],
+  confirmado: ["completado", "cancelado", "ausente"],
+  cancelado: ["confirmado"],
+  completado: ["confirmado"],
+  ausente: ["confirmado"],
+};
+
 export async function cambiarEstadoTurno(entrada: z.input<typeof esquemaEstadoTurno>): Promise<EstadoAccion> {
   const sesion = await sesionParaAccion();
   if (!sesion) return { error: "No tenés permiso." };
@@ -73,10 +81,9 @@ export async function cambiarEstadoTurno(entrada: z.input<typeof esquemaEstadoTu
   const { id, estado } = datos.data;
 
   const supabase = await crearSupabaseServidor();
-  const { data: actual } = await supabase.from("turnos").select("pago_estado, inicio").eq("id", id).maybeSingle();
-  if (estado === "ausente" && actual && new Date(actual.inicio) > new Date()) {
-    return { error: "Todavía no llegó la hora del turno." };
-  }
+  const { data: actual } = await supabase.from("turnos").select("estado, pago_estado").eq("id", id).maybeSingle();
+  if (!actual) return { error: "No se encontró el turno." };
+  if (!TRANSICIONES[actual.estado as EstadoTurno].includes(estado)) return { error: "El turno ya cambió. Recargá la página." };
 
   const cambios: Record<string, string | null> =
     estado === "cancelado"
@@ -84,7 +91,7 @@ export async function cambiarEstadoTurno(entrada: z.input<typeof esquemaEstadoTu
       : { estado, cancelado_at: null, cancelado_por: null };
   // Confirmar o reactivar a mano un turno que esperaba la seña: el negocio
   // decide tomarlo igual, así que deja de vencer.
-  if (estado !== "cancelado" && (actual?.pago_estado === "pendiente" || actual?.pago_estado === "vencido")) {
+  if (estado !== "cancelado" && (actual.pago_estado === "pendiente" || actual.pago_estado === "vencido")) {
     cambios.pago_estado = null;
   }
 
@@ -96,6 +103,10 @@ export async function cambiarEstadoTurno(entrada: z.input<typeof esquemaEstadoTu
   if (!data?.length) return { error: "No se encontró el turno." };
 
   if (estado === "cancelado") await notificarCambioTurno(id, "cancelado");
+  // Se le había dicho que le iban a avisar, o que el turno estaba cancelado.
+  if (estado === "confirmado" && (actual.estado === "pendiente" || actual.estado === "cancelado")) {
+    await notificarCambioTurno(id, "confirmado");
+  }
   sincronizarGoogleDespues(id);
   revalidatePath("/panel", "layout");
   return { ok: true, mensaje: "Turno actualizado." };

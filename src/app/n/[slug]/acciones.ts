@@ -6,6 +6,7 @@ import { trasReservaFirme } from "@/lib/eventos";
 import { sincronizarGoogleDespues } from "@/lib/google";
 import { dentroDelLimite } from "@/lib/limites";
 import { crearPagoSena } from "@/lib/mercadopago";
+import { crearSupabaseAdmin } from "@/lib/supabase/admin";
 import { crearSupabaseServidor } from "@/lib/supabase/server";
 import { mensajeDeError } from "@/lib/errores";
 import { datosDeForm, erroresDeCampo, esquemaConsultaHorarios, esquemaReserva } from "@/lib/validaciones";
@@ -78,12 +79,12 @@ export async function reservar(_prev: EstadoAccion, formData: FormData): Promise
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
   const d = datos.data;
 
-  if (!(await dentroDelLimite("reservar", 8, 3600))) {
+  if (!(await dentroDelLimite(`reservar:${d.negocio_id}`, 20, 3600))) {
     return { error: "Hiciste muchas reservas seguidas. Esperá un rato o comunicate con el negocio." };
   }
 
-  const supabase = await crearSupabaseServidor();
-  const { data, error } = await supabase.rpc("crear_reserva", {
+  // crear_reserva no está abierta al público, para que este límite no se pueda esquivar.
+  const { data, error } = await crearSupabaseAdmin().rpc("crear_reserva", {
     p_negocio_id: d.negocio_id,
     p_servicio_id: d.servicio_id,
     p_profesional_id: d.profesional_id,

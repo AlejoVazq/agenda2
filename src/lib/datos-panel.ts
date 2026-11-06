@@ -11,6 +11,7 @@ export type TurnoConDetalle = {
   notas: string | null;
   origen: "online" | "panel";
   pago_estado: EstadoPago | null;
+  nombre_reserva: string | null;
   profesional_id: string;
   servicio_id: string;
   servicio: { nombre: string; duracion_min: number } | null;
@@ -19,7 +20,7 @@ export type TurnoConDetalle = {
 };
 
 const SELECT_TURNO =
-  "id, inicio, fin, estado, precio, notas, origen, pago_estado, profesional_id, servicio_id, servicio:servicios(nombre, duracion_min), profesional:profesionales(nombre, color), cliente:clientes(id, nombre, telefono, email)";
+  "id, inicio, fin, estado, precio, notas, origen, pago_estado, nombre_reserva, profesional_id, servicio_id, servicio:servicios(nombre, duracion_min), profesional:profesionales(nombre, color), cliente:clientes(id, nombre, telefono, email)";
 
 /**
  * Turnos en un rango [desde, hasta). RLS ya restringe: el dueño ve todo su
@@ -77,7 +78,7 @@ export async function eventosEnRango(desde: string, hasta: string, profesionalId
       inicio: t.inicio,
       fin: t.fin,
       profesional_id: t.profesional_id,
-      titulo: `${t.cliente?.nombre ?? "Cliente"} · ${t.servicio?.nombre ?? ""}`,
+      titulo: `${t.nombre_reserva ?? t.cliente?.nombre ?? "Cliente"} · ${t.servicio?.nombre ?? ""}`,
       color: t.profesional?.color ?? "#7434ee",
       turno: t,
     })),

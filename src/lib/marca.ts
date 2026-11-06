@@ -3,5 +3,5 @@ export const MARCA = {
   nombre: "Turnia",
   lema: "Tu agenda online, sin vueltas",
   descripcion:
-    "Turnos online para salones, barberías, uñas y estética. Tus clientes reservan desde el celular, sin crear cuenta.",
+    "Turnos online para peluquerías, barberías, uñas y estética. Tus clientes reservan desde el celular, sin crear cuenta.",
 };

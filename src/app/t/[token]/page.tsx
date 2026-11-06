@@ -140,7 +140,7 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
 
           <dl className="mt-5 space-y-3 text-sm">
             <Fila titulo="Día">
-              <span className="capitalize">{formatFechaLarga(turno.inicio, tz)}</span>
+              <span className="inline-block first-letter:uppercase">{formatFechaLarga(turno.inicio, tz)}</span>
             </Fila>
             <Fila titulo="Horario">
               {formatHora(turno.inicio, tz)} a {formatHora(turno.fin, tz)} h

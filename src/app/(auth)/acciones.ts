@@ -9,7 +9,7 @@ import type { EstadoAccion } from "@/lib/tipos";
 /** Solo se permiten redirecciones internas (evita open redirects). */
 function destinoSeguro(next: FormDataEntryValue | null, porDefecto = "/panel") {
   const valor = typeof next === "string" ? next : "";
-  return valor.startsWith("/") && !valor.startsWith("//") ? valor : porDefecto;
+  return valor.startsWith("/") && !valor.startsWith("//") && !valor.includes("\\") ? valor : porDefecto;
 }
 
 export async function iniciarSesion(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {

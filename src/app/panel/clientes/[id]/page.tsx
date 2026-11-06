@@ -52,7 +52,7 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
   const gastado = atendidos.reduce((total, t) => total + Number(t.precio ?? 0), 0);
   const ausencias = turnos.filter((t) => t.estado === "ausente");
   // Misma regla que crear_reserva: las ausencias perdonadas ya no limitan.
-  const limitado = ausencias.some((t) => !c.ausencias_perdonadas_at || new Date(t.inicio) > new Date(c.ausencias_perdonadas_at));
+  const limitado = ausencias.filter((t) => !c.ausencias_perdonadas_at || new Date(t.inicio) > new Date(c.ausencias_perdonadas_at)).length >= 3;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -86,7 +86,7 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
       {limitado ? (
         <Aviso tipo="alerta">
           <p>
-            Por no asistir a un turno, solo puede tener un turno reservado a la vez desde la página de reservas. Desde el
+            Por no asistir a 3 turnos, solo puede tener un turno reservado a la vez desde la página de reservas. Desde el
             panel le podés agendar los que quieras.
           </p>
           <BotonAccion className="mt-2" accion={quitarLimiteCliente.bind(null, c.id)} confirmar="Sí, quitar el límite" pendiente="Guardando…">
@@ -110,7 +110,7 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
               <li key={t.id}>
                 <Link href={`/panel/turnos/${t.id}`} className="flex items-center gap-3 rounded-lg px-2 py-2.5 hover:bg-zinc-50">
                   <div className="w-24 shrink-0 text-sm">
-                    <p className="font-semibold capitalize">{formatFechaCorta(t.inicio, tz)}</p>
+                    <p className="font-semibold first-letter:uppercase">{formatFechaCorta(t.inicio, tz)}</p>
                     <p className="text-zinc-500 tabular-nums">{formatHora(t.inicio, tz)} h</p>
                   </div>
                   <div className="min-w-0 flex-1 text-sm">

@@ -4,6 +4,8 @@ export const env = {
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
   siteUrl: (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/$/, ""),
+  /** Mail de contacto que se muestra en la política de privacidad. */
+  contactoEmail: process.env.NEXT_PUBLIC_CONTACTO_EMAIL ?? "",
 };
 
 /**

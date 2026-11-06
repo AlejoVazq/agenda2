@@ -63,8 +63,8 @@ export default async function PaginaBloqueos() {
               <li key={b.id} className="flex items-center gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">
-                    <span className="capitalize">{formatFechaCorta(b.inicio, tz)}</span> {formatHora(b.inicio, tz)} →{" "}
-                    <span className="capitalize">{formatFechaCorta(b.fin, tz)}</span> {formatHora(b.fin, tz)}
+                    <span className="inline-block first-letter:uppercase">{formatFechaCorta(b.inicio, tz)}</span> {formatHora(b.inicio, tz)} →{" "}
+                    <span className="inline-block first-letter:uppercase">{formatFechaCorta(b.fin, tz)}</span> {formatHora(b.fin, tz)}
                   </p>
                   <p className="truncate text-sm text-zinc-500">
                     {nombres.get(b.profesional_id) ?? "Profesional"}

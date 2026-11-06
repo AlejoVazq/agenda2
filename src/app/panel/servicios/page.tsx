@@ -45,7 +45,7 @@ export default async function PaginaServicios() {
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   {!s.activo ? <Insignia>Inactivo</Insignia> : null}
-                  {s.activo && !conProfesional.has(s.id) ? <Insignia color="ambar">Sin profesional</Insignia> : null}
+                  {s.activo && !conProfesional.has(s.id) ? <Insignia color="ambar">Sin profesional: asignalo en Profesionales</Insignia> : null}
                 </div>
                 <span className="text-zinc-400">›</span>
               </Link>

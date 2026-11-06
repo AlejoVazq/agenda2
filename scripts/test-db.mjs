@@ -1,6 +1,7 @@
 // Prueba las migraciones SQL contra un Postgres embebido (PGlite), sin Docker.
 // Emula lo mínimo de Supabase: esquema auth, auth.uid(), roles anon/authenticated
-// y los privilegios por defecto que Supabase otorga sobre el esquema public.
+// y sus privilegios sobre funciones. Las tablas no: los proyectos nuevos no las exponen
+// por defecto, así que los permisos tienen que salir de las migraciones.
 //
 // Uso: npm run test:db
 import { PGlite } from "@electric-sql/pglite";
@@ -25,9 +26,7 @@ await db.exec(`
   create role service_role nologin bypassrls;
   grant usage on schema public, auth, extensions to anon, authenticated, service_role;
   grant execute on function auth.uid() to anon, authenticated;
-  alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
-  alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 `);
 
 for (const archivo of readdirSync(MIGRACIONES).filter((f) => f.endsWith(".sql")).sort()) {
@@ -106,7 +105,7 @@ let negA, negB, servA, profAna, profEva;
 
 await prueba("onboarding: crear_negocio crea negocio + perfil de dueña + profesional", async () => {
   negA = await como("ana", async () =>
-    (await uno("select public.crear_negocio('Salón Ana', 'salon-ana', 'peluqueria', 'Ana', null, null, true) as id")).id,
+    (await uno("select public.crear_negocio('Salón Ana', 'salon-ana', 'otro', 'Ana', null, null, true) as id")).id,
   );
   const perfil = await uno("select * from public.perfiles where id = $1", [USUARIOS.ana]);
   assert.equal(perfil.rol, "dueno");
@@ -127,7 +126,7 @@ await prueba("onboarding: slug ocupado e inválido", async () => {
   );
   await como("beto", () => falla(q("select public.crear_negocio('X', 'Mal Slug!', 'otro', 'Beto')"), null, "slug inválido"));
   negB = await como("beto", async () =>
-    (await uno("select public.crear_negocio('Barbería Beto', 'barberia-beto', 'barberia', 'Beto') as id")).id,
+    (await uno("select public.crear_negocio('Barbería Beto', 'barberia-beto', 'otro', 'Beto') as id")).id,
   );
 });
 
@@ -246,6 +245,16 @@ await prueba("disponibilidad: fuera de la anticipación máxima no hay horarios"
   assert.equal(lejos.length, 0);
 });
 
+await prueba("reserva: crear_reserva solo desde el servidor", async () => {
+  for (const u of ["anon", "ana"]) {
+    await como(u, () =>
+      falla(q("select * from public.crear_reserva($1, $2, null, now(), 'X', '1', 'x@x.com')", [negA, servA]), /permission denied/, u),
+    );
+  }
+  // El resto de las pruebas ejercita su lógica como un visitante cualquiera.
+  await db.exec("grant execute on function public.crear_reserva(uuid, uuid, uuid, timestamptz, text, text, text) to anon");
+});
+
 let token1, inicio10;
 await prueba("reserva: crear_reserva sin cuenta devuelve token", async () => {
   inicio10 = (await uno("select (($1::date + time '10:00') at time zone 'America/Argentina/Buenos_Aires') as t", [lunes])).t;
@@ -263,7 +272,7 @@ await prueba("reserva: crear_reserva sin cuenta devuelve token", async () => {
   assert.equal(turno.estado, "confirmado");
   assert.equal(Number(turno.precio), 8000);
   const cli = await uno("select * from public.clientes where id = $1", [turno.cliente_id]);
-  assert.equal(cli.telefono, "5491155551234");
+  assert.equal(cli.telefono, "1155551234");
 });
 
 await prueba("reserva: mismo horario y profesional se rechaza; con 'cualquiera' se asigna a otra", async () => {
@@ -418,6 +427,15 @@ await prueba("panel: crear_turno_panel respeta permisos y superposición", async
   );
 });
 
+const comoServicioQ = async (sql, params) => {
+  await db.exec("set role service_role");
+  try {
+    return await q(sql, params);
+  } finally {
+    await db.exec("reset role");
+  }
+};
+
 // Reserva de prueba en el salón de Ana: un lunes, con semanas de diferencia.
 const reservarAna = async (semanas, hora, nombre, telefono, email) => {
   const { t } = await uno("select (($1::date + $2::int * 7 + $3::time) at time zone 'America/Argentina/Buenos_Aires') as t", [lunes, semanas, hora]);
@@ -425,66 +443,58 @@ const reservarAna = async (semanas, hora, nombre, telefono, email) => {
     uno("select * from public.crear_reserva($1, $2, $3, $4, $5, $6, $7)", [negA, servA, profAna, t, nombre, telefono, email]),
   );
 };
-// Simula que los turnos de este cliente se pidieron otro día.
-const pedidoAntes = (telefono) =>
-  q(
-    "update public.turnos set created_at = now() - interval '2 days' where cliente_id in (select id from public.clientes where telefono = $1)",
-    [telefono],
-  );
 
 await prueba("reserva: el email es obligatorio", async () => {
   await falla(reservarAna(1, "09:00", "Sin Mail", "1188880000", null), /DATOS_INVALIDOS/, "sin email");
   await falla(reservarAna(1, "09:00", "Sin Mail", "1188880000", "  "), /DATOS_INVALIDOS/, "email vacío");
 });
 
-await prueba("un turno por día: por email o celular, para la misma fecha o el mismo día de pedido", async () => {
+await prueba("un turno por día con cada email; otras fechas se pueden pedir en la misma sesión", async () => {
   const r = await reservarAna(0, "09:00", "Diaria", "1188881111", "diaria@mail.com");
-  await falla(reservarAna(0, "11:00", "Diaria", "1188881111", "otra@mail.com"), /LIMITE_DIARIO/, "mismo celular");
-  await falla(reservarAna(0, "11:00", "Diaria", "1188882222", "DIARIA@mail.com"), /LIMITE_DIARIO/, "mismo email");
-  await falla(reservarAna(1, "11:00", "Diaria", "1188881111", "diaria@mail.com"), /LIMITE_DIARIO/, "otra fecha, pedido el mismo día");
+  await falla(reservarAna(0, "11:00", "Diaria", "1188882222", "DIARIA@mail.com"), /LIMITE_DIARIO/, "mismo email, otro celular");
+  const viernes = await reservarAna(1, "11:00", "Diaria", "1188881111", "diaria@mail.com");
+  assert.ok(viernes.turno_id, "otra fecha, en la misma sesión");
+  await como("anon", () => q("select public.cancelar_turno_cliente($1)", [viernes.token]));
 
-  await pedidoAntes("1188881111");
-  await falla(reservarAna(0, "11:00", "Diaria", "1188881111", "diaria@mail.com"), /LIMITE_DIARIO/, "misma fecha, pedido otro día");
-  const otra = await reservarAna(1, "11:00", "Diaria", "1188881111", "diaria@mail.com");
-  assert.ok(otra.turno_id, "otra fecha y otro día de pedido se permite");
+  // Quien comparte el celular reserva ese día con su email, pero una sola vez.
+  assert.ok((await reservarAna(0, "11:00", "Hija", "1188881111", "hija@mail.com")).turno_id);
+  await falla(reservarAna(0, "14:00", "Hija", "1188881111", "hija@mail.com"), /LIMITE_DIARIO/, "email que no quedó en el cliente");
 
-  // Cancelar libera el cupo, y otra persona no se ve afectada.
-  await como("anon", () => q("select public.cancelar_turno_cliente($1)", [otra.token]));
+  // Cancelar libera la fecha.
   await como("anon", () => q("select public.cancelar_turno_cliente($1)", [r.token]));
   assert.ok((await reservarAna(0, "09:00", "Diaria", "1188881111", "diaria@mail.com")).turno_id);
-  assert.ok((await reservarAna(0, "11:00", "Vecina", "1188883333", "vecina@mail.com")).turno_id);
 });
 
-await prueba("anti-abuso: máximo 3 turnos futuros por cliente", async () => {
-  for (const semanas of [1, 2, 3]) {
-    await reservarAna(semanas, "09:00", "Spam", "1199990000", "spam@mail.com");
-    await pedidoAntes("1199990000");
-  }
-  await falla(reservarAna(0, "14:00", "Spam", "1199990000", "spam@mail.com"), /LIMITE_TURNOS/, "cuarto por celular");
+await prueba("anti-abuso: máximo 3 turnos futuros por local, por email o celular", async () => {
+  for (const semanas of [1, 2, 3]) await reservarAna(semanas, "09:00", "Spam", "1199990000", "spam@mail.com");
+  await falla(reservarAna(0, "14:00", "Spam", "1199990000", "otro.spam@mail.com"), /LIMITE_TURNOS/, "cuarto por celular");
   await falla(reservarAna(0, "14:00", "Spam", "1199991111", "spam@mail.com"), /LIMITE_TURNOS/, "cuarto por email");
 });
 
-await prueba("inasistencia: limita a un turno a la vez hasta que se quita el límite", async () => {
+await prueba("inasistencias: con 3 limita a un turno a la vez hasta que se quita el límite", async () => {
   const primero = await reservarAna(1, "14:00", "Faltó", "1177770000", "falto@mail.com");
   const turno = await uno("select * from public.turnos where id = $1", [primero.turno_id]);
-  await pedidoAntes("1177770000");
+  const faltar = async (dias) =>
+    (
+      await uno(
+        "insert into public.turnos (negocio_id, profesional_id, servicio_id, cliente_id, inicio, fin, estado, precio) values ($1, $2, $3, $4, now() - make_interval(days => $5), now() - make_interval(days => $5) + interval '1 hour', 'ausente', 1000) returning id",
+        [turno.negocio_id, turno.profesional_id, turno.servicio_id, turno.cliente_id, dias],
+      )
+    ).id;
 
-  // Sin inasistencias puede tener otro turno; se cancela para volver al punto de partida.
+  // Con 2 todavía puede tener más de un turno.
+  await faltar(3);
+  await faltar(4);
   const segundo = await reservarAna(2, "14:00", "Faltó", "1177770000", "falto@mail.com");
   await como("anon", () => q("select public.cancelar_turno_cliente($1)", [segundo.token]));
-  await pedidoAntes("1177770000");
 
-  const { id: ausente } = await uno(
-    "insert into public.turnos (negocio_id, profesional_id, servicio_id, cliente_id, inicio, fin, estado, precio, created_at) values ($1, $2, $3, $4, now() - interval '3 days', now() - interval '71 hours', 'ausente', 1000, now() - interval '4 days') returning id",
-    [turno.negocio_id, turno.profesional_id, turno.servicio_id, turno.cliente_id],
-  );
+  const tercera = await faltar(5);
   await falla(reservarAna(2, "14:00", "Faltó", "1177770000", "falto@mail.com"), /LIMITE_AUSENCIAS/, "con un turno futuro");
   await falla(reservarAna(2, "14:00", "Faltó", "1177771111", "falto@mail.com"), /LIMITE_AUSENCIAS/, "mismo email, otro celular");
 
   // Sin turnos futuros puede reservar uno, pero no un segundo.
   await como("anon", () => q("select public.cancelar_turno_cliente($1)", [primero.token]));
   assert.ok((await reservarAna(2, "14:00", "Faltó", "1177770000", "falto@mail.com")).turno_id);
-  await pedidoAntes("1177770000");
   await falla(reservarAna(3, "14:00", "Faltó", "1177770000", "falto@mail.com"), /LIMITE_AUSENCIAS/, "segundo turno futuro");
 
   // La dueña le quita el límite.
@@ -492,22 +502,90 @@ await prueba("inasistencia: limita a un turno a la vez hasta que se quita el lí
   const cuarto = await reservarAna(3, "14:00", "Faltó", "1177770000", "falto@mail.com");
   assert.ok(cuarto.turno_id);
 
-  // Sin perdonar, deshacer "no asistió" también quita el límite.
+  // Sin perdonar, deshacer una de las 3 inasistencias también lo quita.
   await q("update public.clientes set ausencias_perdonadas_at = null where id = $1", [turno.cliente_id]);
   await como("anon", () => q("select public.cancelar_turno_cliente($1)", [cuarto.token]));
-  await pedidoAntes("1177770000");
   await falla(reservarAna(3, "14:00", "Faltó", "1177770000", "falto@mail.com"), /LIMITE_AUSENCIAS/, "vuelve el límite");
-  await q("update public.turnos set estado = 'completado' where id = $1", [ausente]);
+  await q("update public.turnos set estado = 'completado' where id = $1", [tercera]);
   assert.ok((await reservarAna(3, "14:00", "Faltó", "1177770000", "falto@mail.com")).turno_id);
 
   // Una inasistencia no suma ingresos: al pasarla a atendido aparecen sus 1000.
   const ingresos = async () => {
     const { e } = await como("ana", () => uno("select public.estadisticas_negocio(now() - interval '30 days', now() + interval '60 days') as e"));
-    return e.por_servicio.reduce((total, s) => total + Number(s.ingresos), 0);
+    return e.por_servicio.reduce((total, x) => total + Number(x.ingresos), 0);
   };
   const atendido = await ingresos();
-  await q("update public.turnos set estado = 'ausente' where id = $1", [ausente]);
+  await q("update public.turnos set estado = 'ausente' where id = $1", [tercera]);
   assert.equal(await ingresos(), atendido - 1000);
+});
+
+await prueba("rubros: peluquería separada, con sus servicios típicos cargados", async () => {
+  await como("nadie", () =>
+    falla(q("select public.crear_negocio('Viejo', 'rubro-viejo', 'peluqueria', 'Nadie')"), /negocios_rubro_check/, "rubro viejo"),
+  );
+  const id = await como("nadie", async () =>
+    (await uno("select public.crear_negocio('Barber', 'barber-nadie', 'peluqueria_masculina', 'Nadie') as id")).id,
+  );
+  const servicios = await q("select nombre, precio from public.servicios where negocio_id = $1 order by orden", [id]);
+  assert.deepEqual(servicios.map((x) => x.nombre), ["Corte de pelo", "Corte y barba", "Arreglo de barba", "Corte infantil"]);
+  assert.ok(servicios.every((x) => x.precio === null));
+  const { n } = await uno("select count(*)::int as n from public.profesional_servicio where negocio_id = $1", [id]);
+  assert.equal(n, 4);
+});
+
+await prueba("celular: todos los formatos argentinos quedan iguales", async () => {
+  const casos = ["341 881 0001", "+54 9 341 881 0001", "54 341 881 0001", "0341 15 881 0001", "341 15 881 0001", "0054 9 341 881 0001"];
+  for (const c of casos) {
+    assert.equal((await uno("select public.normalizar_telefono($1) as n", [c])).n, "3418810001", c);
+  }
+  assert.equal((await uno("select public.normalizar_telefono('+598 99 123 456') as n")).n, "59899123456");
+});
+
+await prueba("celular: otro formato no saltea el máximo de 3", async () => {
+  for (const [semanas, tel] of [[1, "341 882 0001"], [2, "+54 9 341 882 0001"], [3, "0341 15 882 0001"]]) {
+    await reservarAna(semanas, "16:00", "Formatos", tel, "formatos" + semanas + "@mail.com");
+  }
+  await falla(reservarAna(0, "16:00", "Formatos", "54 341 882 0001", "formatos4@mail.com"), /LIMITE_TURNOS/, "cuarto en otro formato");
+  const { n } = await uno("select count(*)::int as n from public.clientes where telefono = '3418820001'");
+  assert.equal(n, 1);
+});
+
+await prueba("reserva con un celular ajeno: no revela ni toca la ficha, y avisa a quien reservó", async () => {
+  const cliente = await como("eva", () =>
+    uno("select public.crear_turno_panel($1, $2, (($3::date + 7 + time '15:00') at time zone 'America/Argentina/Buenos_Aires'), 'Don Panel', '3418830001') as id", [profEva, servA, lunes]),
+  );
+  assert.ok(cliente.id);
+  const r = await reservarAna(1, "17:00", "Otra Persona", "3418830001", "otra@mail.com");
+  const visto = await como("anon", async () => (await uno("select public.ver_turno($1) as d", [r.token])).d);
+  assert.equal(visto.cliente, "Otra Persona");
+
+  const ficha = await uno("select nombre, email from public.clientes where telefono = '3418830001'");
+  assert.deepEqual({ ...ficha }, { nombre: "Don Panel", email: null });
+
+  await q("update public.turnos set inicio = now() + interval '20 hours', fin = now() + interval '21 hours', created_at = now() - interval '1 day' where id = $1", [r.turno_id]);
+  const avisos = await comoServicioQ("select * from public.reclamar_recordatorios()");
+  const aviso = avisos.find((x) => x.turno_id === r.turno_id);
+  assert.equal(aviso.email, "otra@mail.com");
+  assert.equal(aviso.cliente, "Otra Persona");
+
+  // Al cambiarlo de horario, el recordatorio se vuelve a mandar.
+  await q("update public.turnos set inicio = now() + interval '22 hours', fin = now() + interval '23 hours' where id = $1", [r.turno_id]);
+  const { recordatorio_enviado_at } = await uno("select recordatorio_enviado_at from public.turnos where id = $1", [r.turno_id]);
+  assert.equal(recordatorio_enviado_at, null);
+});
+
+await prueba("estado: un turno futuro no puede figurar atendido ni como inasistencia", async () => {
+  const r = await reservarAna(2, "17:00", "Futuro", "3418840001", "futuro@mail.com");
+  await falla(q("update public.turnos set estado = 'ausente' where id = $1", [r.turno_id]), /TURNO_FUTURO/, "ausente");
+  await falla(q("update public.turnos set estado = 'completado' where id = $1", [r.turno_id]), /TURNO_FUTURO/, "completado");
+});
+
+await prueba("permisos: el dueño lee y carga con los grants de las migraciones", async () => {
+  await como("ana", async () => {
+    assert.ok((await q("select id from public.perfiles")).length >= 1);
+    assert.ok((await q("select id from public.turnos")).length >= 1);
+  });
+  await comoServicioQ("select count(*) from public.integraciones_secretos");
 });
 
 await prueba("bloqueos: un bloqueo quita horarios libres", async () => {
@@ -767,6 +845,9 @@ await prueba("seed: carga datos demo y el negocio queda reservable", async () =>
   const neg = (await s.query("select public.negocio_publico('estudio-luna') as d")).rows[0].d;
   assert.equal(neg.servicios.length, 4);
   assert.equal(neg.profesionales.length, 2);
+  const pelu = (await s.query("select public.negocio_publico('peluqueria-caballeros') as d")).rows[0].d;
+  assert.equal(pelu.rubro, "peluqueria_masculina");
+  assert.equal(pelu.servicios.length, 4);
   const { ok } = (await s.query("select extensions.crypt('demo1234', encrypted_password) = encrypted_password as ok from auth.users")).rows[0];
   assert.equal(ok, true);
   await s.close();
