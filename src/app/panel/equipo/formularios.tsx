@@ -31,33 +31,41 @@ function LinkGenerado({ estado }: { estado: EstadoInvitacion }) {
 export function FormularioInvitacion({ profesionales }: { profesionales: Pick<Profesional, "id" | "nombre">[] }) {
   const { estado, accion, valor, intento } = useFormulario(invitarEmpleado);
   const e = estado.errores ?? {};
+  // El link queda fuera del formulario: al invitar al último profesional libre la página se
+  // recarga sin campos para cargar, pero este componente sigue montado y el link se ve igual.
   return (
-    <form key={intento} action={accion} className="space-y-4" noValidate>
+    <div className="space-y-4">
       <LinkGenerado estado={estado} />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Campo etiqueta="Nombre" htmlFor="inv-nombre" errores={e.nombre}>
-          <Input id="inv-nombre" name="nombre" defaultValue={valor("nombre")} required />
-        </Campo>
-        <Campo etiqueta="Email" htmlFor="inv-email" errores={e.email}>
-          <Input id="inv-email" name="email" type="email" inputMode="email" defaultValue={valor("email")} required />
-        </Campo>
-      </div>
-      <Campo
-        etiqueta="Agenda que va a manejar"
-        htmlFor="inv-prof"
-        errores={e.profesional_id}
-        ayuda="Va a ver y gestionar solo los turnos de este profesional."
-      >
-        <Select id="inv-prof" name="profesional_id" required>
-          {profesionales.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nombre}
-            </option>
-          ))}
-        </Select>
-      </Campo>
-      <BotonEnviar pendiente="Generando…">Generar invitación</BotonEnviar>
-    </form>
+      {profesionales.length === 0 ? (
+        <Aviso tipo="info">Todos los profesionales activos ya tienen usuario. Creá uno nuevo en Profesionales.</Aviso>
+      ) : (
+        <form key={intento} action={accion} className="space-y-4" noValidate>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Campo etiqueta="Nombre" htmlFor="inv-nombre" errores={e.nombre}>
+              <Input id="inv-nombre" name="nombre" defaultValue={valor("nombre")} required />
+            </Campo>
+            <Campo etiqueta="Email" htmlFor="inv-email" errores={e.email}>
+              <Input id="inv-email" name="email" type="email" inputMode="email" defaultValue={valor("email")} required />
+            </Campo>
+          </div>
+          <Campo
+            etiqueta="Agenda que va a manejar"
+            htmlFor="inv-prof"
+            errores={e.profesional_id}
+            ayuda="Va a ver y gestionar solo los turnos de este profesional."
+          >
+            <Select id="inv-prof" name="profesional_id" required>
+              {profesionales.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
+            </Select>
+          </Campo>
+          <BotonEnviar pendiente="Generando…">Generar invitación</BotonEnviar>
+        </form>
+      )}
+    </div>
   );
 }
 

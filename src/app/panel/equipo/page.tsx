@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Aviso, EncabezadoPagina, Insignia, Tarjeta } from "@/components/ui";
+import { EncabezadoPagina, Insignia, Tarjeta } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
 import { comoUsuario, sql } from "@/lib/db";
 import type { Perfil, Profesional } from "@/lib/tipos";
@@ -54,11 +54,7 @@ export default async function PaginaEquipo() {
         <p className="mb-4 text-sm text-zinc-600">
           Primero creá a la persona en Profesionales; después generá su invitación acá.
         </p>
-        {libres.length === 0 ? (
-          <Aviso tipo="info">Todos los profesionales activos ya tienen usuario. Creá uno nuevo en Profesionales.</Aviso>
-        ) : (
-          <FormularioInvitacion profesionales={libres} />
-        )}
+        <FormularioInvitacion profesionales={libres} />
       </Tarjeta>
     </div>
   );
