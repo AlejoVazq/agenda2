@@ -1,43 +1,41 @@
-// Prueba las migraciones SQL contra un Postgres embebido (PGlite), sin Docker.
-// Emula lo mínimo de Supabase: esquema auth, auth.uid(), roles anon/authenticated
-// y sus privilegios sobre funciones. Las tablas no: los proyectos nuevos no las exponen
-// por defecto, así que los permisos tienen que salir de las migraciones.
+// Prueba las migraciones, los roles y RLS contra un Postgres embebido (PGlite), sin Docker.
+// Usa los mismos archivos que producción: db/roles.sql, db/migraciones/ (con el
+// mismo migrador) y db/seed.sql. Las migraciones corren como agenda2_dueno.
 //
 // Uso: npm run test:db
 import { PGlite } from "@electric-sql/pglite";
 import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
-import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, cpSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
+import { verifyPassword } from "better-auth/crypto";
+import { migrar, CARPETA_MIGRACIONES } from "../db/migrar.mjs";
+import { sqlRoles } from "../db/roles.mjs";
+import { cargarSeed, USUARIOS_DEMO, CLAVE_DEMO } from "../db/seed.mjs";
 
-const MIGRACIONES = join(import.meta.dirname, "..", "supabase", "migrations");
-
-const db = new PGlite({ extensions: { btree_gist } });
-
-await db.exec(`
-  create schema auth;
-  create schema extensions;
-  create table auth.users (id uuid primary key, email text);
-  create function auth.uid() returns uuid language sql stable as
-    $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-  create role anon nologin;
-  create role authenticated nologin;
-  create role service_role nologin bypassrls;
-  grant usage on schema public, auth, extensions to anon, authenticated, service_role;
-  grant execute on function auth.uid() to anon, authenticated;
-  alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
-`);
-
-for (const archivo of readdirSync(MIGRACIONES).filter((f) => f.endsWith(".sql")).sort()) {
-  try {
-    await db.exec(readFileSync(join(MIGRACIONES, archivo), "utf8"));
-  } catch (e) {
-    console.error(`✗ Falló la migración ${archivo}: ${e.message}`);
-    process.exit(1);
-  }
-  console.log(`✓ migración ${archivo}`);
+/** Base nueva con los roles de db/roles.sql y las migraciones aplicadas. */
+async function baseNueva({ carpeta } = {}) {
+  const db = new PGlite({ extensions: { btree_gist } });
+  const { roles } = sqlRoles({ clave_dueno: "x", clave_app: "x" });
+  await db.exec(roles);
+  // En producción agenda2_dueno es dueño de la base (y por eso del esquema public).
+  await db.exec(`
+    grant create on database ${(await db.query("select current_database() as d")).rows[0].d} to agenda2_dueno;
+    alter schema public owner to agenda2_dueno;
+  `);
+  const ejecutar = ejecutor(db);
+  await db.exec("set role agenda2_dueno");
+  await migrar(ejecutar, { carpeta, log: (m) => console.log(m) });
+  await db.exec("reset role");
+  return { db, ejecutar };
 }
+
+function ejecutor(db) {
+  return async (sql, params) => (params ? db.query(sql, params) : { rows: (await db.exec(sql)).at(-1)?.rows ?? [] });
+}
+
+const { db } = await baseNueva();
 
 // --- helpers --------------------------------------------------------------------
 const USUARIOS = {
@@ -47,27 +45,35 @@ const USUARIOS = {
   nadie: "00000000-0000-4000-8000-0000000000ff", // registrado sin negocio
 };
 for (const [nombre, id] of Object.entries(USUARIOS)) {
-  await db.query("insert into auth.users (id, email) values ($1, $2)", [id, `${nombre}@test.com`]);
+  await db.query(`insert into auth."user" ("id", "name", "email", "emailVerified") values ($1, $2, $3, true)`, [
+    id,
+    nombre,
+    `${nombre}@test.com`,
+  ]);
 }
 
+const ROLES = { anon: "agenda2_anonimo", servidor: "agenda2_servidor", app: "agenda2_app", auth: "agenda2_auth" };
+
+/** Corre fn como lo hace src/lib/db: un usuario del panel, el visitante anónimo o el servidor. */
 async function como(usuario, fn) {
   await db.exec("reset role");
-  if (usuario === "anon") {
-    await db.query("select set_config('request.jwt.claim.sub', '', false)");
-    await db.exec("set role anon");
+  if (usuario in ROLES) {
+    await db.query("select set_config('app.usuario_id', '', false)");
+    await db.exec(`set role ${ROLES[usuario]}`);
   } else if (usuario) {
-    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [USUARIOS[usuario]]);
-    await db.exec("set role authenticated");
+    await db.query("select set_config('app.usuario_id', $1, false)", [USUARIOS[usuario]]);
+    await db.exec("set role agenda2_usuario");
   }
   try {
     return await fn();
   } finally {
     await db.exec("reset role");
-    await db.query("select set_config('request.jwt.claim.sub', '', false)");
+    await db.query("select set_config('app.usuario_id', '', false)");
   }
 }
 const q = async (sql, params) => (await db.query(sql, params)).rows;
 const uno = async (sql, params) => (await q(sql, params))[0];
+const servicio = (sql, params) => como("servidor", () => q(sql, params));
 
 async function falla(promesa, patron, descripcion) {
   try {
@@ -101,6 +107,86 @@ const { lunes } = await uno(`
 
 console.log("\nPruebas:");
 
+// --- Roles y permisos generales ----------------------------------------------------
+
+await prueba("roles: agenda2_app no puede leer nada sin cambiar de rol (falla cerrado)", async () => {
+  await como("app", async () => {
+    for (const t of ["public.negocios", "public.turnos", "public.clientes", 'auth."user"', 'auth."account"', "app.schema_version"]) {
+      await falla(q(`select * from ${t}`), /permission denied/, t);
+    }
+    await falla(q("select public.negocio_publico('x')"), /permission denied/, "función pública");
+  });
+  // Puede pasar a cada rol de la app, pero no hereda sus permisos.
+  for (const rol of ["agenda2_usuario", "agenda2_anonimo", "agenda2_servidor", "agenda2_auth"]) {
+    const r = await uno("select pg_has_role('agenda2_app', $1, 'SET') as set, pg_has_role('agenda2_app', $1, 'USAGE') as usage", [rol]);
+    assert.deepEqual({ ...r }, { set: true, usage: false }, rol);
+  }
+  const { super: esSuper } = await uno("select rolsuper as super from pg_roles where rolname = 'agenda2_dueno'");
+  assert.equal(esSuper, false);
+});
+
+await prueba("anon: solo ejecuta las 5 funciones del portal público", async () => {
+  const filas = await q(`
+    select p.proname
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname in ('public', 'app', 'auth') and has_function_privilege('agenda2_anonimo', p.oid, 'execute')
+      -- Los constructores del tipo rango_hora (los crea Postgres, ejecutables por todos)
+      -- solo arman un rango de horas: no leen ni escriben nada.
+      and not exists (select 1 from pg_type t where t.typname = p.proname and t.typnamespace = p.pronamespace)
+    order by 1`);
+  assert.deepEqual(
+    filas.map((f) => f.proname),
+    ["cancelar_turno_cliente", "dias_disponibles", "horarios_libres", "negocio_publico", "ver_turno"],
+  );
+});
+
+await prueba("anon: sin permisos sobre ninguna tabla de ningún esquema", async () => {
+  const filas = await q(`
+    select c.oid::regclass::text as tabla
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where c.relkind in ('r', 'v', 'm', 'p') and n.nspname in ('public', 'app', 'auth')
+      and (has_table_privilege('agenda2_anonimo', c.oid, 'select, insert, update, delete')
+           or has_any_column_privilege('agenda2_anonimo', c.oid, 'select, insert, update'))`);
+  assert.deepEqual(filas, []);
+});
+
+await prueba("crear_reserva y las tareas del cron: solo el servidor", async () => {
+  const soloServidor = [
+    "crear_reserva", "consumir_limite", "vencer_pagos_pendientes", "registrar_pago", "reclamar_recordatorios",
+    "reclamar_recordatorios_whatsapp", "turnos_para_sincronizar", "marcar_sincronizado_google", "reemplazar_bloqueos_google",
+  ];
+  const filas = await q(
+    `select p.proname,
+            has_function_privilege('agenda2_usuario', p.oid, 'execute') as usuario,
+            has_function_privilege('agenda2_anonimo', p.oid, 'execute') as anonimo,
+            has_function_privilege('agenda2_servidor', p.oid, 'execute') as servidor
+     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname = any($1)`,
+    [soloServidor],
+  );
+  assert.equal(filas.length, soloServidor.length);
+  for (const f of filas) assert.deepEqual({ ...f }, { proname: f.proname, usuario: false, anonimo: false, servidor: true });
+});
+
+await prueba("auth: Better Auth solo ve su esquema; el resto no lee contraseñas ni sesiones", async () => {
+  await como("auth", async () => {
+    await q('select * from auth."user"');
+    await q('select * from auth."account"');
+    await falla(q("select * from public.negocios"), /permission denied/, "auth en public");
+  });
+  for (const u of ["ana", "anon"]) {
+    await como(u, () => falla(q('select * from auth."user"'), /permission denied/, `${u} lee usuarios`));
+  }
+  await como("servidor", async () => {
+    assert.ok((await q('select "email" from auth."user"')).length >= 4);
+    await falla(q('select "password" from auth."account"'), /permission denied/, "servidor lee contraseñas");
+    await falla(q('select "token" from auth."session"'), /permission denied/, "servidor lee sesiones");
+    await falla(q('update auth."user" set "email" = \'x@x.com\''), /permission denied/, "servidor cambia mails");
+  });
+});
+
+// --- Onboarding y configuración -----------------------------------------------------
+
 let negA, negB, servA, profAna, profEva;
 
 await prueba("onboarding: crear_negocio crea negocio + perfil de dueña + profesional", async () => {
@@ -112,6 +198,16 @@ await prueba("onboarding: crear_negocio crea negocio + perfil de dueña + profes
   assert.equal(perfil.negocio_id, negA);
   assert.ok(perfil.profesional_id);
   profAna = perfil.profesional_id;
+});
+
+await prueba("onboarding: sin usuario en la transacción no se crea nada", async () => {
+  await como("servidor", () => falla(q("select public.crear_negocio('X', 'xxx-sin', 'otro', 'X')"), /permission denied/, "servidor"));
+  await db.exec("set role agenda2_usuario");
+  try {
+    await falla(q("select public.crear_negocio('X', 'xxx-sin', 'otro', 'X')"), /NO_AUTENTICADO/, "sin app.usuario_id");
+  } finally {
+    await db.exec("reset role");
+  }
 });
 
 await prueba("onboarding: no se puede crear un segundo negocio", async () => {
@@ -194,7 +290,7 @@ await prueba("aislamiento: Beto no ve ni modifica datos del negocio de Ana", asy
 
 await prueba("aislamiento: usuario sin negocio no ve nada", async () => {
   await como("nadie", async () => {
-    for (const t of ["negocios", "perfiles", "servicios", "profesionales", "turnos", "clientes"]) {
+    for (const t of ["negocios", "perfiles", "servicios", "profesionales", "turnos", "clientes", "bloqueos", "integraciones"]) {
       assert.equal((await q(`select * from public.${t}`)).length, 0, t);
     }
   });
@@ -202,7 +298,7 @@ await prueba("aislamiento: usuario sin negocio no ve nada", async () => {
 
 await prueba("anon: sin acceso directo a tablas", async () => {
   await como("anon", async () => {
-    for (const t of ["negocios", "servicios", "turnos", "clientes", "perfiles"]) {
+    for (const t of ["negocios", "servicios", "turnos", "clientes", "perfiles", "accesos", "limites_uso"]) {
       await falla(q(`select * from public.${t}`), /permission denied/, `select ${t}`);
     }
     await falla(q("select public.crear_negocio('X', 'xxx', 'otro', 'X')"), /permission denied/, "crear_negocio");
@@ -245,55 +341,58 @@ await prueba("disponibilidad: fuera de la anticipación máxima no hay horarios"
   assert.equal(lejos.length, 0);
 });
 
+// --- Reservas ----------------------------------------------------------------------
+
 await prueba("reserva: crear_reserva solo desde el servidor", async () => {
   for (const u of ["anon", "ana"]) {
     await como(u, () =>
       falla(q("select * from public.crear_reserva($1, $2, null, now(), 'X', '1', 'x@x.com')", [negA, servA]), /permission denied/, u),
     );
   }
-  // El resto de las pruebas ejercita su lógica como un visitante cualquiera.
-  await db.exec("grant execute on function public.crear_reserva(uuid, uuid, uuid, timestamptz, text, text, text) to anon");
 });
+
+/** Reserva online tal como la hace la app: con el rol del servidor. */
+const reservar = (sql, params) => como("servidor", () => uno(sql, params));
 
 let token1, inicio10;
 await prueba("reserva: crear_reserva sin cuenta devuelve token", async () => {
   inicio10 = (await uno("select (($1::date + time '10:00') at time zone 'America/Argentina/Buenos_Aires') as t", [lunes])).t;
-  const r = await como("anon", () =>
-    uno("select * from public.crear_reserva($1, $2, $3, $4, 'Lucía', '+54 9 11 5555-1234', 'lucia@mail.com')", [
-      negA,
-      servA,
-      profAna,
-      inicio10,
-    ]),
-  );
+  const r = await reservar("select * from public.crear_reserva($1, $2, $3, $4, 'Lucía', '+54 9 11 5555-1234', 'lucia@mail.com')", [
+    negA,
+    servA,
+    profAna,
+    inicio10,
+  ]);
   assert.match(r.token, /^[0-9a-f]{64}$/);
   token1 = r.token;
   const turno = await uno("select * from public.turnos where id = $1", [r.turno_id]);
   assert.equal(turno.estado, "confirmado");
   assert.equal(Number(turno.precio), 8000);
+  assert.deepEqual(
+    [turno.nombre_reserva, turno.email_reserva, turno.telefono_reserva],
+    ["Lucía", "lucia@mail.com", "1155551234"],
+  );
   const cli = await uno("select * from public.clientes where id = $1", [turno.cliente_id]);
   assert.equal(cli.telefono, "1155551234");
 });
 
 await prueba("reserva: mismo horario y profesional se rechaza; con 'cualquiera' se asigna a otra", async () => {
-  await como("anon", () =>
-    falla(
-      q("select * from public.crear_reserva($1, $2, $3, $4, 'Otro', '1144445555', 'otro@mail.com')", [negA, servA, profAna, inicio10]),
-      /HORARIO_NO_DISPONIBLE/,
-      "duplicado",
-    ),
+  await falla(
+    reservar("select * from public.crear_reserva($1, $2, $3, $4, 'Otro', '1144445555', 'otro@mail.com')", [negA, servA, profAna, inicio10]),
+    /HORARIO_NO_DISPONIBLE/,
+    "duplicado",
   );
-  const r = await como("anon", () =>
-    uno("select * from public.crear_reserva($1, $2, null, $3, 'Otro', '1144445555', 'otro@mail.com')", [negA, servA, inicio10]),
-  );
+  const r = await reservar("select * from public.crear_reserva($1, $2, null, $3, 'Otro', '1144445555', 'otro@mail.com')", [
+    negA,
+    servA,
+    inicio10,
+  ]);
   const t = await uno("select profesional_id from public.turnos where id = $1", [r.turno_id]);
   assert.equal(t.profesional_id, profEva);
-  await como("anon", () =>
-    falla(
-      q("select * from public.crear_reserva($1, $2, null, $3, 'Tercero', '1144446666', 'tercero@mail.com')", [negA, servA, inicio10]),
-      /HORARIO_NO_DISPONIBLE/,
-      "sin profesionales libres",
-    ),
+  await falla(
+    reservar("select * from public.crear_reserva($1, $2, null, $3, 'Tercero', '1144446666', 'tercero@mail.com')", [negA, servA, inicio10]),
+    /HORARIO_NO_DISPONIBLE/,
+    "sin profesionales libres",
   );
 });
 
@@ -307,19 +406,15 @@ await prueba("reserva: horarios superpuestos ya no aparecen como libres", async 
 
 await prueba("reserva: horario fuera de agenda o datos inválidos se rechazan", async () => {
   const fuera = (await uno("select (($1::date + time '20:00') at time zone 'America/Argentina/Buenos_Aires') as t", [lunes])).t;
-  await como("anon", () =>
-    falla(
-      q("select * from public.crear_reserva($1, $2, null, $3, 'Juan', '1144447777', 'juan@mail.com')", [negA, servA, fuera]),
-      /HORARIO_NO_DISPONIBLE/,
-      "fuera de agenda",
-    ),
+  await falla(
+    reservar("select * from public.crear_reserva($1, $2, null, $3, 'Juan', '1144447777', 'juan@mail.com')", [negA, servA, fuera]),
+    /HORARIO_NO_DISPONIBLE/,
+    "fuera de agenda",
   );
-  await como("anon", () =>
-    falla(
-      q("select * from public.crear_reserva($1, $2, null, $3, 'J', '12', 'no-es-mail')", [negA, servA, inicio10]),
-      /DATOS_INVALIDOS/,
-      "datos inválidos",
-    ),
+  await falla(
+    reservar("select * from public.crear_reserva($1, $2, null, $3, 'J', '12', 'no-es-mail')", [negA, servA, inicio10]),
+    /DATOS_INVALIDOS/,
+    "datos inválidos",
   );
 });
 
@@ -366,6 +461,8 @@ await prueba("token: no se puede cancelar fuera del plazo de la política", asyn
   );
 });
 
+// --- Dueño y empleado ----------------------------------------------------------------
+
 await prueba("empleada: ve solo su agenda y no puede editar la configuración", async () => {
   await db.query("insert into public.perfiles (id, negocio_id, rol, nombre, profesional_id) values ($1, $2, 'empleado', 'Eva', $3)", [
     USUARIOS.eva,
@@ -376,8 +473,9 @@ await prueba("empleada: ve solo su agenda y no puede editar la configuración", 
     const turnos = await q("select * from public.turnos");
     assert.ok(turnos.length >= 1);
     assert.ok(turnos.every((t) => t.profesional_id === profEva));
-    const clientes = await q("select * from public.clientes");
-    assert.equal(clientes.length, 1); // solo "Otro", que tiene turno con ella
+    // De sus turnos ve los datos con que se pidieron, nunca las fichas de clientes.
+    assert.ok(turnos.some((t) => t.nombre_reserva === "Otro" && t.telefono_reserva === "1144445555"));
+    assert.equal((await q("select * from public.clientes")).length, 0);
     assert.equal((await q("select * from public.servicios")).length, 1); // puede leer el catálogo
     assert.equal((await q("select * from public.perfiles")).length, 1); // solo su perfil
     await falla(
@@ -393,8 +491,11 @@ await prueba("empleada: ve solo su agenda y no puede editar la configuración", 
       "pasar turno a otra profesional",
     );
     assert.equal((await db.query("update public.negocios set nombre = 'X'")).affectedRows, 0);
+    assert.equal((await db.query("update public.clientes set notas = 'X'")).affectedRows, 0);
+    assert.equal((await db.query("delete from public.clientes")).affectedRows, 0);
     const neg = await uno("select nombre from public.negocios");
     assert.equal(neg.nombre, "Salón Ana");
+    await falla(q("select public.crear_negocio('Propio', 'propio-eva', 'otro', 'Eva')"), /YA_TIENE_NEGOCIO/, "otro negocio");
   });
 });
 
@@ -427,21 +528,70 @@ await prueba("panel: crear_turno_panel respeta permisos y superposición", async
   );
 });
 
-const comoServicioQ = async (sql, params) => {
-  await db.exec("set role service_role");
-  try {
-    return await q(sql, params);
-  } finally {
-    await db.exec("reset role");
+await prueba("bug corregido: una empleada no lee la ficha de un cliente aunque conozca su celular", async () => {
+  // Lucía ya es clienta (reservó online). La dueña le agrega notas privadas.
+  const lucia = await uno("select id from public.clientes where telefono = '1155551234'");
+  await como("ana", () => q("update public.clientes set notas = 'Prefiere los martes' where id = $1", [lucia.id]));
+
+  // Eva carga un turno en su agenda con el celular de Lucía y otro nombre y mail.
+  const inicio = (await uno("select (($1::date + 7 + time '09:00') at time zone 'America/Argentina/Buenos_Aires') as t", [lunes])).t;
+  const { id } = await como("eva", () =>
+    uno("select public.crear_turno_panel($1, $2, $3, 'Curiosa', '011 15 5555-1234', 'curiosa@mail.com') as id", [profEva, servA, inicio]),
+  );
+  await como("eva", async () => {
+    const turno = await uno("select * from public.turnos where id = $1", [id]);
+    assert.equal(turno.nombre_reserva, "Curiosa");
+    assert.equal(turno.cliente_id, lucia.id); // queda en la ficha de Lucía, que la dueña sí ve
+    assert.equal((await q("select * from public.clientes where id = $1", [lucia.id])).length, 0);
+    assert.equal((await q("select * from public.clientes where telefono = '1155551234'")).length, 0);
+    await falla(q("select public.estadisticas_negocio(now(), now())"), /SIN_PERMISO/, "estadísticas");
+  });
+  // La ficha no cambió: ni el nombre ni el mail que cargó la empleada.
+  const ficha = await uno("select nombre, email, notas from public.clientes where id = $1", [lucia.id]);
+  assert.deepEqual({ ...ficha }, { nombre: "Lucía", email: "lucia@mail.com", notas: "Prefiere los martes" });
+  // La dueña ve la ficha completa y el turno con los datos que se cargaron.
+  await como("ana", async () => {
+    assert.equal((await q("select * from public.clientes where id = $1", [lucia.id])).length, 1);
+    assert.equal((await uno("select nombre_reserva from public.turnos where id = $1", [id])).nombre_reserva, "Curiosa");
+  });
+});
+
+await prueba("aislamiento: ninguna tabla con negocio_id deja ver filas de otro negocio", async () => {
+  const tablas = (
+    await q(`
+      select table_name from information_schema.columns
+      where table_schema = 'public' and column_name = 'negocio_id' order by 1`)
+  ).map((t) => t.table_name);
+  assert.ok(tablas.length >= 9, tablas.join(", "));
+  for (const t of tablas) {
+    const { n: deA } = await uno(`select count(*)::int as n from public.${t} where negocio_id = $1`, [negA]);
+    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones"].includes(t), `${t} sin datos de prueba`);
+    for (const [u, ajeno] of [["beto", negA], ["nadie", negA], ["ana", negB], ["eva", negB]]) {
+      const filas = await como(u, () => q(`select * from public.${t} where negocio_id = $1`, [ajeno]).catch(() => []));
+      assert.equal(filas.length, 0, `${u} ve ${t} de otro negocio`);
+    }
   }
-};
+});
+
+await prueba("aislamiento: un usuario del panel no toca accesos, secretos ni límites", async () => {
+  for (const u of ["ana", "eva"]) {
+    await como(u, async () => {
+      for (const t of ["accesos", "integraciones_secretos", "limites_uso"]) {
+        await falla(q(`select * from public.${t}`), /permission denied/, `${u} ${t}`);
+      }
+      await falla(q("insert into public.perfiles (id, negocio_id, rol, nombre) values ($1, $2, 'dueno', 'Yo')", [USUARIOS.nadie, negA]), /row-level security/, `${u} crea perfil`);
+      assert.equal((await db.query("update public.perfiles set rol = 'dueno'")).affectedRows, 0, `${u} cambia roles`);
+      assert.equal((await db.query("delete from public.perfiles")).affectedRows, 0, `${u} borra perfiles`);
+    });
+  }
+});
+
+const comoServicioQ = servicio;
 
 // Reserva de prueba en el salón de Ana: un lunes, con semanas de diferencia.
 const reservarAna = async (semanas, hora, nombre, telefono, email) => {
   const { t } = await uno("select (($1::date + $2::int * 7 + $3::time) at time zone 'America/Argentina/Buenos_Aires') as t", [lunes, semanas, hora]);
-  return como("anon", () =>
-    uno("select * from public.crear_reserva($1, $2, $3, $4, $5, $6, $7)", [negA, servA, profAna, t, nombre, telefono, email]),
-  );
+  return reservar("select * from public.crear_reserva($1, $2, $3, $4, $5, $6, $7)", [negA, servA, profAna, t, nombre, telefono, email]);
 };
 
 await prueba("reserva: el email es obligatorio", async () => {
@@ -531,6 +681,8 @@ await prueba("rubros: peluquería separada, con sus servicios típicos cargados"
   assert.ok(servicios.every((x) => x.precio === null));
   const { n } = await uno("select count(*)::int as n from public.profesional_servicio where negocio_id = $1", [id]);
   assert.equal(n, 4);
+  const { intervalo_min } = await uno("select intervalo_min from public.negocios where id = $1", [id]);
+  assert.equal(intervalo_min, 10);
 });
 
 await prueba("celular: todos los formatos argentinos quedan iguales", async () => {
@@ -584,6 +736,7 @@ await prueba("permisos: el dueño lee y carga con los grants de las migraciones"
   await como("ana", async () => {
     assert.ok((await q("select id from public.perfiles")).length >= 1);
     assert.ok((await q("select id from public.turnos")).length >= 1);
+    assert.ok((await q("select id from public.clientes")).length >= 1);
   });
   await comoServicioQ("select count(*) from public.integraciones_secretos");
 });
@@ -597,6 +750,16 @@ await prueba("bloqueos: un bloqueo quita horarios libres", async () => {
       [negA, profEva, lunes],
     ),
   );
+  await como("eva", () =>
+    falla(
+      q(
+        `insert into public.bloqueos (negocio_id, profesional_id, inicio, fin) values ($1, $2, now() + interval '1 day', now() + interval '2 days')`,
+        [negA, profAna],
+      ),
+      /row-level security/,
+      "bloqueo en agenda ajena",
+    ),
+  );
   const slots = await como("anon", () =>
     q("select * from public.horarios_libres($1, $2, $3::date, $4)", [negA, servA, lunes, profEva]),
   );
@@ -606,7 +769,7 @@ await prueba("bloqueos: un bloqueo quita horarios libres", async () => {
   assert.equal(dias.length, 2); // dos lunes en 14 días
 });
 
-await prueba("recordatorios: solo service_role, marca una sola vez", async () => {
+await prueba("recordatorios: solo el servidor, marca una sola vez", async () => {
   await como("anon", () => falla(q("select * from public.reclamar_recordatorios()"), /permission denied/, "anon"));
   await como("ana", () => falla(q("select * from public.reclamar_recordatorios()"), /permission denied/, "dueña"));
 
@@ -619,30 +782,16 @@ await prueba("recordatorios: solo service_role, marca una sola vez", async () =>
      returning id`,
     [profEva],
   );
-  await db.exec("set role service_role");
-  try {
-    const primera = await q("select * from public.reclamar_recordatorios()");
-    assert.ok(primera.some((r) => r.turno_id === t.id));
-    const fila = primera.find((r) => r.turno_id === t.id);
-    assert.equal(fila.email, "lucia@mail.com");
-    assert.equal(fila.negocio, "Salón Ana");
-    const segunda = await q("select * from public.reclamar_recordatorios()");
-    assert.ok(!segunda.some((r) => r.turno_id === t.id));
-  } finally {
-    await db.exec("reset role");
-  }
+  const primera = await servicio("select * from public.reclamar_recordatorios()");
+  assert.ok(primera.some((r) => r.turno_id === t.id));
+  const fila = primera.find((r) => r.turno_id === t.id);
+  assert.equal(fila.email, "lucia@mail.com");
+  assert.equal(fila.negocio, "Salón Ana");
+  const segunda = await servicio("select * from public.reclamar_recordatorios()");
+  assert.ok(!segunda.some((r) => r.turno_id === t.id));
 });
 
 // --- Fases 5 y 6: seña, integraciones, Google, límites, estadísticas, WhatsApp ---
-async function comoServicio(fn) {
-  await db.exec("set role service_role");
-  try {
-    return await fn();
-  } finally {
-    await db.exec("reset role");
-  }
-}
-const servicio = (sql, params) => comoServicio(() => q(sql, params));
 const libresAna = () =>
   como("anon", () => q("select * from public.horarios_libres($1, $2, $3::date, $4)", [negA, servA, lunes, profAna]));
 
@@ -661,9 +810,12 @@ await prueba("seña: con Mercado Pago, la reserva queda retenida y se confirma a
   assert.equal(Number(data.servicios[0].sena), 4000);
 
   const slot = (await libresAna()).at(-1);
-  const r = await como("anon", () =>
-    uno("select * from public.crear_reserva($1, $2, $3, $4, 'Pagadora', '1150001111', 'pagadora@mail.com')", [negA, servA, profAna, slot.inicio]),
-  );
+  const r = await reservar("select * from public.crear_reserva($1, $2, $3, $4, 'Pagadora', '1150001111', 'pagadora@mail.com')", [
+    negA,
+    servA,
+    profAna,
+    slot.inicio,
+  ]);
   assert.equal(Number(r.sena), 4000);
   const t = await uno("select * from public.turnos where id = $1", [r.turno_id]);
   assert.equal(t.estado, "pendiente");
@@ -680,9 +832,12 @@ await prueba("seña: con Mercado Pago, la reserva queda retenida y se confirma a
 
 await prueba("seña: si vence se libera el horario; un pago tardío lo recupera si sigue libre", async () => {
   const slot = (await libresAna()).at(-1);
-  const r = await como("anon", () =>
-    uno("select * from public.crear_reserva($1, $2, $3, $4, 'Tardía', '1150002222', 'tardia@mail.com')", [negA, servA, profAna, slot.inicio]),
-  );
+  const r = await reservar("select * from public.crear_reserva($1, $2, $3, $4, 'Tardía', '1150002222', 'tardia@mail.com')", [
+    negA,
+    servA,
+    profAna,
+    slot.inicio,
+  ]);
   assert.ok(!(await libresAna()).some((s) => +s.inicio === +slot.inicio));
   await q("update public.turnos set pago_vence_at = now() - interval '1 minute' where id = $1", [r.turno_id]);
   assert.ok((await libresAna()).some((s) => +s.inicio === +slot.inicio), "el horario vencido vuelve a estar libre");
@@ -700,14 +855,20 @@ await prueba("seña: si vence se libera el horario; un pago tardío lo recupera 
 
 await prueba("seña: pago tardío con el horario ya tomado queda para reembolsar; monto menor también", async () => {
   const slot = (await libresAna()).at(-1);
-  const r = await como("anon", () =>
-    uno("select * from public.crear_reserva($1, $2, $3, $4, 'Lenta', '1150003333', 'lenta@mail.com')", [negA, servA, profAna, slot.inicio]),
-  );
+  const r = await reservar("select * from public.crear_reserva($1, $2, $3, $4, 'Lenta', '1150003333', 'lenta@mail.com')", [
+    negA,
+    servA,
+    profAna,
+    slot.inicio,
+  ]);
   await q("update public.turnos set pago_vence_at = now() - interval '1 minute' where id = $1", [r.turno_id]);
   // Otra persona reserva el mismo horario (crear_reserva libera la retención vencida).
-  const otra = await como("anon", () =>
-    uno("select * from public.crear_reserva($1, $2, $3, $4, 'Rápida', '1150004444', 'rapida@mail.com')", [negA, servA, profAna, slot.inicio]),
-  );
+  const otra = await reservar("select * from public.crear_reserva($1, $2, $3, $4, 'Rápida', '1150004444', 'rapida@mail.com')", [
+    negA,
+    servA,
+    profAna,
+    slot.inicio,
+  ]);
   assert.ok(otra.turno_id);
   assert.equal((await servicio("select public.registrar_pago($1, 'p3', true, 4000) as r", [r.turno_id]))[0].r, "reembolsar");
   assert.equal((await servicio("select public.registrar_pago($1, 'p4', true, 100) as r", [otra.turno_id]))[0].r, "reembolsar");
@@ -805,6 +966,10 @@ await prueba("estadísticas: solo la dueña, con totales del período", async ()
   assert.ok(e.por_servicio.length >= 1);
   assert.equal(Number(e.senas), 8000);
   await como("eva", () => falla(q("select public.estadisticas_negocio(now(), now())"), /SIN_PERMISO/, "empleada"));
+  await como("beto", async () => {
+    const deBeto = (await uno("select public.estadisticas_negocio(now() - interval '30 days', now() + interval '60 days') as e")).e;
+    assert.equal(deBeto.total, 0);
+  });
 });
 
 await prueba("whatsapp: recordatorios con marca propia", async () => {
@@ -815,41 +980,68 @@ await prueba("whatsapp: recordatorios con marca propia", async () => {
   assert.equal((await servicio("select * from public.reclamar_recordatorios_whatsapp()")).length, 0);
 });
 
+await prueba("cuentas: borrar un usuario borra su perfil, sus sesiones y sus accesos", async () => {
+  await q(`insert into auth."session" ("expiresAt", "token", "updatedAt", "userId") values (now() + interval '1 day', 'tok-eva', now(), $1)`, [USUARIOS.eva]);
+  await q(`insert into public.accesos (usuario_id, tipo, token_hash, expira_at) values ($1, 'recuperacion', repeat('a', 64), now() + interval '1 day')`, [USUARIOS.eva]);
+  await como("auth", () => q('delete from auth."user" where "id" = $1', [USUARIOS.eva]));
+  assert.equal((await q("select * from public.perfiles where id = $1", [USUARIOS.eva])).length, 0);
+  assert.equal((await q('select * from auth."session" where "userId" = $1', [USUARIOS.eva])).length, 0);
+  assert.equal((await q("select * from public.accesos where usuario_id = $1", [USUARIOS.eva])).length, 0);
+  // Sus turnos quedan en el negocio.
+  assert.ok((await q("select * from public.turnos where profesional_id = $1", [profEva])).length > 0);
+});
+
 await db.close();
 
-// --- seed.sql en una base nueva (con las columnas de auth que usa) ----------------
-await prueba("seed: carga datos demo y el negocio queda reservable", async () => {
-  const s = new PGlite({ extensions: { btree_gist, pgcrypto } });
-  await s.exec(`
-    create schema auth;
-    create schema extensions;
-    create extension pgcrypto with schema extensions;
-    create table auth.users (
-      instance_id uuid, id uuid primary key, aud text, role text, email text, encrypted_password text,
-      email_confirmed_at timestamptz, raw_app_meta_data jsonb, raw_user_meta_data jsonb,
-      created_at timestamptz, updated_at timestamptz, confirmation_token text, recovery_token text,
-      email_change_token_new text, email_change text
-    );
-    create table auth.identities (
-      id uuid primary key, user_id uuid references auth.users, provider_id text, identity_data jsonb,
-      provider text, last_sign_in_at timestamptz, created_at timestamptz, updated_at timestamptz
-    );
-    create function auth.uid() returns uuid language sql stable as
-      $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-    create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
-  `);
-  for (const archivo of readdirSync(MIGRACIONES).filter((f) => f.endsWith(".sql")).sort()) {
-    await s.exec(readFileSync(join(MIGRACIONES, archivo), "utf8"));
+// --- Migraciones ----------------------------------------------------------------------
+await prueba("migraciones: una segunda corrida no hace nada; editar una aplicada se rechaza", async () => {
+  const carpeta = mkdtempSync(join(tmpdir(), "agenda2-migraciones-"));
+  try {
+    cpSync(CARPETA_MIGRACIONES, carpeta, { recursive: true });
+    const { db: m, ejecutar } = await baseNueva({ carpeta });
+    await m.exec("set role agenda2_dueno");
+    assert.deepEqual(await migrar(ejecutar, { carpeta, log: () => {} }), []);
+
+    writeFileSync(join(carpeta, "0002_nueva.sql"), "create table public.prueba_nueva (id int);");
+    assert.deepEqual(await migrar(ejecutar, { carpeta, log: () => {} }), ["0002_nueva.sql"]);
+    const versiones = (await m.query("select version from app.schema_version order by 1")).rows.map((r) => r.version);
+    assert.deepEqual(versiones, [1, 2]);
+
+    writeFileSync(join(carpeta, "0002_nueva.sql"), "create table public.prueba_nueva (id bigint);");
+    await falla(migrar(ejecutar, { carpeta, log: () => {} }), /cambió después de aplicarse/, "migración editada");
+
+    writeFileSync(join(carpeta, "0002_nueva.sql"), "create table public.prueba_nueva (id int);");
+    writeFileSync(join(carpeta, "0003_rota.sql"), "create table public.rota (id int); select 1/0;");
+    await falla(migrar(ejecutar, { carpeta, log: () => {} }), /0003_rota/, "migración con error");
+    assert.equal((await m.query("select to_regclass('public.rota') as t")).rows[0].t, null, "la migración fallida no deja nada");
+    await m.close();
+  } finally {
+    rmSync(carpeta, { recursive: true, force: true });
   }
-  await s.exec(readFileSync(join(MIGRACIONES, "..", "seed.sql"), "utf8"));
+});
+
+// --- seed en una base nueva ------------------------------------------------------------
+await prueba("seed: carga los datos demo, los usuarios entran y el negocio queda reservable", async () => {
+  const { db: s, ejecutar } = await baseNueva();
+  await cargarSeed(ejecutar);
   const neg = (await s.query("select public.negocio_publico('estudio-luna') as d")).rows[0].d;
   assert.equal(neg.servicios.length, 4);
   assert.equal(neg.profesionales.length, 2);
   const pelu = (await s.query("select public.negocio_publico('peluqueria-caballeros') as d")).rows[0].d;
   assert.equal(pelu.rubro, "peluqueria_masculina");
   assert.equal(pelu.servicios.length, 4);
-  const { ok } = (await s.query("select extensions.crypt('demo1234', encrypted_password) = encrypted_password as ok from auth.users")).rows[0];
-  assert.equal(ok, true);
+  for (const u of USUARIOS_DEMO) {
+    const { rows } = await s.query(
+      `select a."password", p.rol from auth."user" u
+       join auth."account" a on a."userId" = u."id" and a."providerId" = 'credential'
+       join public.perfiles p on p.id = u."id"
+       where u."email" = $1 and u."emailVerified"`,
+      [u.email],
+    );
+    assert.equal(rows.length, 1, u.email);
+    assert.equal(rows[0].rol, "dueno");
+    assert.equal(await verifyPassword({ hash: rows[0].password, password: CLAVE_DEMO }), true);
+  }
   await s.close();
 });
 

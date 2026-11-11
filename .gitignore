@@ -45,3 +45,6 @@ supabase/.temp/
 supabase/.branches/
 
 !.env.example
+
+# Postgres local de desarrollo (npm run db:local)
+/.pgdata/
