@@ -3,7 +3,7 @@
 MVP de agenda y reservas para negocios de servicios (peluquerías, barberías, uñas, estética).
 Los clientes reservan desde el celular sin crear cuenta y el negocio gestiona todo desde `/panel`.
 
-- **Stack:** Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + Supabase (Postgres, Auth, RLS) + FullCalendar 7 + Resend.
+- **Stack:** Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + PostgreSQL 18 (node-postgres, RLS) + Better Auth + FullCalendar 7 + Resend.
 - **Integraciones (opcionales):** Google Calendar, avisos por WhatsApp (Cloud API) y seña con Mercado Pago (hoy oculta, ver Fase 6).
 - **Idioma/zona:** todo en es-AR. Fechas en UTC (`timestamptz`), mostradas en `America/Argentina/Buenos_Aires`.
 - **Marca:** el nombre "Agenda2" está centralizado en `src/lib/marca.ts` y es fácil de cambiar.
@@ -14,44 +14,33 @@ Los clientes reservan desde el celular sin crear cuenta y el negocio gestiona to
 
 ### 1. Requisitos
 
-- Node.js 20+ (probado con Node 24).
-- **Docker Desktop**, que Supabase local necesita. En Windows hay que instalar WSL2 primero:
-  1. En PowerShell como administrador: `wsl --install` y reiniciar.
-  2. Instalar Docker Desktop desde https://www.docker.com/products/docker-desktop/ y abrirlo.
+- Node.js 20+ (probado con Node 24). **No hace falta Docker** ni instalar Postgres: `npm run db:local` usa los binarios de PostgreSQL 18 del paquete `embedded-postgres`.
 
-### 2. Levantar Supabase local
+### 2. Base de datos local
 
 ```bash
 npm install
-npm run db:start      # = npx supabase start (la primera vez descarga imágenes, tarda)
+cp .env.example .env.local   # ya trae las URLs de la base local; completá BETTER_AUTH_SECRET
+npm run db:local             # Postgres en 127.0.0.1:54329, datos en .pgdata/ (Ctrl+C lo apaga)
 ```
 
-Al terminar, el comando imprime las URLs y claves. Copiá `.env.example` a `.env.local` y completalo con esos datos:
-
-| Variable | Valor en `supabase start` |
-| --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | `API URL` (http://127.0.0.1:54321) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `anon key` (o `Publishable key`) |
-| `SUPABASE_SERVICE_ROLE_KEY` | `service_role key` (o `Secret key`). **Solo servidor.** |
-| `NEXT_PUBLIC_SITE_URL` | `http://localhost:3000` |
-
-`supabase start` aplica las migraciones de `supabase/migrations` y carga `supabase/seed.sql`.
-Para volver la base a cero: `npm run db:reset`.
+La primera vez crea los roles (`db/roles.sql`), la base `agenda2`, las tablas (`db/migraciones/`) y los datos demo (`db/seed.sql`). Las siguientes, solo aplica migraciones nuevas. Para volver la base a cero: `npm run db:reset` (con `db:local` corriendo). Para empezar de cero del todo, borrá `.pgdata/`.
 
 ### 3. Correr la app
+
+En otra terminal:
 
 ```bash
 npm run dev
 ```
 
 - App: http://localhost:3000
-- Supabase Studio (ver tablas): http://127.0.0.1:54323
-- Mails de prueba de Supabase Auth (Mailpit): http://127.0.0.1:54324
+- Sin `RESEND_API_KEY`, los mails no se envían y salen **enteros en la consola** de `npm run dev`: ahí están los links para confirmar la cuenta y recuperar la contraseña.
 
 ### Datos de prueba (seed)
 
-- Dueña: **demo@turnos.test / demo1234**, negocio "Estudio Luna" con 2 profesionales y 4 servicios.
-- Página pública: http://localhost:3000/n/estudio-luna
+- Dueña: **demo@turnos.test / demo1234**, negocio "Estudio Luna" con 2 profesionales y 4 servicios → http://localhost:3000/n/estudio-luna
+- Dueño: **barbero@turnos.test / demo1234**, "Peluquería Caballeros" → http://localhost:3000/n/peluqueria-caballeros
 
 ---
 
@@ -63,32 +52,37 @@ npm run dev
 | `npm run build` | Build de producción |
 | `npm run typecheck` | Genera los tipos de rutas y corre `tsc` |
 | `npm run lint` | ESLint |
-| `npm run test:db` | **Prueba las migraciones y la seguridad (RLS) sin Docker**, con Postgres embebido (PGlite) |
-| `npm run db:start` / `db:reset` | Supabase local |
-| `npm run db:tipos` | Genera `src/lib/database.types.ts` desde la base local (opcional) |
+| `npm run test:db` | **Prueba las migraciones, los roles y la seguridad (RLS)** con Postgres embebido (PGlite) |
+| `npm run db:local` | Postgres 18 local (sin Docker) |
+| `npm run db:migrar` | Aplica las migraciones pendientes (con `DATABASE_URL_MIGRAR`) |
+| `npm run db:seed` / `db:reset` | Datos demo / borrar todo, migrar y cargar el seed (solo base local) |
 
 ---
 
 ## Estructura
 
 ```
-supabase/
-  migrations/
-    ..._esquema.sql          tablas, restricciones, exclusión anti-superposición
-    ..._seguridad.sql        RLS + helpers (mi_negocio_id, es_dueno, ...)
-    ..._funciones_panel.sql  crear_negocio, guardar_horarios, guardar_servicios_profesional
-    ..._reservas.sql         negocio_publico, horarios_libres, dias_disponibles,
-                             crear_reserva, ver_turno, cancelar_turno_cliente, crear_turno_panel
-    ..._recordatorios.sql    reclamar_recordatorios (cron de mails)
-    ..._integraciones.sql    seña (retención + registrar_pago), Google (cola de sincronización,
-                             ocupados), WhatsApp, límites de uso, estadísticas
-  seed.sql
-scripts/test-db.mjs          tests de base de datos (PGlite)
+db/
+  roles.sql                  roles agenda2_* y la base (se corre una vez como superusuario)
+  migraciones/
+    0001_inicial.sql         esquema completo: tablas de Better Auth (auth), tablas del negocio,
+                             RLS, funciones del panel, del portal público y del servidor, permisos
+  migrar.mjs                 migrador (app.schema_version, checksum, candado)
+  seed.sql / seed.mjs        datos demo y sus usuarios
+deploy/                      systemd (web, cron, backup) y bloque de Caddy
+scripts/
+  test-db.mjs                tests de base de datos (PGlite)
+  db-local.mjs               Postgres local embebido
+  migrar.mjs / seed.mjs      npm run db:migrar / db:seed / db:reset
+  backup-db.sh               pg_dump diario
 src/
-  proxy.ts                   (ex "middleware") refresca sesión y protege /panel, /onboarding, /cuenta
+  proxy.ts                   (ex "middleware") valida la sesión y protege /panel y /onboarding
   lib/
+    db/                      pool de pg, plantilla sql, comoUsuario / comoAnonimo / comoServidor
+    better-auth.ts           configuración de Better Auth (cuentas, sesiones, mails)
     auth.ts                  getSesion, requerirPanel, requerirDueno, sesionParaAccion
-    supabase/                clientes server / proxy / admin (service role)
+    accesos.ts               links de acceso del equipo (invitación y recuperación)
+    datos-panel.ts           turnos y eventos de la agenda
     validaciones.ts          esquemas zod (todo input se valida en el servidor)
     fechas.ts                helpers UTC <-> hora local del negocio
     email/                   Resend, plantillas, notificaciones
@@ -100,7 +94,9 @@ src/
     limites.ts               límite de pedidos por IP
   app/
     (auth)/                  login, registro, recuperar contraseña
-    auth/confirmar/          canje de links de email (confirmación, invitación, recuperación)
+    api/auth/                Better Auth: solo los links de los mails (verificación y recuperación)
+    cuenta/password/         elegir contraseña nueva con el link de recuperación
+    acceso/[token]/          link de acceso de un empleado (invitación o recuperación)
     onboarding/              alta del negocio
     panel/                   panel de gestión (dueño / empleado)
     n/[slug]/                portal público de reservas
@@ -114,37 +110,40 @@ src/
 
 ## Seguridad: cómo está armada
 
-1. **Proxy** (`src/proxy.ts`): sin sesión no se entra a `/panel`, `/onboarding` ni `/cuenta`.
+1. **Proxy** (`src/proxy.ts`): sin una sesión válida (verificada en la base) no se entra a `/panel` ni a `/onboarding`.
 2. **Servidor**: el layout del panel exige un perfil (dueño o empleado). Las páginas de dueño usan `requerirDueno()`. Cada Server Action vuelve a verificar sesión y rol, y valida el input con zod.
-3. **RLS en Postgres**, que es la capa que importa:
-   - `anon` (público) **no tiene acceso a ninguna tabla**. El portal público solo usa funciones RPC `security definer` que devuelven lo mínimo necesario y validan su propio input.
+3. **Roles de Postgres + RLS**, que es la capa que importa:
+   - La app entra como `agenda2_app`, que **no hereda permisos**: cada consulta corre en una transacción que cambia de rol (`SET LOCAL ROLE`) a `agenda2_usuario` (panel), `agenda2_anonimo` (portal) o `agenda2_servidor` (reservas, cron). Si una consulta se escapara sin cambiar de rol, la base la rechaza.
+   - El anónimo **no tiene acceso a ninguna tabla**. El portal público solo usa 5 funciones `security definer` que devuelven lo mínimo necesario y validan su propio input.
    - Dueño: lee y escribe solo su negocio (`negocio_id = mi_negocio_id()`).
-   - Empleado: lee la configuración del negocio, pero solo ve y modifica los turnos, ausencias y clientes **de su propia agenda**.
+   - Empleado: lee la configuración del negocio, pero solo ve y modifica los turnos y ausencias **de su propia agenda**. No lee fichas de clientes: de sus turnos ve el nombre, mail y celular con que se pidieron.
+   - Better Auth tiene su propio rol (`agenda2_auth`) y esquema (`auth`): ni el panel ni el servidor leen contraseñas o sesiones.
    - Los permisos de UPDATE están limitados por columna (nadie puede mover un registro a otro negocio).
    - Las FK compuestas `(negocio_id, id)` impiden que un turno apunte a un profesional o servicio de otro negocio.
 4. **Turnos duplicados**: hay una restricción de exclusión `EXCLUDE USING gist (profesional_id WITH =, tstzrange(inicio, fin) WITH &&) WHERE estado <> 'cancelado'`. Aunque dos personas reserven a la vez, Postgres rechaza la segunda reserva. Con "cualquier profesional", `crear_reserva` prueba con el siguiente libre.
 5. **Token del turno**: tiene 64 caracteres hex aleatorios. La página `/t/[token]` es `noindex` y `no-referrer`.
 6. **Anti-abuso**: la reserva online pide email y, por negocio, permite un turno por fecha con cada email, máximo 3 turnos futuros (por email o celular) y uno solo a la vez con 3 inasistencias sin perdonar. Los turnos cancelados no cuentan y desde el panel no hay límites. También hay límite de pedidos por IP (hash) en reservar y consultar horarios.
-7. **Secretos de terceros**: los tokens de Google y Mercado Pago se guardan cifrados (AES-256-GCM, `INTEGRACIONES_CLAVE`) en `integraciones_secretos`, una tabla a la que ni `anon` ni `authenticated` tienen acceso: solo el servidor.
-8. **Pagos**: nunca se confía en los parámetros que llegan del navegador ni en el cuerpo del webhook. El pago se consulta a la API de Mercado Pago con el token del negocio y solo se registra si es la seña de un turno de ese negocio, por el monto correcto.
+7. **Secretos de terceros**: los tokens de Google y Mercado Pago se guardan cifrados (AES-256-GCM, `INTEGRACIONES_CLAVE`) en `integraciones_secretos`, una tabla a la que ni el anónimo ni los usuarios del panel tienen acceso: solo el servidor.
+8. **Sesión**: cookie httpOnly (`Secure` en producción). Registro con verificación de mail obligatoria, recuperación de contraseña de un solo uso que cierra las demás sesiones, y límite de intentos por IP en login, registro y recuperación. Por `/api/auth` solo pasan los links de los mails.
+9. **Pagos**: nunca se confía en los parámetros que llegan del navegador ni en el cuerpo del webhook. El pago se consulta a la API de Mercado Pago con el token del negocio y solo se registra si es la seña de un turno de ese negocio, por el monto correcto.
 
-`npm run test:db` verifica todo esto: aislamiento entre negocios, rol empleado, anon sin acceso, turnos superpuestos, política de cancelación, bloqueos, recordatorios, señas (retención, vencimiento, pago tardío), secretos de integraciones, cola de Google, límites de uso y estadísticas.
+`npm run test:db` verifica todo esto: roles (la app sin cambiar de rol no lee nada; el anónimo ejecuta solo las 5 funciones públicas), aislamiento entre negocios en todas las tablas, dueño contra empleado, turnos superpuestos, política de cancelación, bloqueos, recordatorios, señas (retención, vencimiento, pago tardío), secretos de integraciones, cola de Google, límites de uso y estadísticas.
 
 ---
 
 ## Cómo probar cada fase
 
 ### Fase 1: negocio, servicios, profesionales, roles
-1. Entrá a `/registro` y creá una cuenta. En local no hace falta confirmar el mail; te lleva a `/onboarding`.
+1. Entrá a `/registro` y creá una cuenta. Abrí el link de confirmación (en local está en la consola de `npm run dev`): inicia sesión y te lleva a `/onboarding`.
 2. Creá el negocio. Si marcás "Yo también atiendo", quedás creado como profesional.
 3. En **Servicios**, cargá servicios con duración y precio.
 4. En **Profesionales**, creá a alguien más, marcá qué servicios hace y cargá su horario semanal (podés usar varias franjas por día y el botón "Copiar a lunes–viernes").
-5. **Accesos**: invitá a un empleado y vinculalo a un profesional. Se genera un link para compartir por WhatsApp. Abrilo en una ventana de incógnito, elegí la contraseña y vas a ver que **solo aparece su agenda**, sin Servicios, Profesionales ni Mi negocio. Si escribís esas URLs a mano, te redirige.
+5. **Accesos**: invitá a un empleado y vinculalo a un profesional. Se genera un link de un solo uso (`/acceso/…`, vence en 24 h) para compartir por WhatsApp. Abrilo en una ventana de incógnito, elegí la contraseña y vas a ver que **solo aparece su agenda**, sin Servicios, Profesionales, Clientes ni Mi negocio. Si escribís esas URLs a mano, te redirige. Si el empleado olvida la contraseña, "Nuevo link de acceso" le genera otro.
 6. Con un usuario recién registrado sin negocio, `/panel` redirige a `/onboarding`.
 
 ### Fase 2: reservas públicas
 1. Abrí `/n/<tu-slug>` (o `/n/estudio-luna` con el seed) desde el celular o con el modo responsive del navegador.
-2. Elegí servicio, profesional o "Cualquiera", día y horario. Completá nombre y celular; el mail es opcional.
+2. Elegí servicio, profesional o "Cualquiera", día y horario. Completá nombre, celular y mail (obligatorio).
 3. Te lleva a `/t/<token>`: ahí ves el turno y lo podés cancelar hasta X horas antes (se configura en **Mi negocio**).
 4. Para probar la concurrencia, abrí el mismo horario en dos pestañas y confirmá en las dos. La segunda recibe "Ese horario ya no está disponible".
 
@@ -156,15 +155,16 @@ src/
 5. **Ausencias**: vacaciones o trámites. Esos horarios desaparecen de la página pública.
 
 ### Fase 4: mails
-- Sin `RESEND_API_KEY`, los mails no se envían y se registran en la consola del servidor.
-- Para enviarlos de verdad: creá una cuenta en https://resend.com, verificá tu dominio y completá `RESEND_API_KEY` y `EMAIL_FROM`.
+- Sin `RESEND_API_KEY`, los mails no se envían: en desarrollo se muestran enteros en la consola del servidor.
+- Para enviarlos de verdad: creá una cuenta en https://resend.com, verificá el dominio (`agenda2.tech`) y completá `RESEND_API_KEY` y `EMAIL_FROM`.
 - Se envían estos mails:
-  - **Confirmación** al reservar online, si el cliente dejó su email.
-  - **Aviso** cuando el negocio cancela o reprograma el turno.
+  - **Cuenta**: confirmación del email al registrarse y link para recuperar la contraseña (Better Auth).
+  - **Confirmación** al reservar online.
+  - **Aviso** cuando el negocio cancela, confirma o reprograma el turno.
   - **Recordatorio** X horas antes (configurable en Mi negocio).
-- El cron de tareas: `GET /api/cron` con el header `Authorization: Bearer <CRON_SECRET>`. Libera señas vencidas, manda recordatorios (mail y WhatsApp), sincroniza Google Calendar y limpia contadores. En Vercel queda programado cada hora por `vercel.json` (el plan gratuito de Vercel solo permite crons diarios: en ese caso usá un cron externo). En otro hosting, usá cualquier cron externo, por ejemplo:
+- El cron de tareas: `GET /api/cron` con el header `Authorization: Bearer <CRON_SECRET>`. Libera señas vencidas, manda recordatorios (mail y WhatsApp), sincroniza Google Calendar y limpia contadores y links vencidos. En el servidor lo llama `deploy/agenda2-cron.timer` cada hora. A mano:
   ```bash
-  curl -H "Authorization: Bearer $CRON_SECRET" https://tu-dominio/api/cron
+  curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron
   ```
 
 ### Fase 5: Google Calendar
@@ -181,7 +181,7 @@ src/
 ### Fase 6: seña con Mercado Pago
 
 > **Hoy está oculta**: `SENA_ACTIVA = false` en `src/lib/env.ts`. El código y la base siguen intactos; para volver a ofrecerla, alcanza con pasarlo a `true`.
-1. Necesitás `INTEGRACIONES_CLAVE` y `SUPABASE_SERVICE_ROLE_KEY`. No hay variables de Mercado Pago: cada negocio conecta la suya.
+1. Necesitás `INTEGRACIONES_CLAVE`. No hay variables de Mercado Pago: cada negocio conecta la suya.
 2. Panel → **Integraciones** → pegá el **Access Token**. Para probar, usá las credenciales de prueba (`TEST-…`) de https://www.mercadopago.com.ar/developers/panel/app y pagá con una [tarjeta de prueba](https://www.mercadopago.com.ar/developers/es/docs/checkout-pro/additional-content/your-integrations/test/cards).
 3. Configurá la seña (porcentaje del precio o monto fijo) y el plazo para pagar.
 4. Flujo del cliente:
@@ -213,21 +213,19 @@ src/
 
 ---
 
-## Producción (Vercel + Supabase cloud + Resend)
+## Producción (VPS propio: PostgreSQL 18 + Node 24 + Caddy)
 
-1. Creá un proyecto en supabase.com (región São Paulo) y vinculalo: `npx supabase link --project-ref <ref>`.
-2. Subí las migraciones con `npx supabase db push`. El seed **no** se sube. Comprobá los permisos en el SQL Editor: `select has_table_privilege('authenticated', 'public.perfiles', 'select');` tiene que dar `true`.
-3. En Resend, verificá tu dominio y creá una API key. Sin dominio propio, Resend solo entrega a tu propia dirección.
-4. En Supabase → Auth → SMTP, cargá Resend (`smtp.resend.com`, puerto 465, usuario `resend`, contraseña: la API key). El correo que trae Supabase solo llega a los miembros del proyecto, así que sin esto nadie más puede registrarse.
-5. En Auth → URL Configuration, cargá el `Site URL` y agregá `https://tu-dominio/**` a los redirect URLs.
-6. En Auth → Email Templates, para que los links funcionen con SSR, cambiá el link de **Confirm signup** y **Reset password** por:
-   `{{ .SiteURL }}/auth/confirmar?token_hash={{ .TokenHash }}&type=email&next=/onboarding`
-   (usá `type=recovery` y `next=/cuenta/password` para el reset).
-7. En Vercel, creá el proyecto desde el repositorio (región `gru1`) y cargá las variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (ahora obligatoria: las reservas la usan), `NEXT_PUBLIC_SITE_URL` (`https://…`), `NEXT_PUBLIC_CONTACTO_EMAIL`, `RESEND_API_KEY`, `EMAIL_FROM` y `CRON_SECRET`. Las `NEXT_PUBLIC_*` se fijan al compilar: si cambian, hay que volver a desplegar.
-8. Programá `GET https://tu-dominio/api/cron` cada hora con el header `Authorization: Bearer <CRON_SECRET>` en un cron externo (por ejemplo cron-job.org). El plan gratuito de Vercel no permite crons cada hora y hace fallar el despliegue si `vercel.json` los pide.
-9. Hacé un respaldo con `npx supabase db dump` (esquema, y otra vez con `--data-only`): el plan gratuito de Supabase no tiene copias automáticas.
+El paso a paso completo está en `CLAUDE.md`, sección **"Publicar en el VPS"**. En resumen:
 
-Para activar más adelante: `INTEGRACIONES_CLAVE`, las variables de Google (con `https://tu-dominio/api/google/callback` como URI autorizada) y las de WhatsApp. La seña con Mercado Pago se activa además con `SENA_ACTIVA` en `src/lib/env.ts`.
+1. Usuario Linux `agenda2`, código en `/srv/agenda2/web` (`git clone`).
+2. Roles y base, una vez, como superusuario: `sudo -u postgres psql -v clave_dueno=… -v clave_app=… -f db/roles.sql`.
+3. `.env.production.local` (app: `DATABASE_URL` como `agenda2_app`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_SITE_URL`, `CRON_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`…) y `.env.migrar.local` (solo `DATABASE_URL_MIGRAR` como `agenda2_dueno`).
+4. `npm ci && npm run db:migrar && npm run build`, y los servicios de `deploy/`: `agenda2-web` (Next en `127.0.0.1:3002`), `agenda2-cron.timer` (cada hora) y `agenda2-backup.timer` (`pg_dump` diario).
+5. Caddy con el bloque de `deploy/Caddyfile` (HTTPS automático, pisa `X-Forwarded-For` con la IP real).
+
+Actualizar: `git pull && npm ci && npm run db:migrar && npm run build && systemctl restart agenda2-web`.
+
+Para activar más adelante: las variables de Google (con `https://agenda2.tech/api/google/callback` como URI autorizada) y las de WhatsApp. La seña con Mercado Pago se activa además con `SENA_ACTIVA` en `src/lib/env.ts`.
 
 ---
 

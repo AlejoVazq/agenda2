@@ -1,0 +1,12 @@
+# Cada hora. Activar con: sudo systemctl enable --now agenda2-cron.timer
+# Ver la última corrida: systemctl status agenda2-cron.service
+[Unit]
+Description=Agenda2: tareas periódicas cada hora
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target

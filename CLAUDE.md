@@ -6,43 +6,55 @@ App de agenda y reservas online de turnos para negocios de servicios en Argentin
 
 - Todo en **español es-AR**: código, nombres de archivos, variables, textos y commits.
 - Fechas en UTC (`timestamptz`), se muestran en `America/Argentina/Buenos_Aires` (helpers en `src/lib/fechas.ts`, usa `temporal-polyfill`).
-- El README tiene el detalle de cada fase y cómo probarla; `docs/registro-2026-11-06.md`, la última sesión y lo pendiente.
+- El README tiene el detalle de cada fase y cómo probarla; `docs/registro-2026-11-11.md`, la última sesión (salida de Supabase) y lo pendiente.
 
 ## Stack
 
-- **Next.js 16.4** (App Router, Turbopack, React 19.3). Cambia respecto de versiones anteriores: leer `node_modules/next/dist/docs/` antes de tocar APIs. Ejemplo: el middleware ahora es `src/proxy.ts` (función `proxy`).
+- **Next.js 16.4** (App Router, Turbopack, React 19.3). Cambia respecto de versiones anteriores: leer `node_modules/next/dist/docs/` antes de tocar APIs. Ejemplo: el middleware ahora es `src/proxy.ts` (función `proxy`, corre en Node.js).
 - TypeScript, Tailwind CSS 4 (loader en `next.config.ts`), zod 4 para validar todo input en el servidor.
-- **Supabase**: Postgres + Auth + RLS. El esquema vive solo en `supabase/migrations/` (no hay ORM). `@supabase/ssr` para sesión por cookies.
+- **PostgreSQL 18 propio** (en el VPS), con **node-postgres (`pg`) sin ORM**. El esquema vive solo en `db/migraciones/` (SQL puro).
+- **Better Auth 1.7** para cuentas y sesiones (sus tablas en el esquema `auth` de la misma base).
 - FullCalendar 7 (agenda), Resend (mails), Google Calendar (OAuth), Mercado Pago (seña, hoy oculta), WhatsApp Cloud API (opcional).
 - Renderizado dinámico clásico: **sin** Cache Components ni ISR.
+- No se usa Supabase (ni cloud ni autohosteado): decisión del 2026-11-11.
 
 ## Comandos
 
 | Comando | Qué hace |
 | --- | --- |
+| `npm run db:local` | Postgres 18 local embebido en `.pgdata/` (sin Docker). La primera vez crea roles, base, tablas y seed. Queda en primer plano |
 | `npm run dev` | Desarrollo (http://localhost:3000) |
 | `npm run build` / `npm start` | Build y servidor de producción |
 | `npm run typecheck` | `next typegen` + `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm run test:db` | 44 pruebas de migraciones y RLS con PGlite, **sin Docker** |
-| `npm run db:start` / `db:reset` | Supabase local (necesita Docker Desktop encendido) |
+| `npm run test:db` | 55 pruebas de migraciones, roles y RLS con PGlite |
+| `npm run db:migrar` | Aplica migraciones pendientes (usa `DATABASE_URL_MIGRAR`) |
+| `npm run db:seed` / `db:reset` | Datos demo / borrar todo y volver a migrar + seed (solo contra una base local) |
 
 Antes de dar algo por terminado: `test:db`, `typecheck`, `lint` y `build`.
 
-Local en Windows: abrir Docker Desktop (`C:\Users\vtxal\AppData\Local\Programs\DockerDesktop\Docker Desktop.exe`), `npx supabase start` (si falla por timeout de salud, reintentar), `npm run dev`. Seed: `demo@turnos.test / demo1234` → `/n/estudio-luna`; `barbero@turnos.test` → `/n/peluqueria-caballeros`. Studio en :54323, Mailpit en :54324.
+Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en `.env.development.local` (o `.env.local`), ver `.env.example`. Sin `RESEND_API_KEY` los mails salen enteros en la consola de `npm run dev` (ahí están los links de verificación y de recuperación). Seed: `demo@turnos.test / demo1234` → `/n/estudio-luna`; `barbero@turnos.test / demo1234` → `/n/peluqueria-caballeros`.
 
 ## Arquitectura (lo que no se ve a simple vista)
 
-- **Tres capas de seguridad**: `src/proxy.ts` (sin sesión no entra a `/panel`, `/onboarding`, `/cuenta`) → layout y Server Actions verifican sesión y rol (`src/lib/auth.ts`: `requerirPanel`, `requerirDueno`, `sesionParaAccion`) → **RLS**, que es la que importa.
-- Roles: **dueño** (todo su negocio, `negocio_id = mi_negocio_id()`) y **empleado** (solo su agenda, sus turnos y clientes).
-- `anon` no tiene acceso a ninguna tabla. El portal público usa RPC `security definer` (`negocio_publico`, `horarios_libres`, `dias_disponibles`, `ver_turno`, `cancelar_turno_cliente`). `crear_reserva` **solo se llama desde el servidor** con la service role (`src/lib/supabase/admin.ts`): por eso `SUPABASE_SERVICE_ROLE_KEY` es obligatoria.
-- Los permisos de tablas (`grant`) están en las migraciones porque los proyectos nuevos de Supabase no los dan.
+- **Tres capas de seguridad**: `src/proxy.ts` (valida la sesión contra la base en `/panel` y `/onboarding`) → layout y Server Actions verifican sesión y rol (`src/lib/auth.ts`: `requerirPanel`, `requerirDueno`, `sesionParaAccion`) → **RLS**, que es la que importa.
+- **Roles de Postgres** (`db/roles.sql`, prefijo `agenda2_` porque los roles son de todo el servidor):
+  - `agenda2_dueno`: dueño de la base, esquemas, tablas y funciones `security definer`. Solo para migraciones.
+  - `agenda2_app`: con el que se conecta la app (`DATABASE_URL`). **NOINHERIT**: por sí solo no puede leer nada; si una consulta no cambia de rol, falla (falla cerrado).
+  - `agenda2_usuario` (panel, con RLS), `agenda2_anonimo` (portal público: solo 5 funciones, ninguna tabla), `agenda2_servidor` (BYPASSRLS, reservas/cron/integraciones; no lee contraseñas ni sesiones), `agenda2_auth` (Better Auth, solo el esquema `auth`).
+- **Capa de datos** (`src/lib/db`): `comoUsuario(id, tx => …)`, `comoAnonimo(…)`, `comoServidor(…)`. Cada una abre una transacción con `SET LOCAL ROLE` y, para el panel, `set_config('app.usuario_id', id, true)`. `app.usuario_id()` reemplaza a `auth.uid()`. Consultas siempre con la plantilla `` sql`…${valor}…` `` (parámetros, nunca concatenado). Los tipos vuelven como antes con PostgREST: timestamptz en ISO con microsegundos, numeric como number.
+- **Sesión** (`src/lib/better-auth.ts`): registro con verificación de mail obligatoria, login, recuperar contraseña, cookie httpOnly (prefijo `agenda2`, `Secure` en producción). Las pantallas usan Server Actions con zod y límite por IP que llaman a `auth.api.*`; por `/api/auth` solo pasan los links de los mails (`verify-email`, `reset-password/*`), el resto está cerrado. Login con Google: comentado en `better-auth.ts`, fácil de sumar.
+- **Accesos del equipo** (`src/lib/accesos.ts`, tabla `accesos`): el dueño crea el usuario del empleado y le pasa a mano un link de un solo uso `/acceso/[token]` (24 h, se guarda solo el hash) para elegir la contraseña; el mismo mecanismo sirve si la olvida.
+- Roles del panel: **dueño** (todo su negocio, `negocio_id = mi_negocio_id()`) y **empleado** (solo su agenda y sus turnos). **Un empleado no lee fichas de clientes**: de sus turnos ve los datos con que se pidieron (`nombre_reserva`, `email_reserva`, `telefono_reserva`). Los avisos al cliente se leen con el rol del servidor.
+- El portal público usa funciones `security definer` (`negocio_publico`, `horarios_libres`, `dias_disponibles`, `ver_turno`, `cancelar_turno_cliente`). `crear_reserva` **solo la ejecuta el servidor** (`comoServidor`), así no se esquiva el límite por IP.
+- Migraciones (`db/migrar.mjs`): tabla `app.schema_version` con checksum; **nunca se edita una migración aplicada**, se crea una nueva `NNNN_nombre.sql`. Cada una corre en su transacción, con candado.
+- Ninguna función nueva queda ejecutable por `public` (`alter default privileges` en la migración 0001): cada permiso se da explícito. `test:db` verifica que el anónimo ejecute solo las 5 públicas.
 - Anti-superposición: `EXCLUDE USING gist` por profesional en `turnos`. Candado por local para reservas simultáneas.
 - Reglas de reserva online: email obligatorio, 1 turno por fecha por mail, máx. 3 futuros por local (mail o celular), con 3 inasistencias solo 1 a la vez (el dueño lo quita con "Quitar límite"). Cancelados no cuentan; el panel no tiene límites. Límite por IP (hash) en `src/lib/limites.ts`.
 - Celulares normalizados (`normalizarTelefono` en TS y `normalizar_telefono` en SQL).
 - Turno del cliente: `/t/[token]` (64 hex, `noindex`), con cancelación, `.ics` y pago.
-- Secretos de terceros (tokens de Google y MP) cifrados AES-256-GCM con `INTEGRACIONES_CLAVE` en `integraciones_secretos` (solo accesible con service role).
-- Tareas periódicas: **un solo endpoint** `GET /api/cron` con `Authorization: Bearer <CRON_SECRET>` (señas vencidas, recordatorios por mail y WhatsApp, sincronización con Google, limpieza). Hay que llamarlo cada hora desde afuera.
+- Secretos de terceros (tokens de Google y MP) cifrados AES-256-GCM con `INTEGRACIONES_CLAVE` en `integraciones_secretos` (solo el rol del servidor).
+- Tareas periódicas: **un solo endpoint** `GET /api/cron` con `Authorization: Bearer <CRON_SECRET>` (señas vencidas, recordatorios por mail y WhatsApp, sincronización con Google, limpieza de límites y links vencidos). En el servidor lo llama `deploy/agenda2-cron.timer` cada hora.
 - Se usa `after()` para mandar mails y sincronizar con Google después de responder.
 - Integraciones opcionales: si falta su variable, la función se oculta (`integracionesDisponibles()` en `src/lib/env.ts`).
 - **Seña con Mercado Pago apagada**: `SENA_ACTIVA = false` en `src/lib/env.ts`. No se borró nada; se activa pasándolo a `true`.
@@ -50,90 +62,93 @@ Local en Windows: abrir Docker Desktop (`C:\Users\vtxal\AppData\Local\Programs\D
 
 ## Estado (2026-11-11)
 
-- Fases 1 a 6 y extras hechas, probadas en local. Versión preliminar commiteada.
+- Fases 1 a 6 y extras hechas. Supabase reemplazado por Postgres propio + Better Auth (rama `sin-supabase`), probado en local de punta a punta.
 - Objetivo: que un amigo peluquero masculino la pruebe en su local. Google Calendar puede quedar sin conectar.
-- **Próximo paso: publicar en un VPS** (antes se pensaba en Vercel; `vercel.json` queda pero no se usa). El repo todavía no tiene remoto.
-- Pendiente de decidir: dominio (sin él Resend no entrega mails a terceros), mail de contacto para `/privacidad`, revisión de textos legales.
+- **Próximo paso: publicar en el VPS** (Hostinger, Ubuntu 26.04, PostgreSQL 18, Node 24, Caddy), en **https://agenda2.tech**. El repo está en GitHub (`AlejoVazq/agenda2`).
+- Pendiente de decidir: mail de contacto para `/privacidad`, revisión de textos legales.
 - Pedidos del usuario para después de publicar: pulir la estética de la reserva y marca por negocio (logo, color, portada). No agregar otras funciones sin que lo pida.
-- Bug conocido a resolver antes de que el local sume empleados: un empleado puede ver los datos de un cliente si conoce su celular. El resto de lo pendiente está en `docs/registro-2026-11-06.md`.
+- El resto de lo pendiente está en `docs/registro-2026-11-11.md`.
 
-## Publicar en un VPS
+## Publicar en el VPS
 
-Recomendado: **Next.js en el VPS + Supabase cloud** (plan gratuito, región São Paulo). Autohostear Supabase en el VPS es posible (Docker), pero suma Auth, SMTP, backups y actualizaciones a mantener; solo vale la pena si se quiere todo en una máquina.
+El servidor ya corre EnSushi con Postgres directo. Agenda2 va al lado: usuario Linux `agenda2`, código en `/srv/agenda2/web`, servicio `agenda2-web` en `127.0.0.1:3002`, base `agenda2` en el mismo PostgreSQL 18. Los archivos de systemd y Caddy están en `deploy/`.
 
-### 1. Supabase cloud
+### 1. Usuario y código (una vez)
 
-1. Crear el proyecto. `npx supabase link --project-ref <ref>` y `npx supabase db push` (sube las migraciones; el seed **no**).
-2. Comprobar en el SQL Editor: `select has_table_privilege('authenticated', 'public.perfiles', 'select');` → `true`.
-3. Auth → URL Configuration: `Site URL = https://<dominio>` y redirect `https://<dominio>/**`.
-4. Auth → Email Templates: en **Confirm signup** el link `{{ .SiteURL }}/auth/confirmar?token_hash={{ .TokenHash }}&type=email&next=/onboarding`; en **Reset password**, el mismo con `type=recovery&next=/cuenta/password`.
-5. Auth → SMTP con Resend: `smtp.resend.com`, puerto 465, usuario `resend`, contraseña = API key. Sin esto el mail de Supabase solo llega a los miembros del proyecto. Sin dominio: desactivar la confirmación de mail para la primera prueba.
-6. Backups: el plan gratuito no los tiene. `npx supabase db dump` (y `--data-only`) periódicamente.
+```bash
+sudo adduser --system --group --home /srv/agenda2 agenda2
+sudo -u agenda2 git clone https://github.com/AlejoVazq/agenda2.git /srv/agenda2/web
+```
 
-### 2. El servidor
+Node 24 tiene que estar en `/usr/bin/node` (si no, ajustar `deploy/agenda2-web.service`). El servidor necesita **2 GB de RAM (o 1 GB + 2 GB de swap)** para el `next build`. Firewall: solo 22, 80 y 443; el 3002 no se abre.
 
-- Ubuntu LTS, **mínimo 1 GB de RAM + 2 GB de swap** (el `next build` consume bastante; con 2 GB va cómodo).
-- Node.js 20+ (en local se usa 24). Instalar con nvm o NodeSource.
-- Usuario sin root para la app, SSH con clave, firewall (`ufw`): solo 22, 80 y 443. El puerto 3000 **no** se abre: queda detrás del proxy.
-- DNS: registro A del dominio apuntando a la IP del VPS.
+### 2. Base de datos (una vez)
 
-### 3. Variables de entorno (`.env.production.local` en el servidor, nunca en git)
+Generar dos contraseñas largas y crear roles y base como superusuario:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"   # dos veces
+cd /srv/agenda2/web
+sudo -u postgres psql -v ON_ERROR_STOP=1 -v clave_dueno='<clave1>' -v clave_app='<clave2>' -f db/roles.sql
+```
+
+`db/roles.sql` crea los roles `agenda2_*`, la base `agenda2` (orden alfabético en español, ICU `es-AR`) y le saca el `connect` a `public`. Conviene hacer lo mismo con la base de EnSushi (`revoke connect on database <base_ensushi> from public;`) para que ningún rol de un proyecto pueda entrar a la base del otro.
+
+Comprobar: `sudo -u postgres psql -d agenda2 -c "select rolname, rolinherit, rolbypassrls from pg_roles where rolname like 'agenda2_%'"`.
+
+### 3. Variables de entorno
+
+`/srv/agenda2/web/.env.production.local` (chmod 600, dueño `agenda2`; nunca en git):
 
 | Variable | Obligatoria | Nota |
 | --- | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | sí | URL del proyecto cloud |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | sí | anon / publishable key |
-| `SUPABASE_SERVICE_ROLE_KEY` | sí | solo servidor; las reservas la usan |
-| `NEXT_PUBLIC_SITE_URL` | sí | `https://<dominio>`, sin `/` final |
-| `CRON_SECRET` | sí | string aleatorio largo |
+| `DATABASE_URL` | sí | `postgres://agenda2_app:<clave2>@127.0.0.1:5432/agenda2` |
+| `BETTER_AUTH_SECRET` | sí | ≥32 caracteres al azar. Si cambia, se cierran todas las sesiones |
+| `BETTER_AUTH_URL` | sí | `https://agenda2.tech` |
+| `NEXT_PUBLIC_SITE_URL` | sí | `https://agenda2.tech`, sin `/` final |
+| `CRON_SECRET` | sí | string al azar largo |
+| `RESEND_API_KEY`, `EMAIL_FROM` | sí | `EMAIL_FROM="Agenda2 <turnos@agenda2.tech>"` (dominio verificado en Resend). Sin esto nadie puede confirmar su cuenta |
 | `NEXT_PUBLIC_CONTACTO_EMAIL` | recomendada | aparece en `/privacidad` |
-| `RESEND_API_KEY`, `EMAIL_FROM` | si hay dominio | `EMAIL_FROM="Agenda2 <turnos@dominio>"`; sin ellas los mails van a la consola |
 | `INTEGRACIONES_CLAVE` | para Google/MP | ≥32 caracteres; si se pierde, hay que reconectar todo |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | opcional | redirect autorizada: `https://<dominio>/api/google/callback` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | opcional | redirect autorizada: `https://agenda2.tech/api/google/callback` |
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_PLANTILLA_*` | opcional | ver README |
 
-Generar secretos: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
+`/srv/agenda2/web/.env.migrar.local` (chmod 600): solo `DATABASE_URL_MIGRAR=postgres://agenda2_dueno:<clave1>@127.0.0.1:5432/agenda2`. Va aparte para que el proceso de la app no tenga la conexión del dueño.
 
-Las `NEXT_PUBLIC_*` se fijan **al compilar**: si cambian, hay que volver a hacer `npm run build`.
+`/srv/agenda2/cron.env` (chmod 600): `CRON_SECRET=<el mismo>`.
 
-### 4. Build y proceso
+Generar secretos: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Las `NEXT_PUBLIC_*` se fijan **al compilar**: si cambian, hay que volver a hacer `npm run build`.
+
+### 4. Build, migraciones y servicio
 
 ```bash
-git clone <repo> && cd <repo>
-npm ci
-npm run build
-npm start            # escucha en :3000
+cd /srv/agenda2/web
+sudo -u agenda2 npm ci
+sudo -u agenda2 npm run db:migrar      # crea las tablas (y aplica las nuevas en cada actualización)
+sudo -u agenda2 npm run build
+sudo cp deploy/agenda2-*.service deploy/agenda2-*.timer /etc/systemd/system/
+sudo install -m 755 scripts/backup-db.sh /usr/local/bin/agenda2-backup-db
+sudo mkdir -p /var/backups/agenda2 && sudo chown postgres:postgres /var/backups/agenda2 && sudo chmod 700 /var/backups/agenda2
+sudo systemctl daemon-reload
+sudo systemctl enable --now agenda2-web agenda2-cron.timer agenda2-backup.timer
 ```
 
-Mantenerlo vivo con **systemd** o **PM2** (`pm2 start npm --name agenda2 -- start` + `pm2 startup` + `pm2 save`). Con un solo proceso no hace falta `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` ni `deploymentId`; sí si algún día hay varias instancias.
+El seed **no** se carga en producción. Con un solo proceso no hace falta `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` ni `deploymentId`; sí si algún día hay varias instancias.
 
-Actualizar: `git pull && npm ci && npm run build && pm2 restart agenda2`. Si hay migraciones nuevas, `npx supabase db push` antes.
+Actualizar: `cd /srv/agenda2/web && sudo -u agenda2 git pull && sudo -u agenda2 npm ci && sudo -u agenda2 npm run db:migrar && sudo -u agenda2 npm run build && sudo systemctl restart agenda2-web`.
 
-### 5. Reverse proxy con HTTPS
+### 5. Caddy (HTTPS)
 
-Nginx + certbot o Caddy (HTTPS automático). Cosas a respetar:
+Agregar el bloque de `deploy/Caddyfile` a `/etc/caddy/Caddyfile` y `sudo systemctl reload caddy`. DNS: registro A de `agenda2.tech` (y `www`) a la IP del VPS.
 
-- **IP real del cliente**: `src/lib/limites.ts` toma el primer valor de `X-Forwarded-For`. El proxy tiene que **pisar** ese header, no agregarle valores, porque si no cualquiera evita el límite por IP inventándolo. En nginx: `proxy_set_header X-Forwarded-For $remote_addr;` y `proxy_set_header X-Real-IP $remote_addr;`. Caddy ya lo pisa por defecto.
-- Pasar `Host` y `X-Forwarded-Proto` (`proxy_set_header Host $host; proxy_set_header X-Forwarded-Proto $scheme;`).
-- Para el streaming de `loading.tsx` en nginx: `proxy_buffering off;` (o `X-Accel-Buffering: no`).
-- `client_max_body_size` chico alcanza (no hay subida de archivos todavía).
+- **IP real del cliente**: `src/lib/limites.ts` y Better Auth toman el primer valor de `X-Forwarded-For`. Caddy, sin `trusted_proxies`, descarta el que manda el cliente y pone la IP real. **No configurar `trusted_proxies`**, o cualquiera esquiva el límite por IP inventando el header.
+- `flush_interval -1` para el streaming de `loading.tsx`.
 
-Caddyfile mínimo:
+### 6. Cron y backups
 
-```
-dominio.com.ar {
-    reverse_proxy 127.0.0.1:3000
-}
-```
-
-### 6. Cron
-
-En el crontab del VPS (cada hora):
-
-```
-0 * * * * curl -fsS -H "Authorization: Bearer <CRON_SECRET>" https://<dominio>/api/cron > /dev/null
-```
+- `agenda2-cron.timer`: cada hora llama a `http://127.0.0.1:3002/api/cron` con el secreto de `/srv/agenda2/cron.env`. Forzar una corrida: `sudo systemctl start agenda2-cron.service && journalctl -u agenda2-cron -n 5`.
+- `agenda2-backup.timer`: `pg_dump` diario a `/var/backups/agenda2` (se guardan 14 días). Restaurar: ver `scripts/backup-db.sh`. Copiar los backups fuera del VPS cada tanto.
 
 ### 7. Después de publicar
 
-Prueba completa antes de pasársela al peluquero: registro con mail real, onboarding, servicios y horarios, reserva desde un celular real, mail de confirmación, cancelación desde `/t/[token]`, recordatorio (forzar con el cron), recuperar contraseña e invitar un empleado.
+Prueba completa antes de pasársela al peluquero: registro con mail real (llega el link de confirmación), onboarding, servicios y horarios, reserva desde un celular real, mail de confirmación, cancelación desde `/t/[token]`, recordatorio (forzar el cron con un turno de mañana reservado hace más de 3 h), recuperar contraseña e invitar un empleado y entrar como empleado.

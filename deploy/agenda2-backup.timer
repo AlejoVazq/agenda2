@@ -1,0 +1,12 @@
+# Todos los días a las 4:30 (hora del servidor).
+# Activar con: sudo systemctl enable --now agenda2-backup.timer
+[Unit]
+Description=Agenda2: backup diario de la base
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

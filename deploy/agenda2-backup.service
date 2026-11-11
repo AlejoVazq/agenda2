@@ -1,0 +1,20 @@
+# Backup de la base agenda2 con pg_dump (ver scripts/backup-db.sh).
+# Lo dispara agenda2-backup.timer todos los días. El script se instala aparte
+# (el usuario postgres no puede leer /srv/agenda2):
+#   sudo install -m 755 /srv/agenda2/web/scripts/backup-db.sh /usr/local/bin/agenda2-backup-db
+[Unit]
+Description=Agenda2: backup diario de la base
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+Environment=DESTINO=/var/backups/agenda2
+Environment=DIAS=14
+ExecStart=/usr/local/bin/agenda2-backup-db
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/agenda2

@@ -1,0 +1,18 @@
+# Bloque para el Caddyfile del servidor (/etc/caddy/Caddyfile), junto al de EnSushi.
+# Caddy saca el certificado HTTPS solo.
+#
+# X-Forwarded-For: sin trusted_proxies, Caddy descarta el que manda el cliente y
+# pone la IP real. NO configurar trusted_proxies: el límite por IP
+# (src/lib/limites.ts) y Better Auth toman el primer valor de ese header.
+
+agenda2.tech {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3002 {
+		# Sin buffer, para el streaming de loading.tsx.
+		flush_interval -1
+	}
+}
+
+www.agenda2.tech {
+	redir https://agenda2.tech{uri} permanent
+}

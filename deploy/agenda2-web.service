@@ -1,0 +1,38 @@
+# Agenda2: la app Next.js. Instalar en /etc/systemd/system/ y:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now agenda2-web
+# Logs: journalctl -u agenda2-web -f
+#
+# Next lee .env.production.local del directorio de trabajo. DATABASE_URL_MIGRAR
+# NO va ahí: va en .env.migrar.local, que solo usa `npm run db:migrar`.
+# Si Node no está en /usr/bin/node (por ejemplo, instalado con nvm), cambiá la ruta.
+
+[Unit]
+Description=Agenda2 (Next.js)
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=agenda2
+Group=agenda2
+WorkingDirectory=/srv/agenda2/web
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3002
+Restart=on-failure
+RestartSec=5
+
+# Endurecimiento: la app solo escribe en .next/ (caché de imágenes).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/agenda2/web/.next
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

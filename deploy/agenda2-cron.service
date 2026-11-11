@@ -1,0 +1,22 @@
+# Tareas periódicas de Agenda2 (señas vencidas, recordatorios, Google, limpieza).
+# Lo dispara agenda2-cron.timer cada hora. Llama directo a la app (sin pasar por Caddy).
+#
+# /srv/agenda2/cron.env (chmod 600, dueño agenda2) contiene una sola línea:
+#   CRON_SECRET=<el mismo valor que en .env.production.local>
+# El secreto se pasa a curl por la entrada estándar, así no aparece en `ps`.
+
+[Unit]
+Description=Agenda2: tareas periódicas (GET /api/cron)
+After=agenda2-web.service
+Requires=agenda2-web.service
+
+[Service]
+Type=oneshot
+User=agenda2
+Group=agenda2
+EnvironmentFile=/srv/agenda2/cron.env
+ExecStart=/bin/sh -c 'printf "Authorization: Bearer %%s\n" "$CRON_SECRET" | /usr/bin/curl -fsS --max-time 290 -H @- http://127.0.0.1:3002/api/cron'
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
