@@ -11,7 +11,12 @@ export async function enviarEmail(email: Email): Promise<{ ok: boolean; omitido?
   const apiKey = process.env.RESEND_API_KEY;
   const remitente = process.env.EMAIL_FROM;
   if (!apiKey || !remitente) {
-    console.info(`[email omitido: falta RESEND_API_KEY/EMAIL_FROM] asunto="${email.asunto}"`);
+    if (process.env.NODE_ENV === "production") {
+      console.warn(`[email omitido: falta RESEND_API_KEY/EMAIL_FROM] para=${email.para} asunto="${email.asunto}"`);
+    } else {
+      // En desarrollo se muestra entero: así se pueden abrir los links de verificación y recuperación.
+      console.info(`\n[email no enviado: falta RESEND_API_KEY] para=${email.para}\nasunto: ${email.asunto}\n${email.texto}\n`);
+    }
     return { ok: true, omitido: true };
   }
 

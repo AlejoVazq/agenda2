@@ -2,7 +2,7 @@ import "server-only";
 import { after } from "next/server";
 import { env, integracionesDisponibles } from "@/lib/env";
 import { formatFechaHora } from "@/lib/fechas";
-import { crearSupabaseAdmin } from "@/lib/supabase/admin";
+import { comoServidor, sql } from "@/lib/db";
 import { telefonoWhatsApp } from "@/lib/whatsapp";
 
 // Fase 6: avisos automáticos por WhatsApp con la API oficial de Meta (Cloud API).
@@ -75,22 +75,28 @@ export async function enviarPlantillaWhatsApp(
 export function confirmarPorWhatsAppDespues(turnoId: string) {
   if (!integracionesDisponibles().whatsapp || !process.env.WHATSAPP_PLANTILLA_CONFIRMACION) return;
   after(async () => {
-    const admin = crearSupabaseAdmin();
-    const { data } = await admin
-      .from("turnos")
-      .select(
-        "token_cancelacion, inicio, estado, servicio:servicios(nombre), cliente:clientes(nombre, telefono), negocio:negocios(nombre, zona_horaria, whatsapp_avisos)",
-      )
-      .eq("id", turnoId)
-      .maybeSingle();
-    const t = data as unknown as {
-      token_cancelacion: string;
-      inicio: string;
-      estado: string;
-      servicio: { nombre: string } | null;
-      cliente: { nombre: string; telefono: string } | null;
-      negocio: { nombre: string; zona_horaria: string; whatsapp_avisos: boolean } | null;
-    } | null;
+    const t = await comoServidor((tx) =>
+      tx.uno<{
+        token_cancelacion: string;
+        inicio: string;
+        estado: string;
+        servicio: { nombre: string } | null;
+        cliente: { nombre: string; telefono: string } | null;
+        negocio: { nombre: string; zona_horaria: string; whatsapp_avisos: boolean } | null;
+      }>(sql`
+        select t.token_cancelacion, t.inicio, t.estado,
+               json_build_object('nombre', s.nombre) as servicio,
+               json_build_object(
+                 'nombre', coalesce(t.nombre_reserva, c.nombre),
+                 'telefono', coalesce(t.telefono_reserva, c.telefono)
+               ) as cliente,
+               json_build_object('nombre', n.nombre, 'zona_horaria', n.zona_horaria, 'whatsapp_avisos', n.whatsapp_avisos) as negocio
+        from public.turnos t
+        join public.servicios s on s.id = t.servicio_id
+        join public.clientes c on c.id = t.cliente_id
+        join public.negocios n on n.id = t.negocio_id
+        where t.id = ${turnoId}`),
+    );
     if (!t?.negocio?.whatsapp_avisos || !t.cliente || t.estado === "cancelado") return;
     await enviarPlantillaWhatsApp("confirmacion", {
       telefono: t.cliente.telefono,

@@ -2,21 +2,22 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BotonLink, EncabezadoPagina, Insignia, Vacio } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { formatDuracion, formatPrecio } from "@/lib/fechas";
 import type { Servicio } from "@/lib/tipos";
 
 export const metadata: Metadata = { title: "Servicios" };
 
 export default async function PaginaServicios() {
-  const { negocio } = await requerirDueno();
-  const supabase = await crearSupabaseServidor();
-  const [{ data: servicios }, { data: asignaciones }] = await Promise.all([
-    supabase.from("servicios").select("*").eq("negocio_id", negocio.id).order("orden").order("nombre"),
-    supabase.from("profesional_servicio").select("servicio_id").eq("negocio_id", negocio.id),
-  ]);
-  const lista = (servicios ?? []) as Servicio[];
-  const conProfesional = new Set((asignaciones ?? []).map((a) => a.servicio_id as string));
+  const { negocio, userId } = await requerirDueno();
+  const [lista, asignaciones] = await comoUsuario(userId, (tx) =>
+    Promise.all([
+      tx.varios<Servicio>(sql`select * from public.servicios where negocio_id = ${negocio.id} order by orden, nombre`),
+      tx.varios<{ servicio_id: string }>(sql`
+        select servicio_id from public.profesional_servicio where negocio_id = ${negocio.id}`),
+    ]),
+  );
+  const conProfesional = new Set(asignaciones.map((a) => a.servicio_id));
 
   return (
     <>

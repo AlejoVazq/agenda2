@@ -4,11 +4,11 @@ import { integracionesDisponibles } from "@/lib/env";
 import { enviarEmail } from "@/lib/email/enviar";
 import { emailRecordatorio } from "@/lib/email/plantillas";
 import { importarOcupadosTodos, sincronizarPendientes } from "@/lib/google";
-import { crearSupabaseAdmin } from "@/lib/supabase/admin";
+import { comoServidor, sql } from "@/lib/db";
 import { enviarPlantillaWhatsApp } from "@/lib/whatsapp-api";
 
-// Tareas periódicas. Llamarlo cada hora desde un cron (Vercel Cron, GitHub
-// Actions, cron-job.org, etc.) con el header
+// Tareas periódicas. Lo llama cada hora un timer de systemd en el servidor
+// (deploy/agenda2-cron.timer) con el header
 //   Authorization: Bearer <CRON_SECRET>
 //
 //  1. Libera turnos cuya seña no se pagó a tiempo.
@@ -56,10 +56,9 @@ function autorizado(request: NextRequest) {
 async function recordatoriosMail() {
   // Sin mail configurado no se reclaman: quedarían marcados como enviados.
   if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) return { omitido: true };
-  const admin = crearSupabaseAdmin();
-  const { data, error } = await admin.rpc("reclamar_recordatorios", { p_limite: 100 });
-  if (error) throw error;
-  const pendientes = (data ?? []) as PendienteMail[];
+  const pendientes = await comoServidor((tx) =>
+    tx.varios<PendienteMail>(sql`select * from public.reclamar_recordatorios(100)`),
+  );
   const fallidos: string[] = [];
   for (const p of pendientes) {
     const r = await enviarEmail(
@@ -77,16 +76,19 @@ async function recordatoriosMail() {
     if (!r.ok) fallidos.push(p.turno_id);
   }
   // Los que fallaron se reintentan en la próxima corrida.
-  if (fallidos.length) await admin.from("turnos").update({ recordatorio_enviado_at: null }).in("id", fallidos);
+  if (fallidos.length) {
+    await comoServidor((tx) =>
+      tx.ejecutar(sql`update public.turnos set recordatorio_enviado_at = null where id = any(${fallidos}::uuid[])`),
+    );
+  }
   return { enviados: pendientes.length - fallidos.length, fallidos: fallidos.length };
 }
 
 async function recordatoriosWhatsApp() {
   if (!integracionesDisponibles().whatsapp || !process.env.WHATSAPP_PLANTILLA_RECORDATORIO) return { omitido: true };
-  const admin = crearSupabaseAdmin();
-  const { data, error } = await admin.rpc("reclamar_recordatorios_whatsapp", { p_limite: 100 });
-  if (error) throw error;
-  const pendientes = (data ?? []) as PendienteWhatsApp[];
+  const pendientes = await comoServidor((tx) =>
+    tx.varios<PendienteWhatsApp>(sql`select * from public.reclamar_recordatorios_whatsapp(100)`),
+  );
   const fallidos: string[] = [];
   for (const p of pendientes) {
     const r = await enviarPlantillaWhatsApp("recordatorio", {
@@ -100,7 +102,11 @@ async function recordatoriosWhatsApp() {
     });
     if (!r.ok) fallidos.push(p.turno_id);
   }
-  if (fallidos.length) await admin.from("turnos").update({ recordatorio_wa_enviado_at: null }).in("id", fallidos);
+  if (fallidos.length) {
+    await comoServidor((tx) =>
+      tx.ejecutar(sql`update public.turnos set recordatorio_wa_enviado_at = null where id = any(${fallidos}::uuid[])`),
+    );
+  }
   return { enviados: pendientes.length - fallidos.length, fallidos: fallidos.length };
 }
 
@@ -116,18 +122,24 @@ async function tarea<T>(nombre: string, fn: () => Promise<T>) {
 
 export async function GET(request: NextRequest) {
   if (!autorizado(request)) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  const admin = crearSupabaseAdmin();
   const google = integracionesDisponibles().google;
 
   const resultado = {
-    senasVencidas: await tarea("señas", async () => (await admin.rpc("vencer_pagos_pendientes")).data),
+    senasVencidas: await tarea("señas", async () =>
+      (await comoServidor((tx) => tx.uno<{ n: number }>(sql`select public.vencer_pagos_pendientes() as n`)))?.n ?? 0,
+    ),
     mail: await tarea("recordatorios mail", recordatoriosMail),
     whatsapp: await tarea("recordatorios whatsapp", recordatoriosWhatsApp),
     googleOcupados: google ? await tarea("google ocupados", importarOcupadosTodos) : { omitido: true },
     googleTurnos: google ? await tarea("google turnos", () => sincronizarPendientes(100)) : { omitido: true },
     limpieza: await tarea("limpieza", async () => {
-      const limite = new Date(Date.now() - 86_400_000).toISOString();
-      await admin.from("limites_uso").delete().lt("ventana", limite);
+      await comoServidor(async (tx) => {
+        await tx.ejecutar(sql`delete from public.limites_uso where ventana < now() - interval '1 day'`);
+        // Links del equipo vencidos o usados hace más de una semana.
+        await tx.ejecutar(sql`
+          delete from public.accesos
+          where expira_at < now() - interval '7 days' or usado_at < now() - interval '7 days'`);
+      });
       return true;
     }),
   };

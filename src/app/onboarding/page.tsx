@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { Logo, Tarjeta } from "@/components/ui";
 import { cerrarSesion } from "@/app/(auth)/acciones";
 import { getSesion, getSesionPanel } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
 import { env } from "@/lib/env";
 import { FormularioOnboarding } from "./formulario";
 
@@ -14,9 +13,7 @@ export default async function PaginaOnboarding() {
   if (!sesion) redirect("/login");
   if (await getSesionPanel()) redirect("/panel");
 
-  const supabase = await crearSupabaseServidor();
-  const { data } = await supabase.auth.getUser();
-  const nombre = (data.user?.user_metadata?.nombre as string | undefined) ?? "";
+  const nombre = sesion.nombre;
 
   return (
     <div className="flex min-h-dvh flex-col bg-gradient-to-b from-marca-50 to-fondo">

@@ -1,61 +1,93 @@
 import "server-only";
 import { after } from "next/server";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
-import { crearSupabaseAdmin } from "@/lib/supabase/admin";
+import { comoServidor, sql } from "@/lib/db";
 import { enviarEmail } from "./enviar";
 import { emailCambioPorNegocio, emailConfirmacion, emailNuevaReserva } from "./plantillas";
 
+// Avisos por mail. Leen con el rol del servidor porque quien dispara el aviso es
+// un cliente anónimo o un empleado que no lee fichas: el turno ya pasó por los
+// permisos de la acción (o es la propia reserva) y el mail va al cliente o al
+// negocio, nunca a quien hizo la acción. Las consultas son fijas por id.
+
+type NegocioEmail = {
+  nombre: string;
+  direccion: string | null;
+  telefono: string | null;
+  zona_horaria: string;
+  cancelacion_min_horas: number;
+};
+
+type TurnoEmail = {
+  id: string;
+  negocio_id: string;
+  profesional_id: string;
+  token_cancelacion: string;
+  inicio: string;
+  fin: string;
+  precio: number | null;
+  estado: string;
+  sena_monto: number | null;
+  pago_estado: string | null;
+  /** Nombre, mail y celular de quien pidió el turno (o de la ficha si faltan). */
+  cliente: string;
+  email: string | null;
+  telefono: string;
+  servicio: string;
+  profesional: string;
+  negocio: NegocioEmail;
+};
+
+function leerTurno(turnoId: string) {
+  return comoServidor((tx) =>
+    tx.uno<TurnoEmail>(sql`
+      select t.id, t.negocio_id, t.profesional_id, t.token_cancelacion, t.inicio, t.fin, t.precio,
+             t.estado, t.sena_monto, t.pago_estado,
+             coalesce(t.nombre_reserva, c.nombre) as cliente,
+             coalesce(t.email_reserva, c.email) as email,
+             coalesce(t.telefono_reserva, c.telefono) as telefono,
+             s.nombre as servicio, p.nombre as profesional,
+             json_build_object(
+               'nombre', n.nombre, 'direccion', n.direccion, 'telefono', n.telefono,
+               'zona_horaria', n.zona_horaria, 'cancelacion_min_horas', n.cancelacion_min_horas
+             ) as negocio
+      from public.turnos t
+      join public.clientes c on c.id = t.cliente_id
+      join public.servicios s on s.id = t.servicio_id
+      join public.profesionales p on p.id = t.profesional_id
+      join public.negocios n on n.id = t.negocio_id
+      where t.id = ${turnoId}`),
+  );
+}
+
 /**
  * Avisa al dueño (y al empleado de esa agenda, si tiene usuario) que entró una
- * reserva online. Corre después de responder al cliente. Usa service role
- * porque quien reserva es anónimo; la consulta es fija y no depende del input.
+ * reserva online. Corre después de responder al cliente.
  */
 export function notificarNuevaReserva(turnoId: string) {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.RESEND_API_KEY) return;
+  if (!process.env.RESEND_API_KEY) return;
 
   after(async () => {
-    const admin = crearSupabaseAdmin();
-    const { data } = await admin
-      .from("turnos")
-      .select(
-        "id, inicio, estado, negocio_id, profesional_id, nombre_reserva, sena_monto, pago_estado, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, telefono), negocio:negocios(nombre, zona_horaria)",
-      )
-      .eq("id", turnoId)
-      .maybeSingle();
-    const t = data as unknown as {
-      id: string;
-      inicio: string;
-      estado: string;
-      negocio_id: string;
-      profesional_id: string;
-      nombre_reserva: string | null;
-      sena_monto: number | null;
-      pago_estado: string | null;
-      servicio: { nombre: string } | null;
-      profesional: { nombre: string } | null;
-      cliente: { nombre: string; telefono: string } | null;
-      negocio: { nombre: string; zona_horaria: string } | null;
-    } | null;
-    if (!t?.negocio || !t.cliente) return;
+    const t = await leerTurno(turnoId);
+    if (!t) return;
 
-    const { data: perfiles } = await admin
-      .from("perfiles")
-      .select("id, rol, profesional_id")
-      .eq("negocio_id", t.negocio_id);
-    const destinatarios = (perfiles ?? []).filter((p) => p.rol === "dueno" || p.profesional_id === t.profesional_id);
+    const destinatarios = await comoServidor((tx) =>
+      tx.varios<{ email: string }>(sql`
+        select u."email" as email
+        from public.perfiles p
+        join auth."user" u on u."id" = p.id
+        where p.negocio_id = ${t.negocio_id}
+          and (p.rol = 'dueno' or p.profesional_id = ${t.profesional_id})`),
+    );
 
-    for (const p of destinatarios) {
-      const { data: usuario } = await admin.auth.admin.getUserById(p.id);
-      const email = usuario.user?.email;
-      if (!email) continue;
+    for (const { email } of destinatarios) {
       await enviarEmail(
         emailNuevaReserva(email, {
           turnoId: t.id,
           inicio: t.inicio,
-          cliente: t.nombre_reserva ?? t.cliente.nombre,
-          telefono: t.cliente.telefono,
-          servicio: t.servicio?.nombre ?? "",
-          profesional: t.profesional?.nombre ?? "",
+          cliente: t.cliente,
+          telefono: t.telefono,
+          servicio: t.servicio,
+          profesional: t.profesional,
           pendiente: t.estado === "pendiente",
           negocio: t.negocio.nombre,
           zona_horaria: t.negocio.zona_horaria,
@@ -66,54 +98,20 @@ export function notificarNuevaReserva(turnoId: string) {
   });
 }
 
-/**
- * Mail de confirmación al cliente que reservó online (si dejó email). Se lee con
- * service role porque el cliente es anónimo; el id viene de la propia reserva.
- */
+/** Mail de confirmación al cliente que reservó online. */
 export function notificarConfirmacionCliente(turnoId: string) {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return;
-
   after(async () => {
-    const admin = crearSupabaseAdmin();
-    const { data } = await admin
-      .from("turnos")
-      .select(
-        "email_reserva, nombre_reserva, token_cancelacion, inicio, fin, precio, estado, sena_monto, pago_estado, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, email), negocio:negocios(nombre, direccion, telefono, zona_horaria, cancelacion_min_horas)",
-      )
-      .eq("id", turnoId)
-      .maybeSingle();
-    const t = data as unknown as {
-      email_reserva: string | null;
-      nombre_reserva: string | null;
-      token_cancelacion: string;
-      inicio: string;
-      fin: string;
-      precio: number | null;
-      estado: string;
-      sena_monto: number | null;
-      pago_estado: string | null;
-      servicio: { nombre: string } | null;
-      profesional: { nombre: string } | null;
-      cliente: { nombre: string; email: string | null } | null;
-      negocio: {
-        nombre: string;
-        direccion: string | null;
-        telefono: string | null;
-        zona_horaria: string;
-        cancelacion_min_horas: number;
-      } | null;
-    } | null;
-    const destino = t?.email_reserva ?? t?.cliente?.email;
-    if (!t?.cliente || !destino || !t.negocio || t.estado === "cancelado") return;
+    const t = await leerTurno(turnoId);
+    if (!t?.email || t.estado === "cancelado") return;
 
     await enviarEmail(
-      emailConfirmacion(destino, {
+      emailConfirmacion(t.email, {
         token: t.token_cancelacion,
         inicio: t.inicio,
         fin: t.fin,
-        cliente: t.nombre_reserva ?? t.cliente.nombre,
-        servicio: t.servicio?.nombre ?? "",
-        profesional: t.profesional?.nombre ?? "",
+        cliente: t.cliente,
+        servicio: t.servicio,
+        profesional: t.profesional,
         precio: t.precio,
         estado: t.estado,
         sena: t.pago_estado === "aprobado" ? t.sena_monto : null,
@@ -125,59 +123,34 @@ export function notificarConfirmacionCliente(turnoId: string) {
 }
 
 /**
- * Avisa al cliente (si dejó email) que el negocio canceló, movió o confirmó su turno.
- * Lee el turno con la sesión del usuario del panel (RLS) y envía después de
- * responder, para no demorar la acción.
+ * Avisa al cliente (si dejó email) que el negocio canceló, movió o confirmó su
+ * turno. Llamar solo después de que la acción (con RLS) modificó el turno.
+ * Envía después de responder, para no demorar la acción.
  */
-export async function notificarCambioTurno(turnoId: string, tipo: "cancelado" | "reprogramado" | "confirmado") {
-  const supabase = await crearSupabaseServidor();
-  const { data } = await supabase
-    .from("turnos")
-    .select(
-      "email_reserva, nombre_reserva, token_cancelacion, inicio, fin, precio, estado, servicio:servicios(nombre), profesional:profesionales(nombre), cliente:clientes(nombre, email), negocio:negocios(nombre, direccion, telefono, zona_horaria, cancelacion_min_horas)",
-    )
-    .eq("id", turnoId)
-    .maybeSingle();
+export function notificarCambioTurno(turnoId: string, tipo: "cancelado" | "reprogramado" | "confirmado") {
+  after(async () => {
+    const t = await leerTurno(turnoId);
+    if (!t?.email) return;
+    // No avisar cambios de turnos que ya pasaron.
+    if (new Date(t.fin) < new Date()) return;
 
-  const t = data as unknown as {
-    email_reserva: string | null;
-    nombre_reserva: string | null;
-    token_cancelacion: string;
-    inicio: string;
-    fin: string;
-    precio: number | null;
-    estado: string;
-    servicio: { nombre: string } | null;
-    profesional: { nombre: string } | null;
-    cliente: { nombre: string; email: string | null } | null;
-    negocio: {
-      nombre: string;
-      direccion: string | null;
-      telefono: string | null;
-      zona_horaria: string;
-      cancelacion_min_horas: number;
-    } | null;
-  } | null;
-  const destino = t?.email_reserva ?? t?.cliente?.email;
-  if (!t?.cliente || !destino || !t.negocio) return;
-  // No avisar cambios de turnos que ya pasaron.
-  if (new Date(t.fin) < new Date()) return;
-
-  const email = emailCambioPorNegocio(
-    destino,
-    {
-      token: t.token_cancelacion,
-      inicio: t.inicio,
-      fin: t.fin,
-      cliente: t.nombre_reserva ?? t.cliente.nombre,
-      servicio: t.servicio?.nombre ?? "",
-      profesional: t.profesional?.nombre ?? "",
-      precio: t.precio,
-      estado: t.estado,
-      negocio: t.negocio,
-      cancelacion_min_horas: t.negocio.cancelacion_min_horas,
-    },
-    tipo,
-  );
-  after(() => enviarEmail(email));
+    await enviarEmail(
+      emailCambioPorNegocio(
+        t.email,
+        {
+          token: t.token_cancelacion,
+          inicio: t.inicio,
+          fin: t.fin,
+          cliente: t.cliente,
+          servicio: t.servicio,
+          profesional: t.profesional,
+          precio: t.precio,
+          estado: t.estado,
+          negocio: t.negocio,
+          cancelacion_min_horas: t.negocio.cancelacion_min_horas,
+        },
+        tipo,
+      ),
+    );
+  });
 }

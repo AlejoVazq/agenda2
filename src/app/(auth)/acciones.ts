@@ -1,10 +1,14 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
-import { env } from "@/lib/env";
+import { APIError } from "better-auth/api";
+import { auth } from "@/lib/better-auth";
+import { dentroDelLimite } from "@/lib/limites";
 import { datosDeForm, erroresDeCampo, esquemaLogin, esquemaPassword, esquemaRegistro } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
+
+const DEMASIADOS = { error: "Hiciste demasiados intentos. Esperá unos minutos y probá de nuevo." };
 
 /** Solo se permiten redirecciones internas (evita open redirects). */
 function destinoSeguro(next: FormDataEntryValue | null, porDefecto = "/panel") {
@@ -12,19 +16,26 @@ function destinoSeguro(next: FormDataEntryValue | null, porDefecto = "/panel") {
   return valor.startsWith("/") && !valor.startsWith("//") && !valor.includes("\\") ? valor : porDefecto;
 }
 
+function codigoDe(e: unknown): string | undefined {
+  return e instanceof APIError ? (e.body?.code as string | undefined) : undefined;
+}
+
 export async function iniciarSesion(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
   const datos = esquemaLogin.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
+  if (!(await dentroDelLimite("login", 10, 600))) return DEMASIADOS;
 
-  const supabase = await crearSupabaseServidor();
-  const { error } = await supabase.auth.signInWithPassword(datos.data);
-  if (error) {
-    return {
-      error:
-        error.code === "email_not_confirmed"
-          ? "Todavía no confirmaste tu email. Revisá tu casilla."
-          : "Email o contraseña incorrectos.",
-    };
+  try {
+    await auth.api.signInEmail({
+      body: { email: datos.data.email, password: datos.data.password },
+      headers: await headers(),
+    });
+  } catch (e) {
+    if (codigoDe(e) === "EMAIL_NOT_VERIFIED") {
+      return { error: "Todavía no confirmaste tu email. Te reenviamos el link: revisá tu casilla." };
+    }
+    if (!(e instanceof APIError)) console.error("[login]", e);
+    return { error: "Email o contraseña incorrectos." };
   }
 
   redirect(destinoSeguro(formData.get("next")));
@@ -33,25 +44,28 @@ export async function iniciarSesion(_prev: EstadoAccion, formData: FormData): Pr
 export async function registrarse(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
   const datos = esquemaRegistro.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
+  if (!(await dentroDelLimite("registro", 5, 3600))) return DEMASIADOS;
 
-  const supabase = await crearSupabaseServidor();
-  const { data, error } = await supabase.auth.signUp({
-    email: datos.data.email,
-    password: datos.data.password,
-    options: {
-      data: { nombre: datos.data.nombre },
-      emailRedirectTo: `${env.siteUrl}/auth/confirmar?next=/onboarding`,
-    },
-  });
-
-  if (error) {
-    if (error.code === "user_already_exists") return { error: "Ya existe una cuenta con ese email. Iniciá sesión." };
-    if (error.code === "weak_password") return { errores: { password: ["La contraseña es muy débil."] } };
+  try {
+    // Con la verificación de mail obligatoria, Better Auth responde igual exista o
+    // no la cuenta (no revela qué emails están registrados).
+    await auth.api.signUpEmail({
+      body: {
+        name: datos.data.nombre,
+        email: datos.data.email,
+        password: datos.data.password,
+        callbackURL: "/login?verificado=1",
+      },
+      headers: await headers(),
+    });
+  } catch (e) {
+    const codigo = codigoDe(e);
+    if (codigo === "PASSWORD_TOO_SHORT" || codigo === "PASSWORD_TOO_LONG") {
+      return { errores: { password: ["La contraseña debe tener entre 8 y 72 caracteres."] } };
+    }
+    if (!(e instanceof APIError)) console.error("[registro]", e);
     return { error: "No pudimos crear la cuenta. Probá de nuevo en unos minutos." };
   }
-
-  // Con confirmación de email desactivada (desarrollo local) ya hay sesión.
-  if (data.session) redirect("/onboarding");
 
   return {
     ok: true,
@@ -60,34 +74,40 @@ export async function registrarse(_prev: EstadoAccion, formData: FormData): Prom
 }
 
 export async function cerrarSesion() {
-  const supabase = await crearSupabaseServidor();
-  await supabase.auth.signOut();
+  await auth.api.signOut({ headers: await headers() }).catch(() => null);
   redirect("/login");
 }
 
-/** Definir contraseña (empleados invitados o recuperación). */
-export async function definirPassword(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
+/** Elegir contraseña nueva con el link de recuperación que llega por mail. */
+export async function restablecerPassword(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
   const datos = esquemaPassword.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
+  const token = formData.get("token");
+  if (typeof token !== "string" || !/^[A-Za-z0-9_-]{8,200}$/.test(token)) {
+    return { error: "El link no es válido. Pedí uno nuevo." };
+  }
+  if (!(await dentroDelLimite("restablecer", 10, 600))) return DEMASIADOS;
 
-  const supabase = await crearSupabaseServidor();
-  const { error } = await supabase.auth.updateUser({ password: datos.data.password });
-  if (error) {
-    if (error.code === "same_password") return { error: "La contraseña nueva tiene que ser distinta a la anterior." };
-    return { error: "No pudimos guardar la contraseña. Volvé a abrir el link e intentá de nuevo." };
+  try {
+    await auth.api.resetPassword({ body: { newPassword: datos.data.password, token }, headers: await headers() });
+  } catch (e) {
+    if (!(e instanceof APIError)) console.error("[restablecer]", e);
+    return { error: "El link venció o ya se usó. Pedí uno nuevo desde “Olvidé mi contraseña”." };
   }
 
-  redirect("/panel");
+  redirect("/login?password=1");
 }
 
 export async function pedirRecuperacion(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
   const datos = esquemaLogin.pick({ email: true }).safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
+  if (!(await dentroDelLimite("recuperar", 5, 3600))) return DEMASIADOS;
 
-  const supabase = await crearSupabaseServidor();
-  await supabase.auth.resetPasswordForEmail(datos.data.email, {
-    redirectTo: `${env.siteUrl}/auth/confirmar?next=/cuenta/password`,
-  });
+  await auth.api
+    .requestPasswordReset({ body: { email: datos.data.email, redirectTo: "/cuenta/password" }, headers: await headers() })
+    .catch((e) => {
+      if (!(e instanceof APIError)) console.error("[recuperar]", e);
+    });
   // Misma respuesta exista o no la cuenta (no revelar usuarios).
   return { ok: true, mensaje: "Si el email está registrado, te llegará un link para crear una contraseña nueva." };
 }

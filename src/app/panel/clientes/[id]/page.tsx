@@ -6,7 +6,7 @@ import { BotonAccion } from "@/components/boton-accion";
 import { Aviso, BotonLink, EncabezadoPagina, Insignia, Tarjeta } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
 import { formatFechaCorta, formatHora, formatPrecio } from "@/lib/fechas";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { ESTADOS_TURNO, type Cliente, type EstadoTurno } from "@/lib/tipos";
 import { linkWhatsApp } from "@/lib/whatsapp";
 import { quitarLimiteCliente } from "../acciones";
@@ -28,22 +28,27 @@ type TurnoCliente = {
 
 export default async function PaginaCliente({ params }: PageProps<"/panel/clientes/[id]">) {
   const { id } = await params;
-  const { negocio } = await requerirDueno();
+  const { negocio, userId } = await requerirDueno();
   if (!z.uuid().safeParse(id).success) notFound();
 
-  const supabase = await crearSupabaseServidor();
-  const [{ data: cliente }, { data: filas }] = await Promise.all([
-    supabase.from("clientes").select("id, nombre, telefono, email, notas, created_at, ausencias_perdonadas_at").eq("id", id).maybeSingle(),
-    supabase
-      .from("turnos")
-      .select("id, inicio, estado, precio, cancelado_por, servicio:servicios(nombre), profesional:profesionales(nombre)")
-      .eq("cliente_id", id)
-      .order("inicio", { ascending: false })
-      .limit(100),
-  ]);
-  if (!cliente) notFound();
-  const c = cliente as Cliente & { created_at: string; ausencias_perdonadas_at: string | null };
-  const turnos = (filas ?? []) as unknown as TurnoCliente[];
+  const [c, turnos] = await comoUsuario(userId, (tx) =>
+    Promise.all([
+      tx.uno<Cliente & { created_at: string; ausencias_perdonadas_at: string | null }>(sql`
+        select id, nombre, telefono, email, notas, created_at, ausencias_perdonadas_at
+        from public.clientes where id = ${id}`),
+      tx.varios<TurnoCliente>(sql`
+        select t.id, t.inicio, t.estado, t.precio, t.cancelado_por,
+               json_build_object('nombre', s.nombre) as servicio,
+               json_build_object('nombre', p.nombre) as profesional
+        from public.turnos t
+        join public.servicios s on s.id = t.servicio_id
+        join public.profesionales p on p.id = t.profesional_id
+        where t.cliente_id = ${id}
+        order by t.inicio desc
+        limit 100`),
+    ]),
+  );
+  if (!c) notFound();
   const tz = negocio.zona_horaria;
 
   const ahora = new Date().toISOString();

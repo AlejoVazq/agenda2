@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Aviso, BotonLink, EncabezadoPagina, Insignia, Tarjeta, Vacio } from "@/components/ui";
 import { BotonCopiar } from "@/components/copiar";
 import { requerirPanel } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { turnosEnRango } from "@/lib/datos-panel";
 import { env } from "@/lib/env";
 import { fechaLocalISO, formatFechaLarga, formatHora, localADate, sumarDias } from "@/lib/fechas";
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Panel" };
 
 export default async function InicioPanel({ searchParams }: PageProps<"/panel">) {
   const { bienvenida } = await searchParams;
-  const { perfil, negocio, esDueno } = await requerirPanel();
+  const { perfil, negocio, esDueno, userId } = await requerirPanel();
   const tz = negocio.zona_horaria;
   const hoy = fechaLocalISO(new Date(), tz);
 
@@ -26,20 +26,28 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
   let pasos: { texto: string; hecho: boolean; href: string }[] = [];
   let aDevolver: { id: string; inicio: string; cliente: { nombre: string } | null }[] = [];
   if (esDueno) {
-    const supabase = await crearSupabaseServidor();
-    const [servicios, profesionales, horarios, asignaciones, devoluciones] = await Promise.all([
-      supabase.from("servicios").select("id", { count: "exact", head: true }).eq("activo", true),
-      supabase.from("profesionales").select("id", { count: "exact", head: true }).eq("activo", true),
-      supabase.from("horarios_profesional").select("id", { count: "exact", head: true }),
-      supabase.from("profesional_servicio").select("servicio_id", { count: "exact", head: true }),
-      supabase.from("turnos").select("id, inicio, cliente:clientes(nombre)").eq("pago_estado", "reembolsar").limit(10),
-    ]);
-    aDevolver = (devoluciones.data ?? []) as unknown as typeof aDevolver;
+    const [conteo, devoluciones] = await comoUsuario(userId, (tx) =>
+      Promise.all([
+        tx.uno<{ servicios: number; profesionales: number; horarios: number; asignaciones: number }>(sql`
+          select
+            (select count(*) from public.servicios where negocio_id = ${negocio.id} and activo) as servicios,
+            (select count(*) from public.profesionales where negocio_id = ${negocio.id} and activo) as profesionales,
+            (select count(*) from public.horarios_profesional where negocio_id = ${negocio.id}) as horarios,
+            (select count(*) from public.profesional_servicio where negocio_id = ${negocio.id}) as asignaciones`),
+        tx.varios<(typeof aDevolver)[number]>(sql`
+          select t.id, t.inicio, json_build_object('nombre', coalesce(t.nombre_reserva, c.nombre)) as cliente
+          from public.turnos t
+          left join public.clientes c on c.id = t.cliente_id
+          where t.negocio_id = ${negocio.id} and t.pago_estado = 'reembolsar'
+          limit 10`),
+      ]),
+    );
+    aDevolver = devoluciones;
     pasos = [
-      { texto: "Cargá tus servicios con duración y precio", hecho: (servicios.count ?? 0) > 0, href: "/panel/servicios" },
-      { texto: "Agregá a las personas que atienden", hecho: (profesionales.count ?? 0) > 0, href: "/panel/profesionales" },
-      { texto: "Asigná qué servicios hace cada profesional", hecho: (asignaciones.count ?? 0) > 0, href: "/panel/profesionales" },
-      { texto: "Definí los horarios de atención", hecho: (horarios.count ?? 0) > 0, href: "/panel/profesionales" },
+      { texto: "Cargá tus servicios con duración y precio", hecho: (conteo?.servicios ?? 0) > 0, href: "/panel/servicios" },
+      { texto: "Agregá a las personas que atienden", hecho: (conteo?.profesionales ?? 0) > 0, href: "/panel/profesionales" },
+      { texto: "Asigná qué servicios hace cada profesional", hecho: (conteo?.asignaciones ?? 0) > 0, href: "/panel/profesionales" },
+      { texto: "Definí los horarios de atención", hecho: (conteo?.horarios ?? 0) > 0, href: "/panel/profesionales" },
     ];
   }
   const pendientes = pasos.filter((p) => !p.hecho);

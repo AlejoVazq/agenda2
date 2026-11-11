@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BotonLink, EncabezadoPagina, Insignia, Select, Vacio, clasesBoton } from "@/components/ui";
 import { requerirPanel } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { turnosEnRango } from "@/lib/datos-panel";
 import { fechaLocalISO, formatFechaISO, formatHora, localADate, sumarDias } from "@/lib/fechas";
 import { ESTADOS_TURNO, type EstadoTurno } from "@/lib/tipos";
@@ -21,7 +21,7 @@ const COLOR = { pendiente: "ambar", confirmado: "verde", cancelado: "rojo", comp
 
 export default async function PaginaTurnos({ searchParams }: PageProps<"/panel/turnos">) {
   const sp = await searchParams;
-  const { negocio, esDueno } = await requerirPanel();
+  const { negocio, esDueno, userId } = await requerirPanel();
   const tz = negocio.zona_horaria;
 
   const rango: Rango = typeof sp.rango === "string" && Object.hasOwn(RANGOS, sp.rango) ? (sp.rango as Rango) : "proximos";
@@ -36,15 +36,17 @@ export default async function PaginaTurnos({ searchParams }: PageProps<"/panel/t
     pasados: [sumarDias(hoy, -30), sumarDias(hoy, 1)],
   }[rango];
 
-  const supabase = await crearSupabaseServidor();
-  const [todos, { data: profs }] = await Promise.all([
+  const [todos, profs] = await Promise.all([
     turnosEnRango(localADate(desdeF, "00:00", tz), localADate(hastaF, "00:00", tz), {
       profesionalId: profesional,
       incluirCancelados: true,
     }),
     esDueno
-      ? supabase.from("profesionales").select("id, nombre").eq("negocio_id", negocio.id).order("nombre")
-      : Promise.resolve({ data: [] as { id: string; nombre: string }[] }),
+      ? comoUsuario(userId, (tx) =>
+          tx.varios<{ id: string; nombre: string }>(sql`
+            select id, nombre from public.profesionales where negocio_id = ${negocio.id} order by nombre`),
+        )
+      : Promise.resolve([] as { id: string; nombre: string }[]),
   ]);
   const turnos = (estado ? todos.filter((t) => t.estado === estado) : todos).sort((a, b) =>
     rango === "pasados" ? b.inicio.localeCompare(a.inicio) : a.inicio.localeCompare(b.inicio),

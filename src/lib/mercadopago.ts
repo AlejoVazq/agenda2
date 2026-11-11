@@ -2,7 +2,7 @@ import "server-only";
 import { env } from "@/lib/env";
 import { offsetZona } from "@/lib/fechas";
 import { buscarIntegracion, leerSecreto } from "@/lib/integraciones";
-import { crearSupabaseAdmin } from "@/lib/supabase/admin";
+import { comoServidor, sql } from "@/lib/db";
 
 // Fase 6: seña con Mercado Pago (Checkout Pro). Cada negocio conecta su propia
 // cuenta con su Access Token; el dinero va directo a esa cuenta.
@@ -63,26 +63,29 @@ function fechaMP(instante: Date) {
  * de Mercado Pago a la que hay que mandar al cliente (o null si no corresponde).
  */
 export async function crearPagoSena(turnoId: string): Promise<string | null> {
-  const admin = crearSupabaseAdmin();
-  const { data } = await admin
-    .from("turnos")
-    .select(
-      "id, negocio_id, token_cancelacion, sena_monto, pago_estado, pago_vence_at, estado, servicio:servicios(nombre), cliente:clientes(nombre, email), negocio:negocios(nombre)",
-    )
-    .eq("id", turnoId)
-    .maybeSingle();
-  const t = data as unknown as {
-    id: string;
-    negocio_id: string;
-    token_cancelacion: string;
-    sena_monto: number | null;
-    pago_estado: string | null;
-    pago_vence_at: string | null;
-    estado: string;
-    servicio: { nombre: string } | null;
-    cliente: { nombre: string; email: string | null } | null;
-    negocio: { nombre: string } | null;
-  } | null;
+  const t = await comoServidor((tx) =>
+    tx.uno<{
+      id: string;
+      negocio_id: string;
+      token_cancelacion: string;
+      sena_monto: number | null;
+      pago_estado: string | null;
+      pago_vence_at: string | null;
+      estado: string;
+      servicio: { nombre: string } | null;
+      cliente: { nombre: string; email: string | null } | null;
+      negocio: { nombre: string } | null;
+    }>(sql`
+      select t.id, t.negocio_id, t.token_cancelacion, t.sena_monto, t.pago_estado, t.pago_vence_at, t.estado,
+             json_build_object('nombre', s.nombre) as servicio,
+             json_build_object('nombre', coalesce(t.nombre_reserva, c.nombre), 'email', coalesce(t.email_reserva, c.email)) as cliente,
+             json_build_object('nombre', n.nombre) as negocio
+      from public.turnos t
+      join public.servicios s on s.id = t.servicio_id
+      join public.clientes c on c.id = t.cliente_id
+      join public.negocios n on n.id = t.negocio_id
+      where t.id = ${turnoId}`),
+  );
   if (!t || t.pago_estado !== "pendiente" || !t.sena_monto || !t.pago_vence_at) return null;
   if (t.estado === "cancelado") return null;
   const vence = new Date(t.pago_vence_at);
@@ -166,8 +169,9 @@ export async function procesarPago(
   if (!/^[0-9a-f-]{36}$/.test(turnoId)) return null;
   if (turnoEsperado && turnoEsperado !== turnoId) return null;
 
-  const admin = crearSupabaseAdmin();
-  const { data: turno } = await admin.from("turnos").select("id").eq("id", turnoId).eq("negocio_id", negocioId).maybeSingle();
+  const turno = await comoServidor((tx) =>
+    tx.uno(sql`select id from public.turnos where id = ${turnoId} and negocio_id = ${negocioId}`),
+  );
   if (!turno) return null;
 
   if (pago.status === "pending" || pago.status === "in_process" || pago.status === "authorized") {
@@ -175,12 +179,9 @@ export async function procesarPago(
   }
 
   const aprobado = pago.status === "approved" && pago.currency_id === "ARS";
-  const { data, error } = await admin.rpc("registrar_pago", {
-    p_turno_id: turnoId,
-    p_pago_id: String(pago.id),
-    p_aprobado: aprobado,
-    p_monto: pago.transaction_amount ?? 0,
-  });
-  if (error) throw error;
-  return { resultado: data as ResultadoPago, turnoId };
+  const fila = await comoServidor((tx) =>
+    tx.uno<{ r: ResultadoPago }>(sql`
+      select public.registrar_pago(${turnoId}, ${String(pago.id)}, ${aprobado}, ${pago.transaction_amount ?? 0}) as r`),
+  );
+  return { resultado: fila!.r, turnoId };
 }

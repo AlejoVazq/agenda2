@@ -1,12 +1,19 @@
 import "server-only";
 import { cache } from "react";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { auth } from "@/lib/better-auth";
+import { comoUsuario, sql } from "@/lib/db";
 import type { Negocio, Perfil } from "@/lib/tipos";
+
+// Segunda capa de seguridad (la primera es src/proxy.ts; la tercera, RLS):
+// cada página y Server Action del panel valida la sesión contra la base y
+// verifica perfil y rol antes de hacer nada.
 
 export type Sesion = {
   userId: string;
-  email: string | null;
+  email: string;
+  nombre: string;
 };
 
 export type SesionPanel = Sesion & {
@@ -15,13 +22,11 @@ export type SesionPanel = Sesion & {
   esDueno: boolean;
 };
 
-/** Usuario autenticado (JWT verificado) o null. Se memoiza por request. */
+/** Usuario con sesión válida (verificada en la base) o null. Se memoiza por request. */
 export const getSesion = cache(async (): Promise<Sesion | null> => {
-  const supabase = await crearSupabaseServidor();
-  const { data } = await supabase.auth.getClaims();
-  const claims = data?.claims;
-  if (!claims?.sub) return null;
-  return { userId: claims.sub, email: (claims.email as string | undefined) ?? null };
+  const datos = await auth.api.getSession({ headers: await headers() }).catch(() => null);
+  if (!datos?.user) return null;
+  return { userId: datos.user.id, email: datos.user.email, nombre: datos.user.name };
 });
 
 /** Perfil + negocio del usuario actual, o null si no pertenece a ningún negocio. */
@@ -29,15 +34,15 @@ export const getSesionPanel = cache(async (): Promise<SesionPanel | null> => {
   const sesion = await getSesion();
   if (!sesion) return null;
 
-  const supabase = await crearSupabaseServidor();
-  const { data } = await supabase
-    .from("perfiles")
-    .select("id, negocio_id, rol, nombre, profesional_id, negocio:negocios(*)")
-    .eq("id", sesion.userId)
-    .maybeSingle();
-
-  if (!data?.negocio) return null;
-  const { negocio, ...perfil } = data as unknown as Perfil & { negocio: Negocio };
+  const fila = await comoUsuario(sesion.userId, (tx) =>
+    tx.uno<Perfil & { negocio: Negocio }>(sql`
+      select p.id, p.negocio_id, p.rol, p.nombre, p.profesional_id, to_jsonb(n) as negocio
+      from public.perfiles p
+      join public.negocios n on n.id = p.negocio_id
+      where p.id = ${sesion.userId}`),
+  );
+  if (!fila) return null;
+  const { negocio, ...perfil } = fila;
   return { ...sesion, perfil, negocio, esDueno: perfil.rol === "dueno" };
 });
 

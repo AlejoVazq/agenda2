@@ -1,5 +1,6 @@
 import "server-only";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { requerirPanel } from "@/lib/auth";
+import { comoUsuario, sql, type Fragmento, type Tx } from "@/lib/db";
 import type { EstadoPago, EstadoTurno } from "@/lib/tipos";
 
 export type TurnoConDetalle = {
@@ -12,15 +13,35 @@ export type TurnoConDetalle = {
   origen: "online" | "panel";
   pago_estado: EstadoPago | null;
   nombre_reserva: string | null;
+  email_reserva: string | null;
   profesional_id: string;
   servicio_id: string;
   servicio: { nombre: string; duracion_min: number } | null;
   profesional: { nombre: string; color: string } | null;
+  /**
+   * Datos de contacto del turno: los que se cargaron al pedirlo y, si falta
+   * alguno, los de la ficha. Un empleado no lee fichas (RLS), así que para él
+   * son siempre los del turno.
+   */
   cliente: { id: string; nombre: string; telefono: string; email: string | null } | null;
 };
 
-const SELECT_TURNO =
-  "id, inicio, fin, estado, precio, notas, origen, pago_estado, nombre_reserva, profesional_id, servicio_id, servicio:servicios(nombre, duracion_min), profesional:profesionales(nombre, color), cliente:clientes(id, nombre, telefono, email)";
+/** Columnas y joins de un turno con su detalle. Corre con la sesión del usuario (RLS). */
+export const SELECT_TURNO: Fragmento = sql`
+  select t.id, t.inicio, t.fin, t.estado, t.precio, t.notas, t.origen, t.pago_estado,
+         t.nombre_reserva, t.email_reserva, t.profesional_id, t.servicio_id,
+         json_build_object('nombre', s.nombre, 'duracion_min', s.duracion_min) as servicio,
+         json_build_object('nombre', p.nombre, 'color', p.color) as profesional,
+         json_build_object(
+           'id', t.cliente_id,
+           'nombre', coalesce(t.nombre_reserva, c.nombre, 'Cliente'),
+           'telefono', coalesce(t.telefono_reserva, c.telefono),
+           'email', coalesce(t.email_reserva, c.email)
+         ) as cliente
+  from public.turnos t
+  join public.servicios s on s.id = t.servicio_id
+  join public.profesionales p on p.id = t.profesional_id
+  left join public.clientes c on c.id = t.cliente_id`;
 
 /**
  * Turnos en un rango [desde, hasta). RLS ya restringe: el dueño ve todo su
@@ -31,18 +52,22 @@ export async function turnosEnRango(
   hasta: Date,
   opciones: { profesionalId?: string; incluirCancelados?: boolean } = {},
 ) {
-  const supabase = await crearSupabaseServidor();
-  let consulta = supabase
-    .from("turnos")
-    .select(SELECT_TURNO)
-    .gte("inicio", desde.toISOString())
-    .lt("inicio", hasta.toISOString())
-    .order("inicio");
-  if (opciones.profesionalId) consulta = consulta.eq("profesional_id", opciones.profesionalId);
-  if (!opciones.incluirCancelados) consulta = consulta.neq("estado", "cancelado");
-  const { data, error } = await consulta;
-  if (error) throw error;
-  return (data ?? []) as unknown as TurnoConDetalle[];
+  const { userId } = await requerirPanel();
+  return comoUsuario(userId, (tx) => turnosEnRangoTx(tx, desde, hasta, opciones));
+}
+
+async function turnosEnRangoTx(
+  tx: Tx,
+  desde: Date,
+  hasta: Date,
+  opciones: { profesionalId?: string; incluirCancelados?: boolean },
+) {
+  return tx.varios<TurnoConDetalle>(sql`
+    ${SELECT_TURNO}
+    where t.inicio >= ${desde.toISOString()} and t.inicio < ${hasta.toISOString()}
+      ${opciones.profesionalId ? sql`and t.profesional_id = ${opciones.profesionalId}` : sql``}
+      ${opciones.incluirCancelados ? sql`` : sql`and t.estado <> 'cancelado'`}
+    order by t.inicio`);
 }
 
 export type EventoAgenda = {
@@ -58,18 +83,14 @@ export type EventoAgenda = {
 
 /** Turnos y ausencias de un rango, para el calendario. RLS limita por rol. */
 export async function eventosEnRango(desde: string, hasta: string, profesionalId: string | null): Promise<EventoAgenda[]> {
-  const supabase = await crearSupabaseServidor();
-  let consultaBloqueos = supabase
-    .from("bloqueos")
-    .select("id, profesional_id, inicio, fin, motivo")
-    .lt("inicio", hasta)
-    .gt("fin", desde);
-  if (profesionalId) consultaBloqueos = consultaBloqueos.eq("profesional_id", profesionalId);
-
-  const [turnos, { data: bloqueos }] = await Promise.all([
-    turnosEnRango(new Date(desde), new Date(hasta), { profesionalId: profesionalId ?? undefined }),
-    consultaBloqueos,
-  ]);
+  const { userId } = await requerirPanel();
+  const [turnos, bloqueos] = await comoUsuario(userId, async (tx) => [
+    await turnosEnRangoTx(tx, new Date(desde), new Date(hasta), { profesionalId: profesionalId ?? undefined }),
+    await tx.varios<{ id: string; profesional_id: string; inicio: string; fin: string; motivo: string | null }>(sql`
+      select id, profesional_id, inicio, fin, motivo from public.bloqueos
+      where inicio < ${hasta} and fin > ${desde}
+        ${profesionalId ? sql`and profesional_id = ${profesionalId}` : sql``}`),
+  ] as const);
 
   return [
     ...turnos.map<EventoAgenda>((t) => ({
@@ -82,7 +103,7 @@ export async function eventosEnRango(desde: string, hasta: string, profesionalId
       color: t.profesional?.color ?? "#7434ee",
       turno: t,
     })),
-    ...(bloqueos ?? []).map<EventoAgenda>((b) => ({
+    ...bloqueos.map<EventoAgenda>((b) => ({
       id: `b-${b.id}`,
       tipo: "bloqueo",
       inicio: b.inicio,

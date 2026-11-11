@@ -9,7 +9,7 @@ import { desconectarGoogle, importarOcupados, sincronizarPendientes, type Config
 import { actualizarIntegracion, borrarIntegracion, buscarIntegracion, guardarIntegracion } from "@/lib/integraciones";
 import { verificarTokenMercadoPago, type ConfigMercadoPago } from "@/lib/mercadopago";
 import { sesionConPermisoSobreProfesional } from "@/lib/permisos";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { datosDeForm, erroresDeCampo, esquemaSena } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
 
@@ -64,9 +64,17 @@ export async function guardarSena(_prev: EstadoAccion, formData: FormData): Prom
   const datos = esquemaSena.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
 
-  const supabase = await crearSupabaseServidor();
-  const { error } = await supabase.from("negocios").update(datos.data).eq("id", sesion.negocio.id);
-  if (error) return { error: mensajeDeError(error) };
+  const d = datos.data;
+  try {
+    await comoUsuario(sesion.userId, (tx) =>
+      tx.ejecutar(sql`
+        update public.negocios
+        set sena_tipo = ${d.sena_tipo}, sena_valor = ${d.sena_valor}, pago_plazo_min = ${d.pago_plazo_min}
+        where id = ${sesion.negocio.id}`),
+    );
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
 
   revalidatePath(RUTA);
   return { ok: true, mensaje: "Seña guardada." };
@@ -78,12 +86,15 @@ export async function guardarWhatsApp(_prev: EstadoAccion, formData: FormData): 
   const sesion = await sesionParaAccion({ soloDueno: true });
   if (!sesion) return { error: "Solo el dueño puede cambiar esta opción." };
 
-  const supabase = await crearSupabaseServidor();
-  const { error } = await supabase
-    .from("negocios")
-    .update({ whatsapp_avisos: formData.get("whatsapp_avisos") === "on" })
-    .eq("id", sesion.negocio.id);
-  if (error) return { error: mensajeDeError(error) };
+  try {
+    await comoUsuario(sesion.userId, (tx) =>
+      tx.ejecutar(sql`
+        update public.negocios set whatsapp_avisos = ${formData.get("whatsapp_avisos") === "on"}
+        where id = ${sesion.negocio.id}`),
+    );
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
 
   revalidatePath(RUTA);
   return { ok: true, mensaje: "Preferencia guardada." };

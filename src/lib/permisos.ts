@@ -1,6 +1,6 @@
 import "server-only";
 import { getSesionPanel } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 
 /**
  * ¿El usuario actual puede conectar/desconectar el Google Calendar de este
@@ -13,7 +13,8 @@ export async function sesionConPermisoSobreProfesional(profesionalId: string) {
   if (!sesion.esDueno) return sesion.perfil.profesional_id === profesionalId ? sesion : null;
 
   // RLS: solo devuelve el profesional si es del negocio del usuario.
-  const supabase = await crearSupabaseServidor();
-  const { data } = await supabase.from("profesionales").select("id").eq("id", profesionalId).maybeSingle();
-  return data ? sesion : null;
+  const prof = await comoUsuario(sesion.userId, (tx) =>
+    tx.uno(sql`select id from public.profesionales where id = ${profesionalId}`),
+  );
+  return prof ? sesion : null;
 }

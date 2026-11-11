@@ -1,4 +1,4 @@
-// Traduce errores de Postgres/Supabase a mensajes para el usuario.
+// Traduce errores de Postgres (node-postgres) a mensajes para el usuario.
 const MENSAJES: Record<string, string> = {
   YA_TIENE_NEGOCIO: "Tu usuario ya tiene un negocio asociado.",
   SLUG_OCUPADO: "Esa dirección ya está en uso. Probá con otra.",
@@ -19,10 +19,11 @@ const MENSAJES: Record<string, string> = {
   FUERA_DE_PLAZO: "Ya pasó el plazo para cancelar online. Comunicate con el negocio.",
 };
 
-type ErrorPg = { message?: string; code?: string; details?: string } | null | undefined;
+type ErrorPg = { message?: string; code?: string };
 
-export function mensajeDeError(error: ErrorPg, porDefecto = "Ocurrió un error. Probá de nuevo."): string {
-  if (!error) return porDefecto;
+export function mensajeDeError(e: unknown, porDefecto = "Ocurrió un error. Probá de nuevo."): string {
+  if (!e || typeof e !== "object") return porDefecto;
+  const error = e as ErrorPg;
   const texto = error.message ?? "";
   for (const [codigo, mensaje] of Object.entries(MENSAJES)) {
     if (texto.includes(codigo)) return mensaje;
@@ -40,5 +41,7 @@ export function mensajeDeError(error: ErrorPg, porDefecto = "Ocurrió un error. 
     case "42501":
       return "No tenés permiso para hacer eso.";
   }
+  // Un error inesperado (no de negocio) queda en el log del servidor.
+  console.error("[error]", e);
   return porDefecto;
 }

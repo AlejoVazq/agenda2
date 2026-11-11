@@ -1,26 +1,27 @@
 import type { Metadata } from "next";
 import { Aviso, EncabezadoPagina, Insignia, Tarjeta } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
-import { env } from "@/lib/env";
+import { comoUsuario, sql } from "@/lib/db";
 import type { Perfil, Profesional } from "@/lib/tipos";
 import { AccionesEmpleado, FormularioInvitacion } from "./formularios";
 
 export const metadata: Metadata = { title: "Accesos del equipo" };
 
 export default async function PaginaEquipo() {
-  const { negocio, perfil: yo } = await requerirDueno();
-  const supabase = await crearSupabaseServidor();
-  const [{ data: perfiles }, { data: profs }] = await Promise.all([
-    supabase.from("perfiles").select("id, negocio_id, rol, nombre, profesional_id").eq("negocio_id", negocio.id).order("rol"),
-    supabase.from("profesionales").select("id, nombre").eq("negocio_id", negocio.id).eq("activo", true).order("nombre"),
-  ]);
-  const usuarios = (perfiles ?? []) as Perfil[];
-  const profesionales = (profs ?? []) as Pick<Profesional, "id" | "nombre">[];
+  const { negocio, perfil: yo, userId } = await requerirDueno();
+  const [usuarios, profesionales] = await comoUsuario(userId, (tx) =>
+    Promise.all([
+      tx.varios<Perfil>(sql`
+        select id, negocio_id, rol, nombre, profesional_id from public.perfiles
+        where negocio_id = ${negocio.id} order by rol, nombre`),
+      tx.varios<Pick<Profesional, "id" | "nombre">>(sql`
+        select id, nombre from public.profesionales
+        where negocio_id = ${negocio.id} and activo order by nombre`),
+    ]),
+  );
   const nombreProf = new Map(profesionales.map((p) => [p.id, p.nombre]));
   const vinculados = new Set(usuarios.map((u) => u.profesional_id).filter(Boolean));
   const libres = profesionales.filter((p) => !vinculados.has(p.id));
-  const adminConfigurado = Boolean(env.supabaseServiceRoleKey);
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -43,7 +44,7 @@ export default async function PaginaEquipo() {
               </div>
               <Insignia color={u.rol === "dueno" ? "violeta" : "gris"}>{u.rol === "dueno" ? "Dueño/a" : "Empleado/a"}</Insignia>
             </div>
-            {u.rol === "empleado" && adminConfigurado ? <AccionesEmpleado perfilId={u.id} /> : null}
+            {u.rol === "empleado" ? <AccionesEmpleado perfilId={u.id} /> : null}
           </li>
         ))}
       </ul>
@@ -53,9 +54,7 @@ export default async function PaginaEquipo() {
         <p className="mb-4 text-sm text-zinc-600">
           Primero creá a la persona en Profesionales; después generá su invitación acá.
         </p>
-        {!adminConfigurado ? (
-          <Aviso tipo="alerta">Las invitaciones todavía no están disponibles.</Aviso>
-        ) : libres.length === 0 ? (
+        {libres.length === 0 ? (
           <Aviso tipo="info">Todos los profesionales activos ya tienen usuario. Creá uno nuevo en Profesionales.</Aviso>
         ) : (
           <FormularioInvitacion profesionales={libres} />

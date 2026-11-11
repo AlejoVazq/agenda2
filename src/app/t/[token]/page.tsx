@@ -7,7 +7,7 @@ import { env } from "@/lib/env";
 import { procesarPagoYAvisar } from "@/lib/eventos";
 import { formatFechaHora, formatFechaLarga, formatHora, formatPrecio } from "@/lib/fechas";
 import { getTurnoPublico, linkWhatsApp } from "@/lib/publico";
-import { crearSupabaseAdmin } from "@/lib/supabase/admin";
+import { comoServidor, sql } from "@/lib/db";
 import { ESTADOS_TURNO } from "@/lib/tipos";
 import { CancelarTurno } from "./cancelar";
 import { PagarSena } from "./pagar";
@@ -29,13 +29,11 @@ function fechaGoogle(iso: string) {
  * que llegue primero lo registra y el otro no repite nada.
  */
 async function verificarVueltaDePago(token: string, pagoId: string) {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !/^\d{1,20}$/.test(pagoId)) return;
-  const admin = crearSupabaseAdmin();
-  const { data } = await admin
-    .from("turnos")
-    .select("id, negocio_id, pago_estado")
-    .eq("token_cancelacion", token)
-    .maybeSingle();
+  if (!/^\d{1,20}$/.test(pagoId)) return;
+  const data = await comoServidor((tx) =>
+    tx.uno<{ id: string; negocio_id: string; pago_estado: string | null }>(sql`
+      select id, negocio_id, pago_estado from public.turnos where token_cancelacion = ${token}`),
+  );
   if (!data || (data.pago_estado !== "pendiente" && data.pago_estado !== "vencido")) return;
   await procesarPagoYAvisar(data.negocio_id, pagoId, data.id).catch((e) => console.error("[pago] vuelta", e));
 }

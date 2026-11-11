@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 import { Aviso, EncabezadoPagina, Tarjeta } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import type { Horario, Profesional, Servicio } from "@/lib/tipos";
 import {
   EditorHorarios,
@@ -18,18 +18,19 @@ export const metadata: Metadata = { title: "Profesional" };
 export default async function PaginaProfesional({ params, searchParams }: PageProps<"/panel/profesionales/[id]">) {
   const { id } = await params;
   const { nuevo } = await searchParams;
-  const { negocio } = await requerirDueno();
+  const { negocio, userId } = await requerirDueno();
   if (!z.uuid().safeParse(id).success) notFound();
 
-  const supabase = await crearSupabaseServidor();
-  const [{ data: prof }, { data: servicios }, { data: asignados }, { data: horarios }] = await Promise.all([
-    supabase.from("profesionales").select("*").eq("id", id).eq("negocio_id", negocio.id).maybeSingle(),
-    supabase.from("servicios").select("*").eq("negocio_id", negocio.id).order("orden").order("nombre"),
-    supabase.from("profesional_servicio").select("servicio_id").eq("profesional_id", id),
-    supabase.from("horarios_profesional").select("*").eq("profesional_id", id).order("dia_semana").order("desde"),
-  ]);
-  if (!prof) notFound();
-  const profesional = prof as Profesional;
+  const [profesional, servicios, asignados, horarios] = await comoUsuario(userId, (tx) =>
+    Promise.all([
+      tx.uno<Profesional>(sql`select * from public.profesionales where id = ${id} and negocio_id = ${negocio.id}`),
+      tx.varios<Servicio>(sql`select * from public.servicios where negocio_id = ${negocio.id} order by orden, nombre`),
+      tx.varios<{ servicio_id: string }>(sql`select servicio_id from public.profesional_servicio where profesional_id = ${id}`),
+      tx.varios<Horario>(sql`
+        select * from public.horarios_profesional where profesional_id = ${id} order by dia_semana, desde`),
+    ]),
+  );
+  if (!profesional) notFound();
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -44,8 +45,8 @@ export default async function PaginaProfesional({ params, searchParams }: PagePr
         <p className="mb-4 text-sm text-zinc-600">Solo se podrá reservar con este profesional los servicios marcados.</p>
         <FormularioServiciosProfesional
           profesionalId={profesional.id}
-          servicios={(servicios ?? []) as Servicio[]}
-          asignados={(asignados ?? []).map((a) => a.servicio_id as string)}
+          servicios={servicios}
+          asignados={asignados.map((a) => a.servicio_id)}
         />
       </Tarjeta>
 
@@ -58,7 +59,7 @@ export default async function PaginaProfesional({ params, searchParams }: PagePr
           </Link>
           .
         </p>
-        <EditorHorarios profesionalId={profesional.id} horarios={(horarios ?? []) as Horario[]} />
+        <EditorHorarios profesionalId={profesional.id} horarios={horarios} />
       </Tarjeta>
 
       <Tarjeta>

@@ -1,4 +1,4 @@
-// Tipos de las filas de la base (espejo de supabase/migrations).
+// Tipos de las filas de la base (espejo de db/migraciones).
 // Se pueden reemplazar por los generados con `npm run db:tipos`.
 
 export type Rol = "dueno" | "empleado";

@@ -6,14 +6,22 @@ import { FormularioLogin } from "../formularios-auth";
 export const metadata: Metadata = { title: "Ingresar" };
 
 export default async function PaginaLogin({ searchParams }: PageProps<"/login">) {
-  const { next, error } = await searchParams;
+  const { next, error, verificado, password } = await searchParams;
   return (
     <Tarjeta className="shadow-xl shadow-marca-900/5">
       <h1 className="text-2xl font-bold tracking-tight">Ingresá a tu panel</h1>
       <p className="mt-1 text-sm text-zinc-600">Para dueños y equipo de cada negocio.</p>
-      {error === "link" ? (
+      {error ? (
         <Aviso tipo="error" className="mt-4">
-          El link venció o ya fue usado. Pedí uno nuevo.
+          El link venció o ya fue usado. Ingresá con tu email y contraseña para que te mandemos uno nuevo.
+        </Aviso>
+      ) : verificado ? (
+        <Aviso tipo="exito" className="mt-4">
+          Tu email está confirmado. Ingresá con tu contraseña.
+        </Aviso>
+      ) : password ? (
+        <Aviso tipo="exito" className="mt-4">
+          Listo, guardamos tu contraseña nueva. Ingresá con ella.
         </Aviso>
       ) : null}
       <div className="mt-6">

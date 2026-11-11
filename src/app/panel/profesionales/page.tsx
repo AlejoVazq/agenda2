@@ -2,28 +2,30 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BotonLink, EncabezadoPagina, Insignia, Vacio } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { DIAS_SEMANA, type Profesional } from "@/lib/tipos";
 
 export const metadata: Metadata = { title: "Profesionales" };
 
 export default async function PaginaProfesionales() {
-  const { negocio } = await requerirDueno();
-  const supabase = await crearSupabaseServidor();
-  const [{ data: profesionales }, { data: horarios }, { data: asignaciones }] = await Promise.all([
-    supabase.from("profesionales").select("*").eq("negocio_id", negocio.id).order("orden").order("nombre"),
-    supabase.from("horarios_profesional").select("profesional_id, dia_semana").eq("negocio_id", negocio.id),
-    supabase.from("profesional_servicio").select("profesional_id").eq("negocio_id", negocio.id),
-  ]);
-  const lista = (profesionales ?? []) as Profesional[];
+  const { negocio, userId } = await requerirDueno();
+  const [lista, horarios, asignaciones] = await comoUsuario(userId, (tx) =>
+    Promise.all([
+      tx.varios<Profesional>(sql`select * from public.profesionales where negocio_id = ${negocio.id} order by orden, nombre`),
+      tx.varios<{ profesional_id: string; dia_semana: number }>(sql`
+        select profesional_id, dia_semana from public.horarios_profesional where negocio_id = ${negocio.id}`),
+      tx.varios<{ profesional_id: string }>(sql`
+        select profesional_id from public.profesional_servicio where negocio_id = ${negocio.id}`),
+    ]),
+  );
 
   const diasPorProf = new Map<string, Set<number>>();
-  for (const h of horarios ?? []) {
+  for (const h of horarios) {
     if (!diasPorProf.has(h.profesional_id)) diasPorProf.set(h.profesional_id, new Set());
     diasPorProf.get(h.profesional_id)!.add(h.dia_semana);
   }
   const serviciosPorProf = new Map<string, number>();
-  for (const a of asignaciones ?? []) serviciosPorProf.set(a.profesional_id, (serviciosPorProf.get(a.profesional_id) ?? 0) + 1);
+  for (const a of asignaciones) serviciosPorProf.set(a.profesional_id, (serviciosPorProf.get(a.profesional_id) ?? 0) + 1);
 
   return (
     <>

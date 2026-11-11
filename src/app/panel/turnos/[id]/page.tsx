@@ -4,8 +4,8 @@ import { z } from "zod";
 import { BotonAccion } from "@/components/boton-accion";
 import { Aviso, EncabezadoPagina, Insignia, Tarjeta } from "@/components/ui";
 import { requerirPanel } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
-import type { TurnoConDetalle } from "@/lib/datos-panel";
+import { comoUsuario, sql } from "@/lib/db";
+import { SELECT_TURNO, type TurnoConDetalle } from "@/lib/datos-panel";
 import { env } from "@/lib/env";
 import { fechaLocalISO, formatFechaLarga, formatHora, formatPrecio } from "@/lib/fechas";
 import { linkWhatsApp } from "@/lib/whatsapp";
@@ -19,29 +19,27 @@ const COLOR = { pendiente: "ambar", confirmado: "verde", cancelado: "rojo", comp
 
 export default async function PaginaTurno({ params }: PageProps<"/panel/turnos/[id]">) {
   const { id } = await params;
-  const { negocio } = await requerirPanel();
+  const { negocio, userId } = await requerirPanel();
   if (!z.uuid().safeParse(id).success) notFound();
 
-  const supabase = await crearSupabaseServidor();
   // RLS: un empleado no puede leer turnos de otra agenda (devuelve vacío => 404).
-  const { data } = await supabase
-    .from("turnos")
-    .select(
-      "id, inicio, fin, estado, precio, notas, origen, nombre_reserva, email_reserva, profesional_id, servicio_id, cancelado_por, created_at, token_cancelacion, sena_monto, pago_estado, pago_vence_at, google_event_id, servicio:servicios(nombre, duracion_min), profesional:profesionales(nombre, color), cliente:clientes(id, nombre, telefono, email)",
-    )
-    .eq("id", id)
-    .maybeSingle();
-  if (!data) notFound();
-  const t = data as unknown as TurnoConDetalle & {
-    email_reserva: string | null;
-    cancelado_por: string | null;
-    created_at: string;
-    token_cancelacion: string;
-    sena_monto: number | null;
-    pago_estado: EstadoPago | null;
-    pago_vence_at: string | null;
-    google_event_id: string | null;
-  };
+  const t = await comoUsuario(userId, (tx) =>
+    tx.uno<
+      TurnoConDetalle & {
+        cancelado_por: string | null;
+        created_at: string;
+        token_cancelacion: string;
+        sena_monto: number | null;
+        pago_estado: EstadoPago | null;
+        pago_vence_at: string | null;
+        google_event_id: string | null;
+      }
+    >(sql`
+      select x.*, t.cancelado_por, t.created_at, t.token_cancelacion, t.sena_monto, t.pago_vence_at, t.google_event_id
+      from (${SELECT_TURNO} where t.id = ${id}) x
+      join public.turnos t on t.id = x.id`),
+  );
+  if (!t) notFound();
   const tz = negocio.zona_horaria;
   const activo = t.estado === "pendiente" || t.estado === "confirmado";
   const futuro = new Date(t.fin) > new Date();

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { sesionParaAccion } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { mensajeDeError } from "@/lib/errores";
 import { localADate } from "@/lib/fechas";
 import { datosDeForm, erroresDeCampo, esquemaBloqueo } from "@/lib/validaciones";
@@ -26,15 +26,16 @@ export async function crearBloqueo(_prev: EstadoAccion, formData: FormData): Pro
   const [fDesde, hDesde] = d.desde.split("T");
   const [fHasta, hHasta] = d.hasta.split("T");
 
-  const supabase = await crearSupabaseServidor();
-  const { error } = await supabase.from("bloqueos").insert({
-    negocio_id: sesion.negocio.id,
-    profesional_id: d.profesional_id,
-    inicio: localADate(fDesde, hDesde, tz).toISOString(),
-    fin: localADate(fHasta, hHasta, tz).toISOString(),
-    motivo: d.motivo,
-  });
-  if (error) return { error: mensajeDeError(error) };
+  try {
+    await comoUsuario(sesion.userId, (tx) =>
+      tx.ejecutar(sql`
+        insert into public.bloqueos (negocio_id, profesional_id, inicio, fin, motivo)
+        values (${sesion.negocio.id}, ${d.profesional_id}, ${localADate(fDesde, hDesde, tz).toISOString()},
+                ${localADate(fHasta, hHasta, tz).toISOString()}, ${d.motivo ?? null})`),
+    );
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
 
   revalidatePath("/panel/bloqueos");
   return { ok: true, mensaje: "Ausencia guardada. Esos horarios ya no se ofrecen online." };
@@ -45,9 +46,14 @@ export async function eliminarBloqueo(id: string): Promise<EstadoAccion> {
   if (!sesion) return { error: "No tenés permiso." };
   if (!z.uuid().safeParse(id).success) return { error: "Ausencia inválida." };
 
-  const supabase = await crearSupabaseServidor();
-  const { error } = await supabase.from("bloqueos").delete().eq("id", id).eq("negocio_id", sesion.negocio.id);
-  if (error) return { error: mensajeDeError(error) };
+  try {
+    // RLS: el empleado solo borra las de su agenda.
+    await comoUsuario(sesion.userId, (tx) =>
+      tx.ejecutar(sql`delete from public.bloqueos where id = ${id} and negocio_id = ${sesion.negocio.id}`),
+    );
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
 
   revalidatePath("/panel/bloqueos");
   return { ok: true };

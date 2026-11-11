@@ -3,13 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { sesionParaAccion } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { mensajeDeError } from "@/lib/errores";
 import { localADate } from "@/lib/fechas";
 import { notificarCambioTurno } from "@/lib/email/notificar";
 import { sincronizarGoogleDespues } from "@/lib/google";
 import { datosDeForm, erroresDeCampo } from "@/lib/validaciones";
-import type { EstadoAccion } from "@/lib/tipos";
+import type { EstadoAccion, EstadoTurno } from "@/lib/tipos";
 
 const esquemaReprogramar = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha inválida"),
@@ -24,27 +24,30 @@ export async function reprogramarTurno(id: string, _prev: EstadoAccion, formData
 
   const datos = esquemaReprogramar.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
+  const inicio = localADate(datos.data.fecha, datos.data.hora, sesion.negocio.zona_horaria);
 
-  const supabase = await crearSupabaseServidor();
-  const { data: turno } = await supabase.from("turnos").select("inicio, fin, estado").eq("id", id).maybeSingle();
-  if (!turno) return { error: "No se encontró el turno." };
-  if (turno.estado !== "pendiente" && turno.estado !== "confirmado") {
-    return { error: "Solo se pueden reprogramar turnos pendientes o confirmados." };
+  try {
+    // RLS: un empleado solo modifica turnos de su agenda.
+    const r = await comoUsuario(sesion.userId, async (tx) => {
+      const turno = await tx.uno<{ estado: EstadoTurno }>(sql`select estado from public.turnos where id = ${id} for update`);
+      if (!turno) return "No se encontró el turno.";
+      if (turno.estado !== "pendiente" && turno.estado !== "confirmado") {
+        return "Solo se pueden reprogramar turnos pendientes o confirmados.";
+      }
+      // La duración se mantiene: fin = inicio nuevo + (fin - inicio).
+      const n = await tx.ejecutar(sql`
+        update public.turnos
+        set inicio = ${inicio.toISOString()}::timestamptz,
+            fin = ${inicio.toISOString()}::timestamptz + (fin - inicio)
+        where id = ${id}`);
+      return n ? null : "No tenés permiso para modificar este turno.";
+    });
+    if (r) return { error: r };
+  } catch (e) {
+    return { error: mensajeDeError(e) };
   }
 
-  const duracion = new Date(turno.fin).getTime() - new Date(turno.inicio).getTime();
-  const inicio = localADate(datos.data.fecha, datos.data.hora, sesion.negocio.zona_horaria);
-  const fin = new Date(inicio.getTime() + duracion);
-
-  const { data: actualizados, error } = await supabase
-    .from("turnos")
-    .update({ inicio: inicio.toISOString(), fin: fin.toISOString() })
-    .eq("id", id)
-    .select("id");
-  if (error) return { error: mensajeDeError(error) };
-  if (!actualizados?.length) return { error: "No tenés permiso para modificar este turno." };
-
-  await notificarCambioTurno(id, "reprogramado");
+  notificarCambioTurno(id, "reprogramado");
   sincronizarGoogleDespues(id);
   revalidatePath(`/panel/turnos/${id}`);
   return { ok: true, mensaje: "Turno reprogramado." };
@@ -58,9 +61,13 @@ export async function guardarNotas(id: string, _prev: EstadoAccion, formData: Fo
   const notas = z.string().trim().max(500, "Máximo 500 caracteres").safeParse(String(formData.get("notas") ?? ""));
   if (!notas.success) return { errores: { notas: [notas.error.issues[0].message] } };
 
-  const supabase = await crearSupabaseServidor();
-  const { error } = await supabase.from("turnos").update({ notas: notas.data || null }).eq("id", id);
-  if (error) return { error: mensajeDeError(error) };
+  try {
+    await comoUsuario(sesion.userId, (tx) =>
+      tx.ejecutar(sql`update public.turnos set notas = ${notas.data || null} where id = ${id}`),
+    );
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
   sincronizarGoogleDespues(id);
 
   revalidatePath(`/panel/turnos/${id}`);
@@ -73,16 +80,19 @@ export async function marcarSenaPagada(id: string): Promise<EstadoAccion> {
   if (!sesion) return { error: "No tenés permiso." };
   if (!z.uuid().safeParse(id).success) return { error: "Turno inválido." };
 
-  const supabase = await crearSupabaseServidor();
-  const { data, error } = await supabase
-    .from("turnos")
-    .update({ pago_estado: "aprobado", ...(sesion.negocio.confirmacion_automatica ? { estado: "confirmado" } : {}) })
-    .eq("id", id)
-    .eq("pago_estado", "pendiente")
-    .in("estado", ["pendiente", "confirmado"])
-    .select("id");
-  if (error) return { error: mensajeDeError(error) };
-  if (!data?.length) return { error: "La seña ya no estaba pendiente." };
+  let n: number;
+  try {
+    n = await comoUsuario(sesion.userId, (tx) =>
+      tx.ejecutar(sql`
+        update public.turnos
+        set pago_estado = 'aprobado'
+            ${sesion.negocio.confirmacion_automatica ? sql`, estado = 'confirmado'` : sql``}
+        where id = ${id} and pago_estado = 'pendiente' and estado in ('pendiente', 'confirmado')`),
+    );
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+  if (!n) return { error: "La seña ya no estaba pendiente." };
 
   sincronizarGoogleDespues(id);
   revalidatePath(`/panel/turnos/${id}`);
@@ -95,15 +105,15 @@ export async function marcarSenaDevuelta(id: string): Promise<EstadoAccion> {
   if (!sesion) return { error: "No tenés permiso." };
   if (!z.uuid().safeParse(id).success) return { error: "Turno inválido." };
 
-  const supabase = await crearSupabaseServidor();
-  const { data, error } = await supabase
-    .from("turnos")
-    .update({ pago_estado: "devuelta" })
-    .eq("id", id)
-    .eq("pago_estado", "reembolsar")
-    .select("id");
-  if (error) return { error: mensajeDeError(error) };
-  if (!data?.length) return { error: "No había una seña para devolver." };
+  let n: number;
+  try {
+    n = await comoUsuario(sesion.userId, (tx) =>
+      tx.ejecutar(sql`update public.turnos set pago_estado = 'devuelta' where id = ${id} and pago_estado = 'reembolsar'`),
+    );
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+  if (!n) return { error: "No había una seña para devolver." };
 
   revalidatePath(`/panel/turnos/${id}`);
   revalidatePath("/panel");

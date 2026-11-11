@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { EncabezadoPagina, Input, Vacio, clasesBoton } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { formatFechaCorta } from "@/lib/fechas";
 import { linkWhatsApp } from "@/lib/whatsapp";
 import type { Cliente } from "@/lib/tipos";
@@ -11,26 +11,30 @@ export const metadata: Metadata = { title: "Clientes" };
 
 export default async function PaginaClientes({ searchParams }: PageProps<"/panel/clientes">) {
   const { q } = await searchParams;
-  const { negocio } = await requerirDueno();
+  const { negocio, userId } = await requerirDueno();
   const busqueda = typeof q === "string" ? q.trim().slice(0, 60) : "";
 
-  const supabase = await crearSupabaseServidor();
-  let consulta = supabase
-    .from("clientes")
-    .select("id, nombre, telefono, email, notas, created_at, turnos(inicio, estado)")
-    .eq("negocio_id", negocio.id)
-    .order("nombre")
-    .limit(200);
-  if (busqueda) {
-    // Escapar comodines de LIKE y caracteres especiales del filtro de PostgREST.
-    const seguro = busqueda.replace(/[%_\\,().*]/g, " ");
-    const digitos = busqueda.replace(/\D/g, "");
-    consulta = digitos.length >= 3
-      ? consulta.or(`nombre.ilike.%${seguro}%,telefono.ilike.%${digitos}%`)
-      : consulta.ilike("nombre", `%${seguro}%`);
-  }
-  const { data } = await consulta;
-  const clientes = (data ?? []) as (Cliente & { turnos: { inicio: string; estado: string }[] })[];
+  // Escapar los comodines de LIKE: lo que escribe el usuario se busca tal cual.
+  const seguro = busqueda.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const digitos = busqueda.replace(/\D/g, "");
+  const filtro = !busqueda
+    ? sql``
+    : digitos.length >= 3
+      ? sql`and (c.nombre ilike ${`%${seguro}%`} or c.telefono like ${`%${digitos}%`})`
+      : sql`and c.nombre ilike ${`%${seguro}%`}`;
+
+  const clientes = await comoUsuario(userId, (tx) =>
+    tx.varios<Cliente & { turnos: { inicio: string; estado: string }[] }>(sql`
+      select c.id, c.nombre, c.telefono, c.email, c.notas, c.created_at,
+             coalesce(
+               (select json_agg(json_build_object('inicio', t.inicio, 'estado', t.estado)) from public.turnos t where t.cliente_id = c.id),
+               '[]'::json
+             ) as turnos
+      from public.clientes c
+      where c.negocio_id = ${negocio.id} ${filtro}
+      order by c.nombre
+      limit 200`),
+  );
   const ahora = new Date().toISOString();
 
   return (

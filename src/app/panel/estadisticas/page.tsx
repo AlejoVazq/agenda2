@@ -3,7 +3,7 @@ import Link from "next/link";
 import { cx, EncabezadoPagina, Tarjeta, Vacio } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
 import { fechaLocalISO, formatPrecio, localADate, sumarDias } from "@/lib/fechas";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { DIAS_SEMANA } from "@/lib/tipos";
 
 export const metadata: Metadata = { title: "Estadísticas" };
@@ -52,14 +52,19 @@ function rango(periodo: Periodo, tz: string): [Date, Date] {
 }
 
 export default async function PaginaEstadisticas({ searchParams }: PageProps<"/panel/estadisticas">) {
-  const { negocio } = await requerirDueno();
+  const { negocio, userId } = await requerirDueno();
   const { periodo: p } = await searchParams;
   const periodo: Periodo = typeof p === "string" && Object.hasOwn(PERIODOS, p) ? (p as Periodo) : "mes";
   const [desde, hasta] = rango(periodo, negocio.zona_horaria);
 
-  const supabase = await crearSupabaseServidor();
-  const { data } = await supabase.rpc("estadisticas_negocio", { p_desde: desde.toISOString(), p_hasta: hasta.toISOString() });
-  const e = data as Estadisticas | null;
+  const fila = await comoUsuario(userId, (tx) =>
+    tx.uno<{ e: Estadisticas }>(sql`
+      select public.estadisticas_negocio(${desde.toISOString()}::timestamptz, ${hasta.toISOString()}::timestamptz) as e`),
+  ).catch((err) => {
+    console.error("[estadisticas]", err);
+    return null;
+  });
+  const e = fila?.e ?? null;
 
   const tasaCancelacion = e && e.total ? Math.round((e.cancelados / e.total) * 100) : 0;
   const porcentajeOnline = e && e.activos ? Math.round((e.online / e.activos) * 100) : 0;

@@ -182,3 +182,41 @@ export function emailRecordatorio(para: string, d: DatosTurnoEmail): Email {
     texto,
   };
 }
+
+/** Mail simple con un botón: verificación de cuenta y recuperación de contraseña. */
+function plantillaCuenta({ titulo, intro, boton, link, pie }: { titulo: string; intro: string; boton: string; link: string; pie: string }) {
+  const html = `<!doctype html><html lang="es"><body style="margin:0;background:#f6f3ff;font-family:Arial,Helvetica,sans-serif;color:#1d1830">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 12px"><tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:20px;padding:28px"><tr><td>
+      <p style="margin:0;font-size:13px;font-weight:bold;color:#6322d6">${escapar(MARCA.nombre)}</p>
+      <h1 style="margin:6px 0 8px;font-size:22px">${escapar(titulo)}</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#52525b">${escapar(intro)}</p>
+      <p style="margin:0 0 8px"><a href="${escapar(link)}" style="display:inline-block;background:#6322d6;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:12px">${escapar(boton)}</a></p>
+      <p style="margin:16px 0 0;font-size:12px;color:#71717a">${escapar(pie)}</p>
+    </td></tr></table>
+  </td></tr></table>
+</body></html>`;
+  return { html, texto: [`${MARCA.nombre} — ${titulo}`, intro, "", `${boton}: ${link}`, "", pie].join("\n") };
+}
+
+export function emailVerificarCuenta(para: string, d: { nombre: string; url: string }): Email {
+  const { html, texto } = plantillaCuenta({
+    titulo: "Confirmá tu email",
+    intro: `Hola ${d.nombre.split(" ")[0]}, abrí el link para confirmar tu cuenta y cargar tu negocio.`,
+    boton: "Confirmar mi email",
+    link: d.url,
+    pie: "El link vence en 24 horas. Si no creaste una cuenta, ignorá este mail.",
+  });
+  return { para, asunto: `Confirmá tu email en ${MARCA.nombre}`, html, texto };
+}
+
+export function emailRestablecerPassword(para: string, d: { nombre: string; url: string }): Email {
+  const { html, texto } = plantillaCuenta({
+    titulo: "Elegí una contraseña nueva",
+    intro: `Hola ${d.nombre.split(" ")[0]}, pediste cambiar tu contraseña. Abrí el link para elegir una nueva.`,
+    boton: "Elegir contraseña",
+    link: d.url,
+    pie: "El link vence en 1 hora y se puede usar una sola vez. Si no lo pediste, ignorá este mail: tu contraseña no cambia.",
+  });
+  return { para, asunto: `Tu contraseña de ${MARCA.nombre}`, html, texto };
+}

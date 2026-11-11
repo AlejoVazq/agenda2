@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 import { EncabezadoPagina, Tarjeta } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import type { Servicio } from "@/lib/tipos";
 import { EliminarServicio, FormularioServicio } from "../formulario";
 
@@ -11,13 +11,13 @@ export const metadata: Metadata = { title: "Editar servicio" };
 
 export default async function EditarServicio({ params }: PageProps<"/panel/servicios/[id]">) {
   const { id } = await params;
-  const { negocio } = await requerirDueno();
+  const { negocio, userId } = await requerirDueno();
   if (!z.uuid().safeParse(id).success) notFound();
 
-  const supabase = await crearSupabaseServidor();
-  const { data } = await supabase.from("servicios").select("*").eq("id", id).eq("negocio_id", negocio.id).maybeSingle();
-  if (!data) notFound();
-  const servicio = data as Servicio;
+  const servicio = await comoUsuario(userId, (tx) =>
+    tx.uno<Servicio>(sql`select * from public.servicios where id = ${id} and negocio_id = ${negocio.id}`),
+  );
+  if (!servicio) notFound();
 
   return (
     <div className="max-w-2xl">

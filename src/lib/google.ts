@@ -2,9 +2,15 @@ import "server-only";
 import { after } from "next/server";
 import { env, integracionesDisponibles } from "@/lib/env";
 import { fechaLocalISO, localADate, sumarDias } from "@/lib/fechas";
-import { actualizarIntegracion, borrarIntegracion, leerSecreto, type Integracion } from "@/lib/integraciones";
+import { comoServidor, sql } from "@/lib/db";
+import {
+  actualizarIntegracion,
+  borrarIntegracion,
+  integracionesActivas,
+  leerSecreto,
+  type Integracion,
+} from "@/lib/integraciones";
 import { MARCA } from "@/lib/marca";
-import { crearSupabaseAdmin } from "@/lib/supabase/admin";
 import { ESTADOS_TURNO, type EstadoTurno } from "@/lib/tipos";
 
 // Fase 5: Google Calendar, una cuenta por profesional.
@@ -91,15 +97,12 @@ const cacheTokens = new Map<string, { token: string; vence: number }>();
 type Acceso = { token: string; integracion: Integracion<ConfigGoogle> };
 
 async function accesoProfesional(profesionalId: string): Promise<Acceso | null> {
-  const admin = crearSupabaseAdmin();
-  const { data } = await admin
-    .from("integraciones")
-    .select("*")
-    .eq("proveedor", "google_calendar")
-    .eq("profesional_id", profesionalId)
-    .eq("estado", "activa")
-    .maybeSingle();
-  const integracion = data as Integracion<ConfigGoogle> | null;
+  const integracion = await comoServidor((tx) =>
+    tx.uno<Integracion<ConfigGoogle>>(sql`
+      select id, negocio_id, profesional_id, proveedor, estado, config, updated_at
+      from public.integraciones
+      where proveedor = 'google_calendar' and profesional_id = ${profesionalId} and estado = 'activa'`),
+  );
   if (!integracion) return null;
 
   const enCache = cacheTokens.get(integracion.id);
@@ -193,15 +196,23 @@ async function errorDeApi(r: Response, accion: string) {
  * activo, lo borra si se canceló, y lo pasa de calendario si cambió de profesional.
  */
 export async function sincronizarTurno(turnoId: string) {
-  const admin = crearSupabaseAdmin();
-  const { data } = await admin
-    .from("turnos")
-    .select(
-      "id, estado, inicio, fin, notas, updated_at, profesional_id, google_event_id, google_calendar_prof_id, pago_estado, servicio:servicios(nombre), cliente:clientes(nombre, telefono, email), negocio:negocios(nombre, direccion, zona_horaria)",
-    )
-    .eq("id", turnoId)
-    .maybeSingle();
-  const t = data as unknown as TurnoParaGoogle | null;
+  const t = await comoServidor((tx) =>
+    tx.uno<TurnoParaGoogle>(sql`
+      select t.id, t.estado, t.inicio, t.fin, t.notas, t.updated_at, t.profesional_id, t.google_event_id,
+             t.google_calendar_prof_id, t.pago_estado,
+             json_build_object('nombre', s.nombre) as servicio,
+             json_build_object(
+               'nombre', coalesce(t.nombre_reserva, c.nombre),
+               'telefono', coalesce(t.telefono_reserva, c.telefono),
+               'email', coalesce(t.email_reserva, c.email)
+             ) as cliente,
+             json_build_object('nombre', n.nombre, 'direccion', n.direccion, 'zona_horaria', n.zona_horaria) as negocio
+      from public.turnos t
+      join public.servicios s on s.id = t.servicio_id
+      join public.clientes c on c.id = t.cliente_id
+      join public.negocios n on n.id = t.negocio_id
+      where t.id = ${turnoId}`),
+  );
   if (!t) return;
 
   const activo = t.estado === "pendiente" || t.estado === "confirmado" || t.estado === "completado" || t.estado === "ausente";
@@ -233,12 +244,9 @@ export async function sincronizarTurno(turnoId: string) {
     }
   }
 
-  await admin.rpc("marcar_sincronizado_google", {
-    p_turno_id: t.id,
-    p_version: t.updated_at,
-    p_event_id: eventoId,
-    p_prof_id: profCalendario,
-  });
+  await comoServidor((tx) =>
+    tx.ejecutar(sql`select public.marcar_sincronizado_google(${t.id}, ${t.updated_at}, ${eventoId}, ${profCalendario})`),
+  );
 }
 
 /** Después de responder, refleja el cambio de un turno en Google (si aplica). */
@@ -256,12 +264,12 @@ export function sincronizarGoogleDespues(turnoId: string) {
 
 /** Procesa la cola de turnos pendientes de sincronizar (cron). */
 export async function sincronizarPendientes(limite = 50) {
-  const admin = crearSupabaseAdmin();
-  const { data, error } = await admin.rpc("turnos_para_sincronizar", { p_limite: limite });
-  if (error) throw error;
+  const cola = await comoServidor((tx) =>
+    tx.varios<{ turno_id: string }>(sql`select turno_id from public.turnos_para_sincronizar(${limite})`),
+  );
   let ok = 0;
   let fallidos = 0;
-  for (const fila of (data ?? []) as { turno_id: string }[]) {
+  for (const fila of cola) {
     try {
       await sincronizarTurno(fila.turno_id);
       ok++;
@@ -291,12 +299,10 @@ type EventoGoogle = {
  */
 export async function importarOcupados(integracion: Integracion<ConfigGoogle>) {
   if (!integracion.profesional_id) return 0;
-  const admin = crearSupabaseAdmin();
-  const { data: negocio } = await admin
-    .from("negocios")
-    .select("zona_horaria, anticipacion_max_dias")
-    .eq("id", integracion.negocio_id)
-    .single();
+  const negocio = await comoServidor((tx) =>
+    tx.uno<{ zona_horaria: string; anticipacion_max_dias: number }>(sql`
+      select zona_horaria, anticipacion_max_dias from public.negocios where id = ${integracion.negocio_id}`),
+  );
   const tz = negocio?.zona_horaria ?? "America/Argentina/Buenos_Aires";
   const desde = new Date();
   const hasta = localADate(sumarDias(fechaLocalISO(desde, tz), Math.min(negocio?.anticipacion_max_dias ?? 30, 90) + 1), "00:00", tz);
@@ -331,26 +337,23 @@ export async function importarOcupados(integracion: Integracion<ConfigGoogle>) {
     }
   }
 
-  const { data: cantidad, error } = await admin.rpc("reemplazar_bloqueos_google", {
-    p_profesional_id: integracion.profesional_id,
-    p_desde: desde.toISOString(),
-    p_hasta: hasta.toISOString(),
-    p_ocupados: ocupados,
-  });
-  if (error) throw error;
+  const fila = await comoServidor((tx) =>
+    tx.uno<{ n: number }>(sql`
+      select public.reemplazar_bloqueos_google(
+        ${integracion.profesional_id}, ${desde.toISOString()}, ${hasta.toISOString()}, ${JSON.stringify(ocupados)}::jsonb
+      ) as n`),
+  );
   await actualizarIntegracion(integracion, {
     config: { ultima_sync: new Date().toISOString(), ultimo_error: null },
   });
-  return (cantidad as number | null) ?? 0;
+  return fila?.n ?? 0;
 }
 
 /** Importa los ocupados de todas las cuentas conectadas (cron). */
 export async function importarOcupadosTodos() {
-  const admin = crearSupabaseAdmin();
-  const { data } = await admin.from("integraciones").select("*").eq("proveedor", "google_calendar").eq("estado", "activa");
   let ok = 0;
   let fallidos = 0;
-  for (const integracion of (data ?? []) as Integracion<ConfigGoogle>[]) {
+  for (const integracion of await integracionesActivas<ConfigGoogle>("google_calendar")) {
     try {
       await importarOcupados(integracion);
       ok++;
@@ -372,30 +375,29 @@ export async function importarOcupadosTodos() {
  * elimina las ausencias importadas y revoca el permiso.
  */
 export async function desconectarGoogle(integracion: Integracion<ConfigGoogle>) {
-  const admin = crearSupabaseAdmin();
   const profesionalId = integracion.profesional_id;
 
   if (profesionalId) {
     const acceso = await accesoProfesional(profesionalId).catch(() => null);
-    const { data: turnos } = await admin
-      .from("turnos")
-      .select("id, google_event_id")
-      .eq("google_calendar_prof_id", profesionalId)
-      .not("google_event_id", "is", null)
-      .gt("fin", new Date().toISOString())
-      .limit(200);
+    const turnos = await comoServidor((tx) =>
+      tx.varios<{ id: string; google_event_id: string }>(sql`
+        select id, google_event_id from public.turnos
+        where google_calendar_prof_id = ${profesionalId} and google_event_id is not null and fin > now()
+        limit 200`),
+    );
     if (acceso) {
-      for (const t of turnos ?? []) {
+      for (const t of turnos) {
         await api(acceso.token, "DELETE", `/calendars/${cal(acceso)}/events/${encodeURIComponent(t.google_event_id)}`).catch(
           () => null,
         );
       }
     }
-    await admin
-      .from("turnos")
-      .update({ google_event_id: null, google_calendar_prof_id: null })
-      .eq("google_calendar_prof_id", profesionalId);
-    await admin.from("bloqueos").delete().eq("profesional_id", profesionalId).eq("origen", "google");
+    await comoServidor(async (tx) => {
+      await tx.ejecutar(sql`
+        update public.turnos set google_event_id = null, google_calendar_prof_id = null
+        where google_calendar_prof_id = ${profesionalId}`);
+      await tx.ejecutar(sql`delete from public.bloqueos where profesional_id = ${profesionalId} and origen = 'google'`);
+    });
   }
 
   const secreto = await leerSecreto<SecretoGoogle>(integracion.id);

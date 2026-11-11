@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoAnonimo, sql } from "@/lib/db";
 
 export type ServicioPublico = {
   id: string;
@@ -48,21 +48,29 @@ export type TurnoPublico = {
   puede_cancelar: boolean;
 };
 
-/** Datos públicos del negocio vía RPC (el rol anon no lee tablas directamente). */
+/** Datos públicos del negocio (el rol anónimo no lee tablas: solo esta función). */
 export const getNegocioPublico = cache(async (slug: string): Promise<NegocioPublico | null> => {
   if (!/^[a-z0-9-]{3,50}$/.test(slug)) return null;
-  const supabase = await crearSupabaseServidor();
-  const { data, error } = await supabase.rpc("negocio_publico", { p_slug: slug });
-  if (error || !data) return null;
-  return data as NegocioPublico;
+  try {
+    const fila = await comoAnonimo((tx) =>
+      tx.uno<{ d: NegocioPublico | null }>(sql`select public.negocio_publico(${slug}) as d`),
+    );
+    return fila?.d ?? null;
+  } catch (e) {
+    console.error("[publico] negocio_publico", e);
+    return null;
+  }
 });
 
 export const getTurnoPublico = cache(async (token: string): Promise<TurnoPublico | null> => {
   if (!/^[0-9a-f]{64}$/.test(token)) return null;
-  const supabase = await crearSupabaseServidor();
-  const { data, error } = await supabase.rpc("ver_turno", { p_token: token });
-  if (error || !data) return null;
-  return data as TurnoPublico;
+  try {
+    const fila = await comoAnonimo((tx) => tx.uno<{ d: TurnoPublico | null }>(sql`select public.ver_turno(${token}) as d`));
+    return fila?.d ?? null;
+  } catch (e) {
+    console.error("[publico] ver_turno", e);
+    return null;
+  }
 });
 
 export { linkWhatsApp } from "@/lib/whatsapp";

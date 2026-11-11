@@ -6,7 +6,7 @@ import { integracionesDisponibles, SENA_ACTIVA } from "@/lib/env";
 import type { ConfigGoogle } from "@/lib/google";
 import type { Integracion } from "@/lib/integraciones";
 import type { ConfigMercadoPago } from "@/lib/mercadopago";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { AccionesCalendario, DesconectarMercadoPago, FormularioMercadoPago, FormularioSena, FormularioWhatsApp } from "./formularios";
 
 export const metadata: Metadata = { title: "Integraciones" };
@@ -25,19 +25,21 @@ function fechaCorta(iso: string, tz: string) {
 }
 
 export default async function PaginaIntegraciones({ searchParams }: PageProps<"/panel/integraciones">) {
-  const { negocio, perfil, esDueno } = await requerirPanel();
+  const { negocio, perfil, esDueno, userId } = await requerirPanel();
   const { google: resultadoGoogle } = await searchParams;
   const disponibles = integracionesDisponibles();
-  const supabase = await crearSupabaseServidor();
 
-  let consultaProfs = supabase.from("profesionales").select("id, nombre, color").eq("activo", true).order("orden").order("nombre");
-  if (!esDueno) consultaProfs = consultaProfs.eq("id", perfil.profesional_id ?? "00000000-0000-0000-0000-000000000000");
-  const [{ data: profs }, { data: filas }] = await Promise.all([
-    consultaProfs,
-    // RLS: el dueño ve todas; un empleado, solo su Google Calendar.
-    supabase.from("integraciones").select("*"),
-  ]);
-  const integraciones = (filas ?? []) as Integracion[];
+  const [profs, integraciones] = await comoUsuario(userId, (tx) =>
+    Promise.all([
+      tx.varios<{ id: string; nombre: string; color: string }>(sql`
+        select id, nombre, color from public.profesionales
+        where activo ${esDueno ? sql`` : sql`and id = ${perfil.profesional_id ?? null}::uuid`}
+        order by orden, nombre`),
+      // RLS: el dueño ve todas; un empleado, solo su Google Calendar.
+      tx.varios<Integracion>(sql`
+        select id, negocio_id, profesional_id, proveedor, estado, config, updated_at from public.integraciones`),
+    ]),
+  );
   const googlePorProf = new Map(
     integraciones
       .filter((i) => i.proveedor === "google_calendar")

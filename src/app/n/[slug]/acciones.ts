@@ -6,8 +6,7 @@ import { trasReservaFirme } from "@/lib/eventos";
 import { sincronizarGoogleDespues } from "@/lib/google";
 import { dentroDelLimite } from "@/lib/limites";
 import { crearPagoSena } from "@/lib/mercadopago";
-import { crearSupabaseAdmin } from "@/lib/supabase/admin";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoAnonimo, comoServidor, sql } from "@/lib/db";
 import { mensajeDeError } from "@/lib/errores";
 import { datosDeForm, erroresDeCampo, esquemaConsultaHorarios, esquemaReserva } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
@@ -32,15 +31,14 @@ export async function consultarDias(entrada: {
   const d = datos.data;
   if (!(await dentroDelLimite("consultar", 240, 600))) return [];
 
-  const supabase = await crearSupabaseServidor();
-  const { data } = await supabase.rpc("dias_disponibles", {
-    p_negocio_id: d.negocio_id,
-    p_servicio_id: d.servicio_id,
-    p_desde: d.desde,
-    p_dias: d.dias,
-    p_profesional_id: d.profesional_id,
+  const filas = await comoAnonimo((tx) =>
+    tx.varios<{ dia: string }>(sql`
+      select public.dias_disponibles(${d.negocio_id}, ${d.servicio_id}, ${d.desde}::date, ${d.dias}, ${d.profesional_id}::uuid) as dia`),
+  ).catch((e) => {
+    console.error("[reserva] dias_disponibles", e);
+    return [];
   });
-  return ((data ?? []) as string[]).map(String);
+  return filas.map((f) => String(f.dia));
 }
 
 export async function consultarHorarios(entrada: {
@@ -54,18 +52,18 @@ export async function consultarHorarios(entrada: {
   const d = datos.data;
   if (!(await dentroDelLimite("consultar", 240, 600))) return [];
 
-  const supabase = await crearSupabaseServidor();
-  const { data } = await supabase.rpc("horarios_libres", {
-    p_negocio_id: d.negocio_id,
-    p_servicio_id: d.servicio_id,
-    p_fecha: d.fecha,
-    p_profesional_id: d.profesional_id,
+  const libres = await comoAnonimo((tx) =>
+    tx.varios<{ inicio: string; fin: string }>(sql`
+      select inicio, fin from public.horarios_libres(${d.negocio_id}, ${d.servicio_id}, ${d.fecha}::date, ${d.profesional_id}::uuid)`),
+  ).catch((e) => {
+    console.error("[reserva] horarios_libres", e);
+    return [];
   });
 
   // Con "cualquier profesional" puede haber varios en el mismo horario: se ofrece una vez.
   const vistos = new Set<string>();
   const horarios: Horario[] = [];
-  for (const h of (data ?? []) as { inicio: string; fin: string }[]) {
+  for (const h of libres) {
     const clave = new Date(h.inicio).toISOString();
     if (vistos.has(clave)) continue;
     vistos.add(clave);
@@ -84,18 +82,19 @@ export async function reservar(_prev: EstadoAccion, formData: FormData): Promise
   }
 
   // crear_reserva no está abierta al público, para que este límite no se pueda esquivar.
-  const { data, error } = await crearSupabaseAdmin().rpc("crear_reserva", {
-    p_negocio_id: d.negocio_id,
-    p_servicio_id: d.servicio_id,
-    p_profesional_id: d.profesional_id,
-    p_inicio: d.inicio,
-    p_nombre: d.nombre,
-    p_telefono: d.telefono,
-    p_email: d.email,
-  });
-
-  const fila = (data as { turno_id: string; token: string; sena: number | null }[] | null)?.[0];
-  if (error || !fila) return { error: mensajeDeError(error, "No pudimos tomar la reserva. Probá de nuevo.") };
+  let fila: { turno_id: string; token: string; sena: number | null } | null;
+  try {
+    fila = await comoServidor((tx) =>
+      tx.uno<{ turno_id: string; token: string; sena: number | null }>(sql`
+        select turno_id, token, sena from public.crear_reserva(
+          ${d.negocio_id}, ${d.servicio_id}, ${d.profesional_id ?? null}::uuid, ${d.inicio}::timestamptz,
+          ${d.nombre}, ${d.telefono}, ${d.email}
+        )`),
+    );
+  } catch (e) {
+    return { error: mensajeDeError(e, "No pudimos tomar la reserva. Probá de nuevo.") };
+  }
+  if (!fila) return { error: "No pudimos tomar la reserva. Probá de nuevo." };
 
   if (Number(fila.sena) > 0) {
     // Turno retenido hasta que se pague la seña: los avisos salen al confirmarse el pago.

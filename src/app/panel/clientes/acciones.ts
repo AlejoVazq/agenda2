@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { sesionParaAccion } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, esErrorPg, sql } from "@/lib/db";
 import { mensajeDeError } from "@/lib/errores";
 import { datosDeForm, erroresDeCampo, esquemaCliente } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
@@ -15,14 +15,21 @@ export async function guardarCliente(id: string, _prev: EstadoAccion, formData: 
 
   const datos = esquemaCliente.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
+  const d = datos.data;
 
-  const supabase = await crearSupabaseServidor();
-  const { data, error } = await supabase.from("clientes").update(datos.data).eq("id", id).select("id");
-  if (error) {
-    if (error.code === "23505") return { errores: { telefono: ["Ya hay otro cliente con ese celular."] } };
-    return { error: mensajeDeError(error) };
+  let n: number;
+  try {
+    n = await comoUsuario(sesion.userId, (tx) =>
+      tx.ejecutar(sql`
+        update public.clientes
+        set nombre = ${d.nombre}, telefono = ${d.telefono}, email = ${d.email ?? null}, notas = ${d.notas ?? null}
+        where id = ${id}`),
+    );
+  } catch (e) {
+    if (esErrorPg(e) && e.code === "23505") return { errores: { telefono: ["Ya hay otro cliente con ese celular."] } };
+    return { error: mensajeDeError(e) };
   }
-  if (!data?.length) return { error: "No se encontró el cliente." };
+  if (!n) return { error: "No se encontró el cliente." };
 
   revalidatePath(`/panel/clientes/${id}`);
   return { ok: true, mensaje: "Cliente actualizado." };
@@ -34,14 +41,15 @@ export async function quitarLimiteCliente(id: string): Promise<EstadoAccion> {
   if (!sesion) return { error: "Solo el dueño puede quitar el límite." };
   if (!z.uuid().safeParse(id).success) return { error: "Cliente inválido." };
 
-  const supabase = await crearSupabaseServidor();
-  const { data, error } = await supabase
-    .from("clientes")
-    .update({ ausencias_perdonadas_at: new Date().toISOString() })
-    .eq("id", id)
-    .select("id");
-  if (error) return { error: mensajeDeError(error) };
-  if (!data?.length) return { error: "No se encontró el cliente." };
+  let n: number;
+  try {
+    n = await comoUsuario(sesion.userId, (tx) =>
+      tx.ejecutar(sql`update public.clientes set ausencias_perdonadas_at = now() where id = ${id}`),
+    );
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+  if (!n) return { error: "No se encontró el cliente." };
 
   revalidatePath(`/panel/clientes/${id}`);
   return { ok: true, mensaje: "Límite quitado." };

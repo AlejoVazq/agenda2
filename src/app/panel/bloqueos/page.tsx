@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Aviso, EncabezadoPagina, Tarjeta, Vacio } from "@/components/ui";
 import { requerirPanel } from "@/lib/auth";
-import { crearSupabaseServidor } from "@/lib/supabase/server";
+import { comoUsuario, sql } from "@/lib/db";
 import { fechaLocalISO, formatFechaCorta, formatHora } from "@/lib/fechas";
 import type { Bloqueo, Profesional } from "@/lib/tipos";
 import { BotonEliminarBloqueo, FormularioBloqueo } from "./formulario";
@@ -9,25 +9,22 @@ import { BotonEliminarBloqueo, FormularioBloqueo } from "./formulario";
 export const metadata: Metadata = { title: "Ausencias" };
 
 export default async function PaginaBloqueos() {
-  const { negocio, perfil, esDueno } = await requerirPanel();
+  const { negocio, perfil, esDueno, userId } = await requerirPanel();
   const tz = negocio.zona_horaria;
-  const supabase = await crearSupabaseServidor();
 
-  const [{ data: profs }, { data: bloqueos }] = await Promise.all([
-    supabase.from("profesionales").select("id, nombre").eq("negocio_id", negocio.id).order("orden").order("nombre"),
-    // RLS: el empleado solo recibe los suyos.
-    supabase
-      .from("bloqueos")
-      .select("id, profesional_id, inicio, fin, motivo, origen")
-      .eq("negocio_id", negocio.id)
-      // Los ocupados que vienen de Google se administran desde el propio calendario.
-      .eq("origen", "manual")
-      .gte("fin", new Date().toISOString())
-      .order("inicio"),
-  ]);
-  const profesionales = (profs ?? []) as Pick<Profesional, "id" | "nombre">[];
+  const [profesionales, lista] = await comoUsuario(userId, (tx) =>
+    Promise.all([
+      tx.varios<Pick<Profesional, "id" | "nombre">>(sql`
+        select id, nombre from public.profesionales where negocio_id = ${negocio.id} order by orden, nombre`),
+      // RLS: el empleado solo recibe los suyos. Los ocupados que vienen de Google
+      // se administran desde el propio calendario.
+      tx.varios<Bloqueo>(sql`
+        select id, profesional_id, inicio, fin, motivo, origen from public.bloqueos
+        where negocio_id = ${negocio.id} and origen = 'manual' and fin >= now()
+        order by inicio`),
+    ]),
+  );
   const nombres = new Map(profesionales.map((p) => [p.id, p.nombre]));
-  const lista = (bloqueos ?? []) as Bloqueo[];
 
   const puedeCargar = esDueno ? profesionales.length > 0 : Boolean(perfil.profesional_id);
 
