@@ -8,9 +8,9 @@ import { crearSupabaseAdmin } from "@/lib/supabase/admin";
 import { ESTADOS_TURNO, type EstadoTurno } from "@/lib/tipos";
 
 // Fase 5: Google Calendar, una cuenta por profesional.
-//  - Turnia -> Google: cada turno activo es un evento en el calendario del
+//  - Agenda2 -> Google: cada turno activo es un evento en el calendario del
 //    profesional (se crea, mueve y borra solo). Ver sincronizarTurno().
-//  - Google -> Turnia (opcional): lo que el profesional tiene ocupado en Google
+//  - Google -> Agenda2 (opcional): lo que el profesional tiene ocupado en Google
 //    se importa como ausencia para no ofrecer esos horarios. Ver importarOcupados().
 
 const SCOPES = ["openid", "email", "https://www.googleapis.com/auth/calendar.events"];
@@ -138,7 +138,7 @@ function idEvento(turnoId: string) {
 
 const cal = (a: Acceso) => encodeURIComponent(a.integracion.config.calendario || "primary");
 
-// --- Turnia -> Google -------------------------------------------------------------
+// --- Agenda2 -> Google -------------------------------------------------------------
 
 type TurnoParaGoogle = {
   id: string;
@@ -273,7 +273,7 @@ export async function sincronizarPendientes(limite = 50) {
   return { ok, fallidos };
 }
 
-// --- Google -> Turnia (ocupados) ----------------------------------------------------
+// --- Google -> Agenda2 (ocupados) ----------------------------------------------------
 
 type EventoGoogle = {
   status?: string;
@@ -287,7 +287,7 @@ type EventoGoogle = {
 /**
  * Importa como ausencias los horarios ocupados del calendario del profesional,
  * desde ahora hasta el máximo de anticipación del negocio. Ignora los eventos
- * creados por Turnia, los marcados como "disponible" y los rechazados.
+ * creados por Agenda2 (marcados con turniaTurnoId), los marcados como "disponible" y los rechazados.
  */
 export async function importarOcupados(integracion: Integracion<ConfigGoogle>) {
   if (!integracion.profesional_id) return 0;

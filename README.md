@@ -1,4 +1,4 @@
-# Turnia — agenda y reservas online de turnos
+# Agenda2 — agenda y reservas online de turnos
 
 MVP de agenda y reservas para negocios de servicios (peluquerías, barberías, uñas, estética).
 Los clientes reservan desde el celular sin crear cuenta y el negocio gestiona todo desde `/panel`.
@@ -6,7 +6,7 @@ Los clientes reservan desde el celular sin crear cuenta y el negocio gestiona to
 - **Stack:** Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + Supabase (Postgres, Auth, RLS) + FullCalendar 7 + Resend.
 - **Integraciones (opcionales):** Google Calendar, avisos por WhatsApp (Cloud API) y seña con Mercado Pago (hoy oculta, ver Fase 6).
 - **Idioma/zona:** todo en es-AR. Fechas en UTC (`timestamptz`), mostradas en `America/Argentina/Buenos_Aires`.
-- **Marca:** el nombre "Turnia" está centralizado en `src/lib/marca.ts` y es fácil de cambiar.
+- **Marca:** el nombre "Agenda2" está centralizado en `src/lib/marca.ts` y es fácil de cambiar.
 
 ---
 
@@ -233,10 +233,10 @@ Para activar más adelante: `INTEGRACIONES_CLAVE`, las variables de Google (con 
 
 ## Decisiones y límites conocidos
 
-- **Google Calendar** se conecta por profesional, no por negocio, porque la agenda es de cada persona. Turnia es la fuente de verdad: si alguien mueve el evento en Google, no cambia el turno.
+- **Google Calendar** se conecta por profesional, no por negocio, porque la agenda es de cada persona. Agenda2 es la fuente de verdad: si alguien mueve el evento en Google, no cambia el turno.
 - **Ocupados de Google**: se importan cada hora, así que un evento recién creado puede tardar hasta una hora en bloquear horarios, salvo que se use "Sincronizar ahora".
 - **Mercado Pago**: cada negocio pega su Access Token. Es más simple que el OAuth de marketplace, que requiere homologar la app como plataforma, y el dinero va igual directo al negocio. Si la plataforma quiere cobrar comisión, hay que pasar a OAuth + `marketplace_fee`.
-- **Devoluciones** de seña: se hacen desde Mercado Pago y en Turnia se registran a mano. Todavía no hay reembolso automático por API.
+- **Devoluciones** de seña: se hacen desde Mercado Pago y en Agenda2 se registran a mano. Todavía no hay reembolso automático por API.
 - **WhatsApp automático**: usa un número de la plataforma. Para que cada negocio mande desde su propio número, cada uno tendría que tener su cuenta de WhatsApp Business API.
 
 ## Ideas para después
