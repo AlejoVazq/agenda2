@@ -9,14 +9,13 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test:db": "node scripts/test-db.mjs",
-    "db:start": "supabase start",
-    "db:reset": "supabase db reset",
-    "db:tipos": "supabase gen types typescript --local > src/lib/database.types.ts"
+    "db:local": "node scripts/db-local.mjs",
+    "db:migrar": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.development.local --env-file-if-exists=.env.production.local scripts/migrar.mjs",
+    "db:seed": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.development.local scripts/seed.mjs",
+    "db:reset": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.development.local scripts/seed.mjs --reset"
   },
   "dependencies": {
     "@fullcalendar/react": "^7.1.3",
-    "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.118.0",
     "better-auth": "1.7.18",
     "next": "16.4.3",
     "pg": "^8.23.1",
@@ -36,7 +35,6 @@
     "embedded-postgres": "^18.4.0-beta.17",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
-    "supabase": "^2.122.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
