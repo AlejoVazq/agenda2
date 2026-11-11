@@ -64,8 +64,8 @@ Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en 
 
 - Fases 1 a 6 y extras hechas. Supabase reemplazado por Postgres propio + Better Auth (rama `sin-supabase`), probado en local de punta a punta.
 - Objetivo: que un amigo peluquero masculino la pruebe en su local. Google Calendar puede quedar sin conectar.
-- **Próximo paso: publicar en el VPS** (Hostinger, Ubuntu 26.04, PostgreSQL 18, Node 24, Caddy), en **https://agenda2.tech**. El repo está en GitHub (`AlejoVazq/agenda2`).
-- Pendiente de decidir: mail de contacto para `/privacidad`, revisión de textos legales.
+- **Publicada en https://agenda2.tech** (VPS Hostinger `187.53.106.37`, SSH como `root`) desde el 2026-11-11. El repo está en GitHub (`AlejoVazq/agenda2`). Falta cargar `RESEND_API_KEY` y hacer la prueba completa del paso 7.
+- Mail de contacto de `/privacidad`: `vaztechcontact@gmail.com`. Pendiente: revisión de textos legales.
 - Pedidos del usuario para después de publicar: pulir la estética de la reserva y marca por negocio (logo, color, portada). No agregar otras funciones sin que lo pida.
 - El resto de lo pendiente está en `docs/registro-2026-11-11.md`.
 
@@ -139,9 +139,9 @@ Actualizar: `cd /srv/agenda2/web && sudo -u agenda2 git pull && sudo -u agenda2 
 
 ### 5. Caddy (HTTPS)
 
-Agregar el bloque de `deploy/Caddyfile` a `/etc/caddy/Caddyfile` y `sudo systemctl reload caddy`. DNS: registro A de `agenda2.tech` (y `www`) a la IP del VPS.
+Copiar `deploy/Caddyfile` a `/etc/caddy/sitios/agenda2.caddy` (el Caddyfile global lo importa y define el snippet `comun`), `caddy validate --config /etc/caddy/Caddyfile` y `sudo systemctl reload caddy`. DNS: registro A de `agenda2.tech` (y `www`) a `187.53.106.37`.
 
-- **IP real del cliente**: `src/lib/limites.ts` y Better Auth toman el primer valor de `X-Forwarded-For`. Caddy, sin `trusted_proxies`, descarta el que manda el cliente y pone la IP real. **No configurar `trusted_proxies`**, o cualquiera esquiva el límite por IP inventando el header.
+- **IP real del cliente**: `src/lib/limites.ts` y Better Auth toman el primer valor de `X-Forwarded-For`. El bloque lo pisa con `header_up X-Forwarded-For {client_ip}`. El Caddyfile global solo confía en los rangos de Cloudflare (`trusted_proxies` + `CF-Connecting-IP`, puesto por EnSushi); **no sumar otros `trusted_proxies`**, o cualquiera esquiva el límite por IP inventando el header.
 - `flush_interval -1` para el streaming de `loading.tsx`.
 
 ### 6. Cron y backups

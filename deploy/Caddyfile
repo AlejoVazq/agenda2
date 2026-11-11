@@ -1,18 +1,22 @@
-# Bloque para el Caddyfile del servidor (/etc/caddy/Caddyfile), junto al de EnSushi.
-# Caddy saca el certificado HTTPS solo.
+# Bloque de Agenda2 para Caddy. En el VPS va en /etc/caddy/sitios/agenda2.caddy
+# (el /etc/caddy/Caddyfile global lo importa y define el snippet `comun`: compresión,
+# HSTS, cabeceras y log en /var/log/caddy/agenda2.log). Caddy saca el certificado solo.
 #
-# X-Forwarded-For: sin trusted_proxies, Caddy descarta el que manda el cliente y
-# pone la IP real. NO configurar trusted_proxies: el límite por IP
-# (src/lib/limites.ts) y Better Auth toman el primer valor de ese header.
-
-agenda2.tech {
-	encode zstd gzip
-	reverse_proxy 127.0.0.1:3002 {
-		# Sin buffer, para el streaming de loading.tsx.
-		flush_interval -1
-	}
-}
+# IP real del cliente: el límite por IP (src/lib/limites.ts) y Better Auth toman el
+# primer valor de X-Forwarded-For, así que se pisa con {client_ip}, que Caddy resuelve
+# (el Caddyfile global solo confía en los rangos de Cloudflare). Un X-Forwarded-For que
+# mande el cliente se descarta.
 
 www.agenda2.tech {
 	redir https://agenda2.tech{uri} permanent
+}
+
+agenda2.tech {
+	import comun agenda2
+	reverse_proxy 127.0.0.1:3002 {
+		# Solo la IP real del cliente.
+		header_up X-Forwarded-For {client_ip}
+		# Sin buffer, para el streaming de loading.tsx.
+		flush_interval -1
+	}
 }

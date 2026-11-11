@@ -221,7 +221,7 @@ El paso a paso completo está en `CLAUDE.md`, sección **"Publicar en el VPS"**.
 2. Roles y base, una vez, como superusuario: `sudo -u postgres psql -v clave_dueno=… -v clave_app=… -f db/roles.sql`.
 3. `.env.production.local` (app: `DATABASE_URL` como `agenda2_app`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_SITE_URL`, `CRON_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`…) y `.env.migrar.local` (solo `DATABASE_URL_MIGRAR` como `agenda2_dueno`).
 4. `npm ci && npm run db:migrar && npm run build`, y los servicios de `deploy/`: `agenda2-web` (Next en `127.0.0.1:3002`), `agenda2-cron.timer` (cada hora) y `agenda2-backup.timer` (`pg_dump` diario).
-5. Caddy con el bloque de `deploy/Caddyfile` (HTTPS automático, pisa `X-Forwarded-For` con la IP real).
+5. Caddy con el bloque de `deploy/Caddyfile` (en `/etc/caddy/sitios/agenda2.caddy`) (HTTPS automático, pisa `X-Forwarded-For` con la IP real).
 
 Actualizar: `git pull && npm ci && npm run db:migrar && npm run build && systemctl restart agenda2-web`.
 
