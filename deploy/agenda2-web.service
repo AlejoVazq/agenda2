@@ -21,6 +21,8 @@ Environment=NODE_ENV=production
 ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3002
 Restart=on-failure
 RestartSec=5
+# 143 = salida normal de Node al recibir SIGTERM (restart/stop): no es un error.
+SuccessExitStatus=143
 
 # Endurecimiento: la app solo escribe en .next/ (caché de imágenes).
 NoNewPrivileges=true
