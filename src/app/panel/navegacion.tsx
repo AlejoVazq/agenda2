@@ -57,8 +57,10 @@ export function MenuLateral({ esDueno }: { esDueno: boolean }) {
           key={i.href}
           href={i.href}
           className={cx(
-            "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
-            activo(pathname, i.href) ? "bg-marca-100 text-marca-800" : "text-zinc-600 hover:bg-zinc-100 hover:text-tinta",
+            "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
+            activo(pathname, i.href)
+              ? "bg-tinta text-white shadow-[0_6px_16px_-8px_rgb(26_21_35/0.6)] [&_svg]:text-coral-300"
+              : "text-zinc-600 hover:bg-zinc-100 hover:text-tinta",
           )}
         >
           <Icono nombre={i.icono} />
@@ -77,7 +79,7 @@ export function BarraInferior({ esDueno }: { esDueno: boolean }) {
   const enResto = resto.some((i) => activo(pathname, i.href));
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200/80 bg-white/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
       <div className="grid grid-cols-4">
         {principales.map((i) => (
           <Link

@@ -87,20 +87,26 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
   }
 
   return (
-    <div className="min-h-dvh bg-gradient-to-b from-marca-50 to-fondo">
-      <main className="mx-auto max-w-md px-4 pb-16 pt-8">
+    <div className="relative min-h-dvh overflow-x-clip bg-fondo">
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-80 overflow-hidden" aria-hidden>
+        <div className="absolute -right-24 -top-32 size-96 rounded-full bg-marca-200/60 blur-3xl" />
+        <div className="absolute -left-24 -top-16 size-80 rounded-full bg-coral-100/80 blur-3xl" />
+      </div>
+      <main className="relative mx-auto max-w-md px-4 pb-16 pt-10">
         {encabezado ? (
-          <div className="mb-6 text-center">
+          <div className="mb-7 animate-aparecer text-center">
             <span
               className={
                 encabezado.icono === "ok"
-                  ? "mx-auto grid size-16 place-items-center rounded-full bg-emerald-100 text-3xl text-emerald-700"
-                  : "mx-auto grid size-16 place-items-center rounded-full bg-amber-100 text-amber-700"
+                  ? "mx-auto grid size-18 place-items-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-[0_12px_30px_-10px_rgb(5_150_105/0.7)] ring-8 ring-emerald-100/70"
+                  : "mx-auto grid size-18 place-items-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-white shadow-[0_12px_30px_-10px_rgb(217_119_6/0.6)] ring-8 ring-amber-100/70"
               }
               aria-hidden
             >
               {encabezado.icono === "ok" ? (
-                "✓"
+                <svg viewBox="0 0 24 24" fill="none" className="size-9">
+                  <path d="m5 12 5 5L20 7" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               ) : (
                 <svg viewBox="0 0 24 24" fill="none" className="size-8">
                   <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
@@ -108,11 +114,11 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
                 </svg>
               )}
             </span>
-            <h1 className="mt-4 text-2xl font-extrabold tracking-tight">{encabezado.titulo}</h1>
-            <p className="mt-1 text-sm text-zinc-600">{encabezado.texto}</p>
+            <h1 className="mt-5 font-display text-3xl font-bold tracking-tight">{encabezado.titulo}</h1>
+            <p className="mt-1.5 text-zinc-600">{encabezado.texto}</p>
           </div>
         ) : (
-          <h1 className="mb-6 text-center text-2xl font-extrabold tracking-tight">Tu turno</h1>
+          <h1 className="mb-7 text-center font-display text-3xl font-bold tracking-tight">Tu turno</h1>
         )}
 
         {esperandoSena && estadoVuelta && estadoVuelta !== "approved" && estadoVuelta !== "null" ? (
@@ -127,19 +133,30 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
           </div>
         ) : null}
 
-        <div className="rounded-3xl bg-white p-5 shadow-xl shadow-marca-900/10">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-marca-700">{turno.negocio.nombre}</p>
-              <p className="text-xl font-bold">{turno.servicio}</p>
+        <div className="animate-aparecer overflow-hidden rounded-[2rem] bg-white shadow-flotante ring-1 ring-zinc-200/60 retraso-1">
+          <div className="relative overflow-hidden bg-noche bg-[radial-gradient(ellipse_80%_100%_at_100%_0%,rgb(106_67_246/0.6),transparent)] px-5 pb-6 pt-5 text-white">
+            <div className="fondo-puntos pointer-events-none absolute inset-0 opacity-60" aria-hidden />
+            <div className="relative flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-coral-300">{turno.negocio.nombre}</p>
+                <p className="mt-1 font-display text-2xl font-bold leading-tight">{turno.servicio}</p>
+              </div>
+              <Insignia color={esperandoSena ? "ambar" : senaVencida ? "rojo" : colorEstado[turno.estado]}>{etiquetaEstado}</Insignia>
             </div>
-            <Insignia color={esperandoSena ? "ambar" : senaVencida ? "rojo" : colorEstado[turno.estado]}>{etiquetaEstado}</Insignia>
+            <div className="relative mt-5 flex items-end gap-4">
+              <p className="font-display text-5xl font-bold tabular-nums leading-none">{formatHora(turno.inicio, tz)}</p>
+              <p className="pb-1 text-sm text-white/70 first-letter:uppercase">{formatFechaLarga(turno.inicio, tz)}</p>
+            </div>
           </div>
 
-          <dl className="mt-5 space-y-3 text-sm">
-            <Fila titulo="Día">
-              <span className="inline-block first-letter:uppercase">{formatFechaLarga(turno.inicio, tz)}</span>
-            </Fila>
+          {/* Troquelado de ticket */}
+          <div className="relative h-0" aria-hidden>
+            <span className="absolute -left-3 -top-3 size-6 rounded-full bg-fondo" />
+            <span className="absolute -right-3 -top-3 size-6 rounded-full bg-fondo" />
+          </div>
+
+          <div className="px-5 pb-5">
+          <dl className="mt-5 divide-y divide-dashed divide-zinc-200 text-sm">
             <Fila titulo="Horario">
               {formatHora(turno.inicio, tz)} a {formatHora(turno.fin, tz)} h
             </Fila>
@@ -173,13 +190,13 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
               <a
                 href={googleCal.toString()}
                 target="_blank"
-                className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 text-sm font-semibold hover:bg-zinc-50"
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white text-sm font-semibold shadow-suave transition hover:border-marca-300 hover:bg-marca-50/60"
               >
                 Google Calendar
               </a>
               <a
                 href={`/t/${token}/ics`}
-                className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 text-sm font-semibold hover:bg-zinc-50"
+                className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white text-sm font-semibold shadow-suave transition hover:border-marca-300 hover:bg-marca-50/60"
               >
                 Apple / Outlook
               </a>
@@ -190,13 +207,14 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
                     `Hola! Tengo un turno el ${formatFechaHora(turno.inicio, tz)} (${turno.servicio}).`,
                   )}
                   target="_blank"
-                  className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 text-sm font-semibold hover:bg-zinc-50 sm:col-span-2"
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white text-sm font-semibold shadow-suave transition hover:border-marca-300 hover:bg-marca-50/60 sm:col-span-2"
                 >
                   Escribirle al negocio
                 </a>
               ) : null}
             </div>
           ) : null}
+          </div>
         </div>
 
         {senaVencida ? (
@@ -265,9 +283,9 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
             {activo ? `Ir a ${turno.negocio.nombre}` : "Reservar otro turno"}
           </BotonLink>
         </div>
-        <footer className="mt-10 flex justify-center opacity-60">
-          <Link href="/">
-            <Logo className="scale-75" />
+        <footer className="mt-10 flex justify-center">
+          <Link href="/" className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs text-zinc-500 transition hover:bg-white hover:text-tinta">
+            Turnos online con <Logo className="origin-left scale-[0.8]" />
           </Link>
         </footer>
       </main>
@@ -277,7 +295,7 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
 
 function Fila({ titulo, children }: { titulo: string; children: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-4">
+    <div className="flex justify-between gap-4 py-3">
       <dt className="text-zinc-500">{titulo}</dt>
       <dd className="text-right font-semibold">{children}</dd>
     </div>

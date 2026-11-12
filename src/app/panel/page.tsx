@@ -51,6 +51,7 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
     ];
   }
   const pendientes = pasos.filter((p) => !p.hecho);
+  const siguiente = proximoTurno([...turnosHoy, ...proximos]);
 
   return (
     <>
@@ -86,7 +87,7 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
 
       {esDueno && pendientes.length > 0 ? (
         <Tarjeta className="mb-6 border-marca-200 bg-marca-50/50">
-          <h2 className="font-bold">Terminá de configurar tu agenda</h2>
+          <h2 className="text-lg font-bold">Terminá de configurar tu agenda</h2>
           <p className="mt-0.5 text-sm text-zinc-600">
             {pasos.length - pendientes.length} de {pasos.length} pasos completos
           </p>
@@ -111,24 +112,41 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
         </Tarjeta>
       ) : null}
 
-      <Tarjeta className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold">Tu link de reservas</p>
-          <a href={linkPublico} target="_blank" className="block truncate text-sm text-marca-700 hover:underline">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Dato valor={turnosHoy.length} texto={turnosHoy.length === 1 ? "turno hoy" : "turnos hoy"} />
+        <Dato valor={proximos.length} texto="en los próximos 7 días" />
+        <Dato
+          className="col-span-2 sm:col-span-1"
+          valor={siguiente ? formatHora(siguiente.inicio, tz) : "—"}
+          texto={
+            siguiente
+              ? `Próximo: ${siguiente.nombre_reserva ?? siguiente.cliente?.nombre ?? "Cliente"}`
+              : "Sin turnos por delante"
+          }
+          destacado
+        />
+      </div>
+
+      <div className="relative mb-8 flex flex-col gap-4 overflow-hidden rounded-3xl bg-noche bg-[radial-gradient(ellipse_70%_120%_at_100%_0%,rgb(106_67_246/0.55),transparent),radial-gradient(ellipse_50%_100%_at_0%_100%,rgb(255_106_61/0.22),transparent)] p-5 text-white sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="fondo-puntos pointer-events-none absolute inset-0 opacity-60" aria-hidden />
+        <div className="relative min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-coral-300">Tu link de reservas</p>
+          <a href={linkPublico} target="_blank" className="mt-1 block truncate font-display text-lg font-semibold hover:underline">
             {linkPublico.replace(/^https?:\/\//, "")}
           </a>
+          <p className="mt-0.5 text-sm text-white/60">Compartilo en Instagram, WhatsApp y Google.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="relative flex shrink-0 gap-2">
           <BotonCopiar texto={linkPublico} />
           <a
-            className="inline-flex h-9 items-center rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700"
+            className="inline-flex h-9 items-center rounded-lg bg-emerald-500 px-3 text-sm font-semibold text-white transition hover:bg-emerald-600"
             href={`https://wa.me/?text=${encodeURIComponent(`Reservá tu turno en ${negocio.nombre}: ${linkPublico}`)}`}
             target="_blank"
           >
             Compartir
           </a>
         </div>
-      </Tarjeta>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section>
@@ -171,10 +189,10 @@ function ListaTurnos({
   conFecha?: boolean;
 }) {
   return (
-    <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+    <ul className="divide-y divide-zinc-100 overflow-hidden rounded-3xl border border-zinc-200/80 bg-white shadow-suave">
       {turnos.map((t) => (
         <li key={t.id}>
-          <Link href={`/panel/turnos/${t.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50">
+          <Link href={`/panel/turnos/${t.id}`} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-marca-50/40">
             <span className="h-10 w-1 shrink-0 rounded-full" style={{ background: t.profesional?.color ?? "#7434ee" }} />
             <div className="w-14 shrink-0">
               <p className="font-bold tabular-nums">{formatHora(t.inicio, tz)}</p>
@@ -200,4 +218,37 @@ function ListaTurnos({
       ))}
     </ul>
   );
+}
+
+function Dato({
+  valor,
+  texto,
+  destacado,
+  className,
+}: {
+  valor: string | number;
+  texto: string;
+  destacado?: boolean;
+  className?: string;
+}) {
+  return (
+    <div
+      className={
+        (destacado
+          ? "border-coral-200 bg-gradient-to-br from-coral-50 to-white "
+          : "border-zinc-200/80 bg-white ") +
+        "rounded-3xl border px-4 py-3.5 shadow-suave " +
+        (className ?? "")
+      }
+    >
+      <p className={"font-display text-3xl font-bold tabular-nums " + (destacado ? "text-coral-600" : "text-tinta")}>{valor}</p>
+      <p className="truncate text-xs font-medium text-zinc-500">{texto}</p>
+    </div>
+  );
+}
+
+/** El primer turno que todavía no empezó (fuera del render para no llamar a Date.now() en él). */
+function proximoTurno<T extends { inicio: string; estado: string }>(turnos: T[]) {
+  const ahora = Date.now();
+  return turnos.find((t) => new Date(t.inicio).getTime() >= ahora && t.estado !== "cancelado");
 }

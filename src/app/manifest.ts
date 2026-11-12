@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: MARCA.descripcion,
     start_url: "/panel",
     display: "standalone",
-    background_color: "#faf9fc",
-    theme_color: "#6322d6",
+    background_color: "#fbf9f6",
+    theme_color: "#5932e0",
     lang: "es-AR",
     icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
   };

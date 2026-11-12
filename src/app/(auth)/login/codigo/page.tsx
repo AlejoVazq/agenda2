@@ -10,7 +10,7 @@ export default async function PaginaCodigo({ searchParams }: PageProps<"/login/c
   const { next } = await searchParams;
   return (
     <Tarjeta className="shadow-xl shadow-marca-900/5">
-      <h1 className="text-2xl font-bold tracking-tight">Código de verificación</h1>
+      <h1 className="text-3xl font-bold tracking-tight">Código de verificación</h1>
       <p className="mt-1 text-sm text-zinc-600">Abrí tu app autenticadora e ingresá el código de esta cuenta.</p>
       <div className="mt-6">
         <FormularioCodigo next={typeof next === "string" ? next : undefined} />

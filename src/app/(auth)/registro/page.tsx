@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Crear cuenta" };
 export default function PaginaRegistro() {
   return (
     <Tarjeta className="shadow-xl shadow-marca-900/5">
-      <h1 className="text-2xl font-bold tracking-tight">Creá la agenda de tu negocio</h1>
+      <h1 className="text-3xl font-bold tracking-tight">Creá la agenda de tu negocio</h1>
       <p className="mt-1 text-sm text-zinc-600">
         En 2 minutos tenés tu página de reservas. Tus clientes no necesitan registrarse.
       </p>

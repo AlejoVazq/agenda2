@@ -9,7 +9,7 @@ export default async function PaginaLogin({ searchParams }: PageProps<"/login">)
   const { next, error, verificado, password } = await searchParams;
   return (
     <Tarjeta className="shadow-xl shadow-marca-900/5">
-      <h1 className="text-2xl font-bold tracking-tight">Ingresá a tu panel</h1>
+      <h1 className="text-3xl font-bold tracking-tight">Ingresá a tu panel</h1>
       <p className="mt-1 text-sm text-zinc-600">Para dueños y equipo de cada negocio.</p>
       {error ? (
         <Aviso tipo="error" className="mt-4">

@@ -1,11 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Bricolage_Grotesque, Plus_Jakarta_Sans } from "next/font/google";
 import { env } from "@/lib/env";
 import { MARCA } from "@/lib/marca";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
+  subsets: ["latin"],
+});
+
+// Títulos: grotesca con carácter (ver --font-display en globals.css).
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-bricolage",
   subsets: ["latin"],
 });
 
@@ -16,14 +22,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#6322d6",
+  themeColor: "#fbf9f6",
   width: "device-width",
   initialScale: 1,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="es-AR" className={`${jakarta.variable} h-full antialiased`}>
+    <html lang="es-AR" className={`${jakarta.variable} ${bricolage.variable} h-full scroll-smooth antialiased`}>
       <body className="flex min-h-full flex-col font-sans">{children}</body>
     </html>
   );

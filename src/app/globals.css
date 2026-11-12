@@ -1,35 +1,151 @@
 @import "tailwindcss";
 
+/*
+ * Identidad visual de Agenda2 (2026-11-12).
+ * - Violeta índigo como color de marca, coral como acento cálido.
+ * - Neutros cálidos (papel) en lugar de grises fríos: los `zinc-*` de todo el código toman estos valores.
+ * - Bricolage Grotesque para títulos (con carácter) y Plus Jakarta Sans para el texto.
+ */
 @theme {
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
 
-  /* Marca: violeta ciruela + acento coral. */
-  --color-marca-50: #f6f3ff;
-  --color-marca-100: #ede8ff;
-  --color-marca-200: #dcd3ff;
-  --color-marca-300: #c2b0ff;
-  --color-marca-400: #a283fd;
-  --color-marca-500: #8656f8;
-  --color-marca-600: #7434ee;
-  --color-marca-700: #6322d6;
-  --color-marca-800: #521db0;
-  --color-marca-900: #451a8f;
-  --color-marca-950: #2a0d61;
+  --color-marca-50: #f5f3ff;
+  --color-marca-100: #ece8ff;
+  --color-marca-200: #dad2ff;
+  --color-marca-300: #bdaeff;
+  --color-marca-400: #9b85ff;
+  --color-marca-500: #7d5fff;
+  --color-marca-600: #6a43f6;
+  --color-marca-700: #5932e0;
+  --color-marca-800: #4827b5;
+  --color-marca-900: #3b2290;
+  --color-marca-950: #221354;
 
-  --color-coral-400: #fb8a72;
-  --color-coral-500: #f4694c;
+  --color-coral-50: #fff5f0;
+  --color-coral-100: #ffe8dd;
+  --color-coral-200: #ffcdb8;
+  --color-coral-300: #ffab8a;
+  --color-coral-400: #ff8a60;
+  --color-coral-500: #ff6a3d;
+  --color-coral-600: #ee4f23;
+  --color-coral-700: #c63c17;
 
-  --color-fondo: #faf9fc;
-  --color-tinta: #1d1830;
+  /* Neutros cálidos. */
+  --color-zinc-50: #faf8f5;
+  --color-zinc-100: #f3f0eb;
+  --color-zinc-200: #e7e2db;
+  --color-zinc-300: #d5cec5;
+  --color-zinc-400: #a59d94;
+  --color-zinc-500: #7b736b;
+  --color-zinc-600: #5e5750;
+  --color-zinc-700: #48423d;
+  --color-zinc-800: #2f2a27;
+  --color-zinc-900: #1f1b19;
+  --color-zinc-950: #13100e;
+
+  --color-fondo: #fbf9f6;
+  --color-tinta: #1a1523;
+  --color-noche: #15111d;
+
+  --radius-4xl: 2rem;
+
+  --shadow-suave: 0 1px 2px rgb(26 21 35 / 0.04), 0 4px 16px -4px rgb(26 21 35 / 0.06);
+  --shadow-flotante: 0 2px 6px rgb(26 21 35 / 0.04), 0 24px 48px -16px rgb(59 34 144 / 0.22);
+
+  --animate-aparecer: aparecer 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-flotar: flotar 6s ease-in-out infinite;
+  --animate-latido: latido 2.4s ease-in-out infinite;
+  --animate-marquesina: marquesina 32s linear infinite;
+
+  @keyframes aparecer {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes flotar {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+  @keyframes marquesina {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  @keyframes latido {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgb(255 106 61 / 0.45);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgb(255 106 61 / 0);
+    }
+  }
 }
 
-html {
-  -webkit-tap-highlight-color: transparent;
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: var(--color-fondo);
+    color: var(--color-tinta);
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background: var(--color-marca-200);
+    color: var(--color-marca-950);
+  }
+
+  :focus-visible {
+    outline-color: var(--color-marca-500);
+  }
 }
 
-body {
-  background: var(--color-fondo);
-  color: var(--color-tinta);
+/* Textura de puntos sutil para fondos de marca. */
+@utility fondo-puntos {
+  background-image: radial-gradient(rgb(255 255 255 / 0.12) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+/* Retraso para escalonar animaciones de entrada: `retraso-1` … `retraso-6`. */
+@utility retraso-* {
+  animation-delay: calc(--value(integer) * 90ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Inputs nativos de fecha/hora un poco más prolijos en móviles. */
@@ -41,10 +157,10 @@ input[type="datetime-local"] {
 
 /* FullCalendar (tema "forma"): colores de la marca. Más específico que la paleta importada. */
 html:root {
-  --fc-forma-primary: #6322d6;
-  --fc-forma-primary-over: #521db0;
-  --fc-forma-primary-down: #451a8f;
-  --fc-forma-event: #7434ee;
-  --fc-forma-highlight: #7434ee33;
-  --fc-forma-background-event: #a1a1aa;
+  --fc-forma-primary: #5932e0;
+  --fc-forma-primary-over: #4827b5;
+  --fc-forma-primary-down: #3b2290;
+  --fc-forma-event: #6a43f6;
+  --fc-forma-highlight: #6a43f626;
+  --fc-forma-background-event: #a59d94;
 }

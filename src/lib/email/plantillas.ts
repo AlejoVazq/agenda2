@@ -44,27 +44,27 @@ function plantilla({ titulo, intro, d, boton }: { titulo: string; intro: string;
       : "Podés cancelar online hasta el momento del turno.";
 
   const html = `<!doctype html>
-<html lang="es"><body style="margin:0;background:#f6f3ff;font-family:Arial,Helvetica,sans-serif;color:#1d1830">
+<html lang="es"><body style="margin:0;background:#f5f3ff;font-family:Arial,Helvetica,sans-serif;color:#1a1523">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 12px">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:20px;padding:28px">
         <tr><td>
-          <p style="margin:0;font-size:13px;font-weight:bold;color:#6322d6">${escapar(d.negocio.nombre)}</p>
+          <p style="margin:0;font-size:13px;font-weight:bold;color:#5932e0">${escapar(d.negocio.nombre)}</p>
           <h1 style="margin:6px 0 8px;font-size:22px">${escapar(titulo)}</h1>
-          <p style="margin:0 0 20px;font-size:15px;color:#52525b">${escapar(intro)}</p>
+          <p style="margin:0 0 20px;font-size:15px;color:#5e5750">${escapar(intro)}</p>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;border-top:1px solid #eee">
             ${filas
               .map(
                 ([k, v]) =>
-                  `<tr><td style="padding:9px 0;color:#71717a;border-bottom:1px solid #eee;width:90px">${escapar(k)}</td><td style="padding:9px 0;font-weight:bold;border-bottom:1px solid #eee">${escapar(v)}</td></tr>`,
+                  `<tr><td style="padding:9px 0;color:#7b736b;border-bottom:1px solid #eee;width:90px">${escapar(k)}</td><td style="padding:9px 0;font-weight:bold;border-bottom:1px solid #eee">${escapar(v)}</td></tr>`,
               )
               .join("")}
           </table>
-          <p style="margin:24px 0 8px"><a href="${link}" style="display:inline-block;background:#6322d6;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:12px">${escapar(boton)}</a></p>
-          <p style="margin:12px 0 0;font-size:12px;color:#71717a">${escapar(politica)}</p>
+          <p style="margin:24px 0 8px"><a href="${link}" style="display:inline-block;background:#5932e0;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:12px">${escapar(boton)}</a></p>
+          <p style="margin:12px 0 0;font-size:12px;color:#7b736b">${escapar(politica)}</p>
         </td></tr>
       </table>
-      <p style="font-size:11px;color:#a1a1aa;margin-top:16px">Turnos online con ${escapar(MARCA.nombre)}</p>
+      <p style="font-size:11px;color:#a59d94;margin-top:16px">Turnos online con ${escapar(MARCA.nombre)}</p>
     </td></tr>
   </table>
 </body></html>`;
@@ -151,14 +151,14 @@ export function emailNuevaReserva(
     ["Con", d.profesional],
   ];
   if (d.sena) filas.push(["Seña", `${formatPrecio(d.sena)} (pagada por Mercado Pago)`]);
-  const html = `<!doctype html><html lang="es"><body style="font-family:Arial,Helvetica,sans-serif;color:#1d1830;background:#f6f3ff;padding:24px 12px">
+  const html = `<!doctype html><html lang="es"><body style="font-family:Arial,Helvetica,sans-serif;color:#1a1523;background:#f5f3ff;padding:24px 12px">
   <div style="max-width:480px;margin:auto;background:#fff;border-radius:20px;padding:24px">
-    <p style="margin:0;font-size:13px;font-weight:bold;color:#6322d6">${escapar(d.negocio)}</p>
+    <p style="margin:0;font-size:13px;font-weight:bold;color:#5932e0">${escapar(d.negocio)}</p>
     <h1 style="margin:6px 0 16px;font-size:20px">${d.pendiente ? "Nueva reserva para confirmar" : "Nueva reserva online"}</h1>
     <table style="font-size:14px;width:100%">${filas
-      .map(([k, v]) => `<tr><td style="padding:6px 0;color:#71717a;width:80px">${escapar(k)}</td><td style="padding:6px 0;font-weight:bold">${escapar(v)}</td></tr>`)
+      .map(([k, v]) => `<tr><td style="padding:6px 0;color:#7b736b;width:80px">${escapar(k)}</td><td style="padding:6px 0;font-weight:bold">${escapar(v)}</td></tr>`)
       .join("")}</table>
-    <p style="margin:20px 0 0"><a href="${link}" style="display:inline-block;background:#6322d6;color:#fff;text-decoration:none;font-weight:bold;padding:11px 18px;border-radius:12px">Ver en el panel</a></p>
+    <p style="margin:20px 0 0"><a href="${link}" style="display:inline-block;background:#5932e0;color:#fff;text-decoration:none;font-weight:bold;padding:11px 18px;border-radius:12px">Ver en el panel</a></p>
   </div></body></html>`;
   return {
     para,
@@ -185,14 +185,14 @@ export function emailRecordatorio(para: string, d: DatosTurnoEmail): Email {
 
 /** Mail simple con un botón: verificación de cuenta y recuperación de contraseña. */
 function plantillaCuenta({ titulo, intro, boton, link, pie }: { titulo: string; intro: string; boton: string; link: string; pie: string }) {
-  const html = `<!doctype html><html lang="es"><body style="margin:0;background:#f6f3ff;font-family:Arial,Helvetica,sans-serif;color:#1d1830">
+  const html = `<!doctype html><html lang="es"><body style="margin:0;background:#f5f3ff;font-family:Arial,Helvetica,sans-serif;color:#1a1523">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 12px"><tr><td align="center">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:20px;padding:28px"><tr><td>
-      <p style="margin:0;font-size:13px;font-weight:bold;color:#6322d6">${escapar(MARCA.nombre)}</p>
+      <p style="margin:0;font-size:13px;font-weight:bold;color:#5932e0">${escapar(MARCA.nombre)}</p>
       <h1 style="margin:6px 0 8px;font-size:22px">${escapar(titulo)}</h1>
-      <p style="margin:0 0 20px;font-size:15px;color:#52525b">${escapar(intro)}</p>
-      <p style="margin:0 0 8px"><a href="${escapar(link)}" style="display:inline-block;background:#6322d6;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:12px">${escapar(boton)}</a></p>
-      <p style="margin:16px 0 0;font-size:12px;color:#71717a">${escapar(pie)}</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#5e5750">${escapar(intro)}</p>
+      <p style="margin:0 0 8px"><a href="${escapar(link)}" style="display:inline-block;background:#5932e0;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:12px">${escapar(boton)}</a></p>
+      <p style="margin:16px 0 0;font-size:12px;color:#7b736b">${escapar(pie)}</p>
     </td></tr></table>
   </td></tr></table>
 </body></html>`;

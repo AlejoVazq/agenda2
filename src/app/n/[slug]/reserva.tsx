@@ -133,7 +133,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
 
       {paso === "servicio" ? (
         <section aria-labelledby="t-servicio">
-          <h2 id="t-servicio" className="mb-3 text-lg font-bold">
+          <h2 id="t-servicio" className="mb-4 font-display text-xl font-bold">
             ¿Qué te querés hacer?
           </h2>
           {negocio.servicios.length === 0 ? (
@@ -146,15 +146,32 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
                 <li key={s.id}>
                   <button
                     onClick={() => elegirServicio(s)}
-                    className="flex w-full items-center gap-3 rounded-2xl border border-zinc-200 bg-white p-4 text-left transition hover:border-marca-300 hover:shadow-md hover:shadow-marca-900/5 active:scale-[0.99]"
+                    className="group flex w-full items-center gap-3 rounded-2xl border border-zinc-200/90 bg-white p-4 text-left transition hover:-translate-y-px hover:border-marca-300 hover:shadow-flotante active:scale-[0.99]"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold">{s.nombre}</p>
+                      <p className="font-semibold text-tinta">{s.nombre}</p>
                       {s.descripcion ? <p className="mt-0.5 line-clamp-2 text-sm text-zinc-500">{s.descripcion}</p> : null}
-                      <p className="mt-1 text-sm text-zinc-500">{formatDuracion(s.duracion_min)}</p>
+                      <p className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-zinc-500">
+                        <svg viewBox="0 0 24 24" fill="none" className="size-3.5" aria-hidden>
+                          <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                          <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                        {formatDuracion(s.duracion_min)}
+                      </p>
                     </div>
-                    {s.precio !== null ? <p className="shrink-0 font-bold text-marca-800">{formatPrecio(s.precio)}</p> : null}
-                    <span className="text-xl text-zinc-300">›</span>
+                    {s.precio !== null ? (
+                      <p className="shrink-0 rounded-full bg-marca-50 px-3 py-1 text-sm font-bold tabular-nums text-marca-800">
+                        {formatPrecio(s.precio)}
+                      </p>
+                    ) : null}
+                    <span
+                      className="grid size-8 shrink-0 place-items-center rounded-full bg-zinc-100 text-zinc-500 transition group-hover:bg-marca-700 group-hover:text-white"
+                      aria-hidden
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" className="size-4">
+                        <path d="m9 6 6 6-6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
                   </button>
                 </li>
               ))}
@@ -165,7 +182,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
 
       {paso === "profesional" ? (
         <section aria-labelledby="t-prof">
-          <h2 id="t-prof" className="mb-3 text-lg font-bold">
+          <h2 id="t-prof" className="mb-4 font-display text-xl font-bold">
             ¿Con quién?
           </h2>
           <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
@@ -175,12 +192,14 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
                 <li key={id}>
                   <button
                     onClick={() => elegirProfesional(id)}
-                    className="flex w-full flex-col items-center gap-2 rounded-2xl border border-zinc-200 bg-white p-4 transition hover:border-marca-300 active:scale-[0.98]"
+                    className="flex w-full flex-col items-center gap-2 rounded-2xl border border-zinc-200/90 bg-white p-4 transition hover:-translate-y-px hover:border-marca-300 hover:shadow-flotante active:scale-[0.98]"
                   >
                     <span
                       className={cx(
-                        "grid size-12 place-items-center rounded-full text-lg font-bold",
-                        id === CUALQUIERA ? "bg-zinc-100 text-zinc-500" : "bg-marca-100 text-marca-800",
+                        "grid size-14 place-items-center rounded-full font-display text-xl font-bold",
+                        id === CUALQUIERA
+                          ? "bg-coral-100 text-coral-600"
+                          : "bg-gradient-to-br from-marca-500 to-marca-800 text-white shadow-[0_8px_18px_-8px_rgb(89_50_224/0.7)]",
                       )}
                     >
                       {id === CUALQUIERA ? "★" : nombre.slice(0, 1).toUpperCase()}
@@ -197,7 +216,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
 
       {paso === "horario" ? (
         <section aria-labelledby="t-horario">
-          <h2 id="t-horario" className="mb-3 text-lg font-bold">
+          <h2 id="t-horario" className="mb-4 font-display text-xl font-bold">
             Elegí día y horario
           </h2>
           {avisoHorario ? (
@@ -222,9 +241,9 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
                       className={cx(
                         "flex w-16 flex-col items-center rounded-2xl border py-2.5 transition",
                         activo
-                          ? "border-marca-700 bg-marca-700 text-white"
+                          ? "border-marca-700 bg-marca-700 text-white shadow-[0_8px_18px_-8px_rgb(89_50_224/0.8)]"
                           : disponible
-                            ? "border-zinc-200 bg-white hover:border-marca-300"
+                            ? "border-zinc-200 bg-white hover:border-marca-300 hover:bg-marca-50/50"
                             : "border-transparent bg-zinc-100/70 text-zinc-300",
                         dias === null && "animate-pulse",
                       )}
@@ -232,7 +251,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
                       <span className="text-[11px] font-semibold uppercase">
                         {formatFechaISO(d, { weekday: "short" }).replace(".", "")}
                       </span>
-                      <span className="text-xl font-bold leading-tight">{formatFechaISO(d, { day: "numeric" })}</span>
+                      <span className="font-display text-xl font-bold leading-tight">{formatFechaISO(d, { day: "numeric" })}</span>
                       <span className="text-[11px]">{formatFechaISO(d, { month: "short" }).replace(".", "")}</span>
                     </button>
                   </li>
@@ -269,7 +288,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
 
       {paso === "datos" && servicio && horario ? (
         <section aria-labelledby="t-datos">
-          <h2 id="t-datos" className="mb-1 text-lg font-bold">
+          <h2 id="t-datos" className="mb-1 font-display text-xl font-bold">
             Tus datos
           </h2>
           <p className="mb-4 text-sm text-zinc-600">No hace falta crear una cuenta.</p>
@@ -331,14 +350,35 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
   );
 }
 
+const NOMBRES_PASO: Record<Paso, string> = {
+  servicio: "Servicio",
+  profesional: "Profesional",
+  horario: "Día y horario",
+  datos: "Tus datos",
+};
+
 function Pasos({ paso }: { paso: Paso }) {
   const orden: Paso[] = ["servicio", "profesional", "horario", "datos"];
   const actual = orden.indexOf(paso);
   return (
-    <div className="mb-5 flex gap-1.5" aria-hidden>
-      {orden.map((p, i) => (
-        <span key={p} className={cx("h-1.5 flex-1 rounded-full", i <= actual ? "bg-marca-600" : "bg-zinc-200")} />
-      ))}
+    <div className="mb-5" aria-hidden>
+      <p className="mb-2 flex items-center justify-between text-xs font-semibold text-zinc-500">
+        <span>
+          Paso {actual + 1} de {orden.length}
+        </span>
+        <span className="text-marca-700">{NOMBRES_PASO[paso]}</span>
+      </p>
+      <div className="flex gap-1.5">
+        {orden.map((p, i) => (
+          <span
+            key={p}
+            className={cx(
+              "h-1.5 flex-1 rounded-full transition-colors duration-500",
+              i < actual ? "bg-marca-600" : i === actual ? "bg-gradient-to-r from-marca-600 to-coral-500" : "bg-zinc-200",
+            )}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -357,7 +397,12 @@ function Resumen({
   onCambiar: () => void;
 }) {
   return (
-    <div className="mb-5 flex items-start gap-3 rounded-2xl bg-marca-50 p-4">
+    <div className="mb-6 flex items-start gap-3 rounded-2xl bg-gradient-to-br from-marca-50 to-coral-50/70 p-4 ring-1 ring-marca-100">
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-marca-700 shadow-suave" aria-hidden>
+        <svg viewBox="0 0 24 24" fill="none" className="size-5">
+          <path d="m5 12 5 5L20 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
       <div className="min-w-0 flex-1 text-sm">
         <p className="font-bold text-marca-950">{servicio.nombre}</p>
         <p className="text-marca-900/80">
@@ -371,7 +416,7 @@ function Resumen({
           </p>
         ) : null}
       </div>
-      <button onClick={onCambiar} className="shrink-0 text-sm font-semibold text-marca-700 hover:underline">
+      <button onClick={onCambiar} className="shrink-0 rounded-lg px-2 py-1 text-sm font-semibold text-marca-700 hover:bg-white">
         Cambiar
       </button>
     </div>
@@ -394,13 +439,13 @@ function GrillaHorarios({ horarios, tz, onElegir }: { horarios: Horario[]; tz: s
         .filter((g) => g.lista.length)
         .map((g) => (
           <div key={g.titulo}>
-            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-500">{g.titulo}</p>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-400">{g.titulo}</p>
             <ul className="grid grid-cols-4 gap-2 sm:grid-cols-6">
               {g.lista.map((h) => (
                 <li key={h.inicio}>
                   <button
                     onClick={() => onElegir(h)}
-                    className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 text-sm font-semibold tabular-nums transition hover:border-marca-500 hover:bg-marca-50 active:scale-95"
+                    className="w-full rounded-xl border border-zinc-200 bg-white py-3 text-sm font-semibold tabular-nums transition hover:border-marca-700 hover:bg-marca-700 hover:text-white active:scale-95"
                   >
                     {formatHora(h.inicio, tz)}
                   </button>
@@ -417,7 +462,7 @@ function Cargando() {
   return (
     <div className="grid grid-cols-4 gap-2 sm:grid-cols-6" aria-label="Cargando">
       {Array.from({ length: 8 }).map((_, i) => (
-        <span key={i} className="h-10 animate-pulse rounded-xl bg-zinc-100" />
+        <span key={i} className="h-11 animate-pulse rounded-xl bg-zinc-100" />
       ))}
     </div>
   );

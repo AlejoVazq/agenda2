@@ -22,7 +22,7 @@ export default async function PaginaPassword({ searchParams }: PageProps<"/cuent
       </header>
       <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-4 sm:items-center">
         <Tarjeta className="w-full max-w-md shadow-xl shadow-marca-900/5">
-          <h1 className="text-2xl font-bold tracking-tight">Elegí tu contraseña</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Elegí tu contraseña</h1>
           {valido ? (
             <>
               <p className="mt-1 text-sm text-zinc-600">Después vas a ingresar con ella.</p>

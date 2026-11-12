@@ -21,7 +21,7 @@ export default async function PaginaAcceso({ params }: PageProps<"/acceso/[token
       </header>
       <main className="flex flex-1 items-start justify-center px-4 pb-16 pt-4 sm:items-center">
         <Tarjeta className="w-full max-w-md shadow-xl shadow-marca-900/5">
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="text-3xl font-bold tracking-tight">
             {acceso?.tipo === "recuperacion" ? "Elegí una contraseña nueva" : "Elegí tu contraseña"}
           </h1>
           {acceso ? (

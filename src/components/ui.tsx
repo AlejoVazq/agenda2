@@ -8,25 +8,30 @@ export function cx(...clases: (string | false | null | undefined)[]) {
 
 // --- Botones -------------------------------------------------------------------------
 
-type Variante = "primario" | "secundario" | "fantasma" | "peligro";
+type Variante = "primario" | "secundario" | "fantasma" | "peligro" | "oscuro" | "coral";
 type Tamano = "sm" | "md" | "lg";
 
 const VARIANTES: Record<Variante, string> = {
-  primario: "bg-marca-700 text-white hover:bg-marca-800 active:bg-marca-900 shadow-sm shadow-marca-900/10",
-  secundario: "bg-white text-tinta border border-zinc-200 hover:border-marca-300 hover:bg-marca-50",
+  primario:
+    "bg-marca-700 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(34_19_84/0.2),0_6px_16px_-6px_rgb(89_50_224/0.55)] hover:bg-marca-800 active:bg-marca-900",
+  secundario: "bg-white text-tinta border border-zinc-200 shadow-suave hover:border-marca-300 hover:bg-marca-50/60",
   fantasma: "text-marca-700 hover:bg-marca-50",
   peligro: "bg-white text-red-700 border border-red-200 hover:bg-red-50",
+  coral:
+    "bg-coral-500 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_10px_30px_-10px_rgb(255_106_61/0.7)] hover:bg-coral-600 active:bg-coral-700",
+  oscuro:
+    "bg-tinta text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.12),0_6px_16px_-6px_rgb(26_21_35/0.5)] hover:bg-zinc-800 active:bg-black",
 };
 
 const TAMANOS: Record<Tamano, string> = {
   sm: "h-9 px-3 text-sm rounded-lg",
   md: "h-11 px-4 text-sm rounded-xl",
-  lg: "h-12 px-6 text-base rounded-xl",
+  lg: "h-13 px-6 text-base rounded-2xl",
 };
 
 export function clasesBoton(variante: Variante = "primario", tamano: Tamano = "md", extra?: string) {
   return cx(
-    "inline-flex items-center justify-center gap-2 font-semibold transition-colors select-none",
+    "inline-flex items-center justify-center gap-2 font-semibold transition-[background-color,border-color,transform,box-shadow] duration-150 select-none active:scale-[0.98]",
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-marca-500",
     "disabled:cursor-not-allowed disabled:opacity-50",
     VARIANTES[variante],
@@ -58,7 +63,7 @@ export function BotonLink({
 const claseInput = cx(
   "block w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-base sm:text-sm text-tinta",
   "placeholder:text-zinc-400 transition-colors",
-  "focus:border-marca-500 focus:outline-none focus:ring-4 focus:ring-marca-100",
+  "shadow-[0_1px_2px_rgb(26_21_35/0.03)] hover:border-zinc-300 focus:border-marca-500 focus:outline-none focus:ring-4 focus:ring-marca-100",
   "disabled:bg-zinc-50 disabled:text-zinc-500",
   "aria-[invalid=true]:border-red-400 aria-[invalid=true]:focus:ring-red-100",
 );
@@ -130,7 +135,7 @@ export function Casilla({
 // --- Contenedores y feedback --------------------------------------------------------------
 
 export function Tarjeta({ className, ...props }: ComponentProps<"div">) {
-  return <div className={cx("rounded-2xl border border-zinc-200/80 bg-white p-4 sm:p-6", className)} {...props} />;
+  return <div className={cx("rounded-3xl border border-zinc-200/70 bg-white p-4 shadow-suave sm:p-6", className)} {...props} />;
 }
 
 export function Aviso({
@@ -192,7 +197,7 @@ export function EncabezadoPagina({
       ) : null}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-tinta">{titulo}</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight text-tinta sm:text-3xl">{titulo}</h1>
           {descripcion ? <p className="mt-1 text-sm text-zinc-600">{descripcion}</p> : null}
         </div>
         {acciones ? <div className="flex flex-wrap gap-2">{acciones}</div> : null}
@@ -203,7 +208,13 @@ export function EncabezadoPagina({
 
 export function Vacio({ titulo, descripcion, accion }: { titulo: string; descripcion?: string; accion?: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-dashed border-zinc-300 bg-white/60 px-6 py-10 text-center">
+    <div className="rounded-3xl border border-dashed border-zinc-300 bg-white/60 px-6 py-10 text-center">
+      <span className="mx-auto mb-3 grid size-11 place-items-center rounded-2xl bg-marca-50 text-marca-600" aria-hidden>
+        <svg viewBox="0 0 24 24" fill="none" className="size-5">
+          <rect x="4" y="5" width="16" height="15" rx="3" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M8 3v4M16 3v4M4 10h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      </span>
       <p className="font-semibold text-tinta">{titulo}</p>
       {descripcion ? <p className="mx-auto mt-1 max-w-sm text-sm text-zinc-600">{descripcion}</p> : null}
       {accion ? <div className="mt-4">{accion}</div> : null}
@@ -211,17 +222,40 @@ export function Vacio({ titulo, descripcion, accion }: { titulo: string; descrip
   );
 }
 
-export function Logo({ className }: { className?: string }) {
+/** Isotipo: el "2" de Agenda2 con el punto coral (un turno reservado). Mismo dibujo que `src/app/icon.svg`. */
+export function Isotipo({ className }: { className?: string }) {
   return (
-    <span className={cx("inline-flex items-center gap-2 font-extrabold tracking-tight text-tinta", className)}>
-      <span className="grid size-8 place-items-center rounded-xl bg-gradient-to-br from-marca-600 to-coral-500 text-white">
-        <svg viewBox="0 0 24 24" fill="none" className="size-4.5" aria-hidden>
-          <rect x="4" y="5" width="16" height="15" rx="3" stroke="currentColor" strokeWidth="2" />
-          <path d="M8 3v4M16 3v4M4 10h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          <path d="m9.5 14.5 2 2 3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+    <svg viewBox="0 0 64 64" className={cx("size-8 shrink-0", className)} aria-hidden>
+      <defs>
+        <linearGradient id="isotipo-g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#7d5fff" />
+          <stop offset="1" stopColor="#3b2290" />
+        </linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="18" fill="url(#isotipo-g)" />
+      <path
+        d="M21.5 25.5c0-6.4 4.7-10.5 10.5-10.5s10.5 3.9 10.5 9.6c0 5-3.2 8-7.6 11.9L21.5 48.5h21.5"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="6.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="50" cy="14" r="5" fill="#ff6a3d" />
+    </svg>
+  );
+}
+
+export function Logo({ className, claro }: { className?: string; claro?: boolean }) {
+  // Si el nombre termina en número (Agenda2), el número va en el color de marca.
+  const [, palabra, numero] = /^(.*?)(\d*)$/.exec(MARCA.nombre) ?? [, MARCA.nombre, ""];
+  return (
+    <span className={cx("inline-flex items-center gap-2", className)}>
+      <Isotipo />
+      <span className={cx("font-display text-xl font-bold tracking-tight", claro ? "text-white" : "text-tinta")}>
+        {palabra}
+        {numero ? <span className={claro ? "text-coral-400" : "text-marca-600"}>{numero}</span> : null}
       </span>
-      <span className="text-lg">{MARCA.nombre}</span>
     </span>
   );
 }

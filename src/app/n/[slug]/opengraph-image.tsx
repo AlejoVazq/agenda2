@@ -13,6 +13,7 @@ export default async function Imagen({ params }: { params: Promise<{ slug: strin
   const negocio = await getNegocioPublico(slug);
   const nombre = negocio?.nombre ?? MARCA.nombre;
   const rubro = negocio ? (RUBROS[negocio.rubro as Rubro] ?? "Turnos online") : "Turnos online";
+  const inicial = nombre.trim().charAt(0).toUpperCase();
 
   return new ImageResponse(
     (
@@ -24,36 +25,60 @@ export default async function Imagen({ params }: { params: Promise<{ slug: strin
           flexDirection: "column",
           justifyContent: "space-between",
           padding: 72,
-          background: "linear-gradient(135deg, #3b0f8c 0%, #6322d6 55%, #8b5cf6 100%)",
+          background:
+            "radial-gradient(ellipse 70% 90% at 100% 0%, rgba(106,67,246,0.75), transparent), radial-gradient(ellipse 60% 80% at 0% 100%, rgba(255,106,61,0.4), transparent), #15111d",
           color: "white",
           fontFamily: "sans-serif",
         }}
       >
-        <div style={{ display: "flex", fontSize: 30, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", opacity: 0.8 }}>
-          {rubro}
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              width: 96,
+              height: 96,
+              borderRadius: 28,
+              background: "rgba(255,255,255,0.12)",
+              border: "2px solid rgba(255,255,255,0.2)",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 48,
+              fontWeight: 800,
+              marginRight: 28,
+            }}
+          >
+            {inicial}
+          </div>
+          <div style={{ display: "flex", fontSize: 28, fontWeight: 700, letterSpacing: 4, textTransform: "uppercase", color: "#ffab8a" }}>
+            {rubro}
+          </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", fontSize: nombre.length > 24 ? 76 : 96, fontWeight: 800, lineHeight: 1.05 }}>{nombre}</div>
-          <div style={{ display: "flex", marginTop: 24, fontSize: 40, opacity: 0.9 }}>Reservá tu turno online, en un minuto.</div>
+          <div style={{ display: "flex", fontSize: nombre.length > 24 ? 80 : 104, fontWeight: 800, lineHeight: 1.02, letterSpacing: -3 }}>
+            {nombre}
+          </div>
+          <div style={{ display: "flex", marginTop: 24, fontSize: 40, color: "rgba(255,255,255,0.75)" }}>
+            Reservá tu turno online, en un minuto.
+          </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", fontSize: 30, opacity: 0.85 }}>
+        <div style={{ display: "flex", alignItems: "center", fontSize: 30, color: "rgba(255,255,255,0.7)" }}>
           <div
             style={{
               display: "flex",
               width: 48,
               height: 48,
               borderRadius: 14,
-              background: "white",
-              color: "#6322d6",
+              background: "linear-gradient(135deg, #7d5fff, #3b2290)",
               alignItems: "center",
               justifyContent: "center",
               fontWeight: 800,
+              color: "white",
               marginRight: 16,
             }}
           >
-            ✓
+            2
           </div>
-          {MARCA.nombre}
+          Turnos con {MARCA.nombre}
         </div>
       </div>
     ),

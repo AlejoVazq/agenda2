@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Logo } from "@/components/ui";
+import { Isotipo, Logo } from "@/components/ui";
 import { cerrarSesion } from "@/app/(auth)/acciones";
 import { requerirPanel } from "@/lib/auth";
 import { AvisoSuscripcion } from "./aviso-suscripcion";
@@ -13,15 +13,20 @@ export default async function LayoutPanel({ children }: { children: ReactNode })
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[16rem_1fr]">
-      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-zinc-200 bg-white px-4 py-5 lg:flex">
+      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-zinc-200/80 bg-white/70 px-4 py-5 backdrop-blur lg:flex">
         <Link href="/panel" className="px-2">
           <Logo />
         </Link>
-        <div className="mt-6 rounded-xl bg-zinc-50 px-3 py-2.5">
-          <p className="truncate text-sm font-semibold">{negocio.nombre}</p>
-          <p className="text-xs text-zinc-500">
-            {perfil.nombre} · {esDueno ? "Dueño/a" : "Equipo"}
-          </p>
+        <div className="mt-6 flex items-center gap-3 rounded-2xl border border-zinc-200/80 bg-white px-3 py-2.5 shadow-suave">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-marca-500 to-marca-800 font-display text-sm font-bold text-white" aria-hidden>
+            {negocio.nombre.trim().charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{negocio.nombre}</p>
+            <p className="truncate text-xs text-zinc-500">
+              {perfil.nombre} · {esDueno ? "Dueño/a" : "Equipo"}
+            </p>
+          </div>
         </div>
         <div className="mt-4 flex-1 overflow-y-auto">
           <MenuLateral esDueno={esDueno} />
@@ -30,9 +35,12 @@ export default async function LayoutPanel({ children }: { children: ReactNode })
           <a
             href={`/n/${negocio.slug}`}
             target="_blank"
-            className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-marca-700 hover:bg-marca-50"
+            className="flex items-center justify-between gap-2 rounded-xl bg-marca-50 px-3 py-2.5 text-sm font-semibold text-marca-800 transition hover:bg-marca-100"
           >
-            Ver mi página pública ↗
+            Ver mi página pública
+            <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden>
+              <path d="M7 17 17 7M8 7h9v9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </a>
           <form action={cerrarSesion}>
             <button className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-zinc-600 hover:bg-zinc-100">
@@ -43,12 +51,15 @@ export default async function LayoutPanel({ children }: { children: ReactNode })
       </aside>
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
-          <Link href="/panel" className="min-w-0">
-            <p className="truncate text-base font-bold">{negocio.nombre}</p>
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-zinc-200/80 bg-fondo/85 px-4 py-3 backdrop-blur-xl lg:hidden">
+          <Link href="/panel" className="flex min-w-0 items-center gap-2.5">
+            <Isotipo className="size-8" />
+            <span className="min-w-0">
+            <p className="truncate font-display text-base font-bold">{negocio.nombre}</p>
             <p className="text-xs text-zinc-500">
               {perfil.nombre} · {esDueno ? "Dueño/a" : "Equipo"}
             </p>
+            </span>
           </Link>
           <form action={cerrarSesion}>
             <button className="rounded-lg px-2 py-1 text-sm font-medium text-zinc-600 hover:bg-zinc-100">Salir</button>
