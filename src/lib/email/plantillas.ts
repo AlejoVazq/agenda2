@@ -220,3 +220,51 @@ export function emailRestablecerPassword(para: string, d: { nombre: string; url:
   });
   return { para, asunto: `Tu contraseña de ${MARCA.nombre}`, html, texto };
 }
+
+export type AvisoSuscripcion = {
+  tipo: "por_vencer" | "vencio" | "bloqueado";
+  /** Estado al momento del aviso: "prueba" o "activa" para por_vencer. */
+  estado: string;
+  negocio: string;
+  nombre: string;
+  vence: string;
+  fin_servicio: string | null;
+};
+
+/** Avisos del vencimiento de la suscripción al dueño (los manda el cron). */
+export function emailSuscripcion(para: string, a: AvisoSuscripcion): Email {
+  const nombre = a.nombre.split(" ")[0];
+  const contacto = env.contactoEmail ? ` Escribinos a ${env.contactoEmail}.` : "";
+  const textos = {
+    por_vencer:
+      a.estado === "prueba"
+        ? {
+            asunto: `Tu prueba de ${MARCA.nombre} termina el ${formatFechaLarga(a.vence)}`,
+            titulo: "Tu período de prueba está por terminar",
+            intro: `Hola ${nombre}, la prueba de ${a.negocio} termina el ${formatFechaLarga(a.vence)}. Para seguir tomando turnos online después, contratá el plan mensual.${contacto}`,
+          }
+        : {
+            asunto: `Tu plan de ${MARCA.nombre} vence el ${formatFechaLarga(a.vence)}`,
+            titulo: "Tu plan está por vencer",
+            intro: `Hola ${nombre}, el plan de ${a.negocio} vence el ${formatFechaLarga(a.vence)}. Renovalo para que tu página siga tomando reservas.${contacto}`,
+          },
+    vencio: {
+      asunto: `Tu suscripción de ${MARCA.nombre} venció`,
+      titulo: "Tu suscripción venció",
+      intro: `Hola ${nombre}, la suscripción de ${a.negocio} venció, pero todo sigue funcionando${a.fin_servicio ? ` hasta el ${formatFechaLarga(a.fin_servicio)}` : ""}. Después, el panel queda en solo lectura y tu página deja de tomar reservas.${contacto}`,
+    },
+    bloqueado: {
+      asunto: `${a.negocio} dejó de tomar reservas online`,
+      titulo: "Tu página dejó de tomar reservas",
+      intro: `Hola ${nombre}, como la suscripción de ${a.negocio} no se renovó, tu página ya no toma reservas nuevas y el panel quedó en solo lectura. Los turnos que ya estaban reservados siguen en pie. Para volver a activarla, renová el plan.${contacto}`,
+    },
+  }[a.tipo];
+  const { html, texto } = plantillaCuenta({
+    titulo: textos.titulo,
+    intro: textos.intro,
+    boton: "Ir a mi panel",
+    link: `${env.siteUrl}/panel`,
+    pie: `Recibís este mail porque sos el dueño de ${a.negocio} en ${MARCA.nombre}.`,
+  });
+  return { para, asunto: textos.asunto, html, texto, responderA: env.contactoEmail || null };
+}

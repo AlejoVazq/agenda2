@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { integracionesDisponibles } from "@/lib/env";
 import { enviarEmail } from "@/lib/email/enviar";
-import { emailRecordatorio } from "@/lib/email/plantillas";
+import { emailRecordatorio, emailSuscripcion, type AvisoSuscripcion } from "@/lib/email/plantillas";
 import { importarOcupadosTodos, sincronizarPendientes } from "@/lib/google";
 import { comoServidor, sql } from "@/lib/db";
 import { enviarPlantillaWhatsApp } from "@/lib/whatsapp-api";
@@ -14,7 +14,8 @@ import { enviarPlantillaWhatsApp } from "@/lib/whatsapp-api";
 //  1. Libera turnos cuya seña no se pagó a tiempo.
 //  2. Recordatorios por mail y por WhatsApp.
 //  3. Google Calendar: reintenta sincronizaciones y trae horarios ocupados.
-//  4. Limpia contadores viejos de límites de uso.
+//  4. Avisa a los dueños que su suscripción está por vencer, venció o se bloqueó.
+//  5. Limpia contadores viejos de límites de uso.
 export const maxDuration = 300;
 
 type PendienteMail = {
@@ -110,6 +111,38 @@ async function recordatoriosWhatsApp() {
   return { enviados: pendientes.length - fallidos.length, fallidos: fallidos.length };
 }
 
+async function avisosSuscripcion() {
+  // Sin mail configurado no se reclaman: quedarían marcados como enviados.
+  if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) return { omitido: true };
+  const avisos = await comoServidor((tx) =>
+    tx.varios<Omit<AvisoSuscripcion, "negocio"> & { negocio_id: string; nombre: string; dueno_nombre: string; dueno_email: string }>(
+      sql`select * from plataforma.reclamar_avisos_suscripcion()`,
+    ),
+  );
+  let fallidos = 0;
+  for (const a of avisos) {
+    const r = await enviarEmail(
+      emailSuscripcion(a.dueno_email, {
+        tipo: a.tipo,
+        estado: a.estado,
+        negocio: a.nombre,
+        nombre: a.dueno_nombre,
+        vence: a.vence,
+        fin_servicio: a.fin_servicio,
+      }),
+    );
+    if (r.ok) continue;
+    fallidos++;
+    // Se reintenta en la próxima corrida.
+    await comoServidor((tx) =>
+      tx.ejecutar(sql`
+        delete from plataforma.avisos_suscripcion
+        where negocio_id = ${a.negocio_id} and tipo = ${a.tipo} and vence = ${a.vence}::timestamptz`),
+    );
+  }
+  return { enviados: avisos.length - fallidos, fallidos };
+}
+
 /** Corre una tarea sin que su error frene a las demás. */
 async function tarea<T>(nombre: string, fn: () => Promise<T>) {
   try {
@@ -130,6 +163,7 @@ export async function GET(request: NextRequest) {
     ),
     mail: await tarea("recordatorios mail", recordatoriosMail),
     whatsapp: await tarea("recordatorios whatsapp", recordatoriosWhatsApp),
+    suscripciones: await tarea("avisos de suscripción", avisosSuscripcion),
     googleOcupados: google ? await tarea("google ocupados", importarOcupadosTodos) : { omitido: true },
     googleTurnos: google ? await tarea("google turnos", () => sincronizarPendientes(100)) : { omitido: true },
     limpieza: await tarea("limpieza", async () => {

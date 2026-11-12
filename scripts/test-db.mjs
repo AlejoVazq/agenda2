@@ -1217,14 +1217,46 @@ await prueba("admin: pagos encadenados, anulación, prueba, suspensión, notas, 
   assert.ok(d.auditoria.every((a) => a.admin === "admin"));
 });
 
-await prueba("admin: avisos de vencimiento solo para el servidor", async () => {
-  const filas = await servicio("select * from plataforma.negocios_por_vencer(now(), now() + interval '30 days')");
-  const b = filas.find((f) => f.negocio_id === negB);
-  assert.equal(b.dueno_email, "beto@test.com");
-  assert.equal(b.estado, "prueba");
-  await como("ana", () =>
-    falla(q("select * from plataforma.negocios_por_vencer(now(), now())"), /permission denied/, "dueña"),
+await prueba("avisos: el cron reclama cada aviso de vencimiento una sola vez por ciclo", async () => {
+  const reclamar = async () =>
+    (await servicio("select * from plataforma.reclamar_avisos_suscripcion()")).filter((a) => a.negocio_id === negB);
+  const fijarPrueba = (intervalo) =>
+    q("update public.negocios set prueba_hasta = now() + $2::interval, pagado_hasta = null where id = $1", [negB, intervalo]);
+
+  await fijarPrueba("10 days");
+  assert.deepEqual(await reclamar(), [], "lejos del vencimiento");
+
+  await fijarPrueba("2 days");
+  const [porVencer] = await reclamar();
+  assert.equal(porVencer.tipo, "por_vencer");
+  assert.equal(porVencer.dueno_email, "beto@test.com");
+  assert.deepEqual(await reclamar(), [], "no se repite");
+
+  await fijarPrueba("-1 day");
+  assert.deepEqual((await reclamar()).map((a) => a.tipo), ["vencio"]);
+  await fijarPrueba("-6 days");
+  assert.deepEqual((await reclamar()).map((a) => a.tipo), ["bloqueado"]);
+  await fijarPrueba("-40 days");
+  assert.deepEqual(await reclamar(), [], "vencido hace mucho: no se le escribe");
+
+  // Nuevo ciclo (otra fecha de vencimiento): los avisos vuelven a salir.
+  await fijarPrueba("1 day");
+  const [nuevo] = await reclamar();
+  assert.equal(nuevo.tipo, "por_vencer");
+  // Si el mail falla, el cron desmarca el aviso y sale en la corrida siguiente.
+  await servicio("delete from plataforma.avisos_suscripcion where negocio_id = $1 and tipo = $2 and vence = $3", [
+    negB, nuevo.tipo, nuevo.vence,
+  ]);
+  assert.deepEqual((await reclamar()).map((a) => a.tipo), ["por_vencer"], "reintento");
+  await como("servidor", () =>
+    falla(q("insert into plataforma.avisos_suscripcion (negocio_id, tipo, vence) values ($1, 'vencio', now())", [negB]), /permission denied/, "servidor inserta"),
   );
+  await como("servidor", () => falla(q("select * from plataforma.pagos"), /permission denied/, "servidor lee pagos"));
+
+  await como("ana", () =>
+    falla(q("select * from plataforma.reclamar_avisos_suscripcion()"), /permission denied/, "dueña"),
+  );
+  await fijarPrueba("20 days");
 });
 
 await prueba("cuentas: borrar un usuario borra su perfil, sus sesiones y sus accesos", async () => {
