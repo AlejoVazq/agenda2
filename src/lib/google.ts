@@ -11,6 +11,8 @@ import {
   type Integracion,
 } from "@/lib/integraciones";
 import { MARCA } from "@/lib/marca";
+import { enviarEmail } from "@/lib/email/enviar";
+import { emailGoogleDesconectado } from "@/lib/email/plantillas";
 import { ESTADOS_TURNO, type EstadoTurno } from "@/lib/tipos";
 
 // Fase 5: Google Calendar, una cuenta por profesional.
@@ -19,7 +21,13 @@ import { ESTADOS_TURNO, type EstadoTurno } from "@/lib/tipos";
 //  - Google -> Agenda2 (opcional): lo que el profesional tiene ocupado en Google
 //    se importa como ausencia para no ofrecer esos horarios. Ver importarOcupados().
 
-const SCOPES = ["openid", "email", "https://www.googleapis.com/auth/calendar.events"];
+// Permisos mínimos (verificación de Google, docs/verificacion-google.md):
+//  - openid + email: solo para mostrar qué cuenta se conectó.
+//  - calendar.events.owned: crear, cambiar y borrar los eventos de los turnos y leer
+//    inicio/fin de los ocupados, únicamente en el calendario principal del profesional
+//    (que es suyo). Es más acotado que calendar.events (todos los calendarios).
+const SCOPE_CALENDARIO = "https://www.googleapis.com/auth/calendar.events.owned";
+const SCOPES = ["openid", "email", SCOPE_CALENDARIO];
 const API = "https://www.googleapis.com/calendar/v3";
 
 export type ConfigGoogle = {
@@ -78,7 +86,8 @@ export async function canjearCodigoGoogle(codigo: string) {
   const t = await pedirToken({ code: codigo, grant_type: "authorization_code", redirect_uri: urlRedireccionGoogle() });
   if (!t.ok || !t.access_token) throw new Error(`Google rechazó el código (${t.error ?? "sin detalle"}).`);
   if (!t.refresh_token) throw new Error("Google no devolvió un permiso permanente. Probá conectar de nuevo.");
-  if (!t.scope?.includes("calendar.events")) {
+  // Con el consentimiento granular de Google el usuario puede destildar el calendario.
+  if (!t.scope?.split(" ").includes(SCOPE_CALENDARIO)) {
     throw new Error("Hace falta permitir el acceso al calendario para conectar la cuenta.");
   }
 
@@ -114,15 +123,34 @@ async function accesoProfesional(profesionalId: string): Promise<Acceso | null> 
   if (!t.ok || !t.access_token) {
     if (t.error === "invalid_grant") {
       // El usuario quitó el permiso desde su cuenta de Google (o venció).
+      // Solo se llega con la integración activa: el aviso sale una vez por desconexión.
       await actualizarIntegracion(integracion, {
         estado: "error",
         config: { ultimo_error: "Google revocó el acceso. Volvé a conectar la cuenta." },
       });
+      await avisarDesconexion(integracion).catch((e) => console.error("[google] aviso de desconexión", e));
     }
     return null;
   }
   cacheTokens.set(integracion.id, { token: t.access_token, vence: Date.now() + (t.expires_in ?? 3600) * 1000 });
   return { token: t.access_token, integracion };
+}
+
+/** Mail al profesional (su cuenta de Google) y al dueño: hay que volver a conectar. */
+async function avisarDesconexion(integracion: Integracion<ConfigGoogle>) {
+  const datos = await comoServidor((tx) =>
+    tx.uno<{ profesional: string; negocio: string; dueno_email: string | null }>(sql`
+      select p.nombre as profesional, n.nombre as negocio,
+        (select u."email" from public.perfiles pe join auth."user" u on u."id" = pe.id
+          where pe.negocio_id = n.id and pe.rol = 'dueno' order by pe.created_at limit 1) as dueno_email
+      from public.profesionales p join public.negocios n on n.id = p.negocio_id
+      where p.id = ${integracion.profesional_id}`),
+  );
+  if (!datos) return;
+  const destinos = new Set([integracion.config.email, datos.dueno_email].filter((m): m is string => Boolean(m?.includes("@"))));
+  for (const para of destinos) {
+    await enviarEmail(emailGoogleDesconectado(para, { profesional: datos.profesional, negocio: datos.negocio }));
+  }
 }
 
 function api(token: string, metodo: string, ruta: string, cuerpo?: unknown) {
@@ -288,14 +316,21 @@ type EventoGoogle = {
   transparency?: string;
   start?: { dateTime?: string; date?: string };
   end?: { dateTime?: string; date?: string };
+  id?: string;
   attendees?: { self?: boolean; responseStatus?: string }[];
-  extendedProperties?: { private?: Record<string, string> };
 };
+
+/** ¿Lo creó Agenda2? Sus eventos tienen id fijo: "tn" + el id del turno sin guiones (idEvento). */
+const EVENTO_PROPIO = /^tn[0-9a-f]{32}$/;
 
 /**
  * Importa como ausencias los horarios ocupados del calendario del profesional,
  * desde ahora hasta el máximo de anticipación del negocio. Ignora los eventos
- * creados por Agenda2 (marcados con turniaTurnoId), los marcados como "disponible" y los rechazados.
+ * creados por Agenda2 (por su id), los marcados como "disponible" y los rechazados.
+ *
+ * Datos mínimos (verificación de Google): `fields` pide solo id, estado, ocupado/
+ * disponible, inicio, fin y la respuesta del propio usuario. Nunca títulos,
+ * descripciones, lugares, invitados ni propiedades de otras apps.
  */
 export async function importarOcupados(integracion: Integracion<ConfigGoogle>) {
   if (!integracion.profesional_id) return 0;
@@ -318,7 +353,7 @@ export async function importarOcupados(integracion: Integracion<ConfigGoogle>) {
         timeMax: hasta.toISOString(),
         singleEvents: "true",
         maxResults: "2500",
-        fields: "nextPageToken,items(status,transparency,start,end,attendees(self,responseStatus),extendedProperties)",
+        fields: "nextPageToken,items(id,status,transparency,start,end,attendees(self,responseStatus))",
       });
       if (pagina) params.set("pageToken", pagina);
       const r = await api(acceso.token, "GET", `/calendars/${cal(acceso)}/events?${params}`);
@@ -326,7 +361,7 @@ export async function importarOcupados(integracion: Integracion<ConfigGoogle>) {
       const cuerpo = (await r.json()) as { items?: EventoGoogle[]; nextPageToken?: string };
       for (const ev of cuerpo.items ?? []) {
         if (ev.status === "cancelled" || ev.transparency === "transparent") continue;
-        if (ev.extendedProperties?.private?.turniaTurnoId) continue;
+        if (ev.id && EVENTO_PROPIO.test(ev.id)) continue;
         if (ev.attendees?.some((a) => a.self && a.responseStatus === "declined")) continue;
         const inicio = ev.start?.dateTime ?? (ev.start?.date ? localADate(ev.start.date, "00:00", tz).toISOString() : null);
         const fin = ev.end?.dateTime ?? (ev.end?.date ? localADate(ev.end.date, "00:00", tz).toISOString() : null);

@@ -171,6 +171,7 @@ src/
 
 ### Fase 5: Google Calendar
 1. En https://console.cloud.google.com creá un proyecto, habilitá **Google Calendar API** y configurá la pantalla de consentimiento (tipo "Externo"; mientras esté "en prueba", agregá tus cuentas como usuarios de prueba).
+   Permisos que pide la app: `openid`, `email` y `calendar.events.owned`. Para producción y la verificación de Google, seguí `docs/verificacion-google.md`.
 2. Credenciales → **ID de cliente OAuth** → "Aplicación web". URI de redirección: `http://localhost:3000/api/google/callback` (y la de producción).
 3. Completá `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `INTEGRACIONES_CLAVE` en `.env.local` y reiniciá `npm run dev`.
 4. Panel → **Integraciones** → "Conectar" al lado de cada profesional. Cada empleado ve solo su propia fila y conecta su cuenta desde su usuario.

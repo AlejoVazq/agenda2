@@ -74,6 +74,30 @@ export default async function PaginaIntegraciones({ searchParams }: PageProps<"/
             {esDueno ? "Todavía no hay profesionales activos." : "Tu usuario no tiene una agenda asignada."}
           </p>
         ) : (
+          <>
+          {/* Aviso en contexto antes de pedir el permiso (política de datos de Google). */}
+          <div className="mb-4 rounded-xl bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+            <p className="font-semibold text-tinta">Qué permiso le pedimos a Google</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              <li>Ver tu mail, para mostrar qué cuenta conectaste.</li>
+              <li>
+                Crear, cambiar y borrar los eventos de los turnos, solo en tu calendario principal. El evento lleva el
+                servicio y el nombre y contacto del cliente.
+              </li>
+              <li>
+                De los eventos de ese calendario, leer solo cuándo empiezan y terminan y si te ocupan, para no ofrecer
+                esos horarios. No leemos títulos, descripciones ni invitados.
+              </li>
+            </ul>
+            <p className="mt-2 text-xs text-zinc-500">
+              No compartimos ni vendemos estos datos. Podés desconectar cuando quieras: se borran los turnos que creamos y
+              se anula el permiso. Más detalle en la{" "}
+              <a href="/privacidad#google" className="font-medium text-marca-700 underline">
+                política de privacidad
+              </a>
+              .
+            </p>
+          </div>
           <ul className="divide-y divide-zinc-100 rounded-xl border border-zinc-200">
             {profs.map((p) => {
               const g = googlePorProf.get(p.id);
@@ -114,6 +138,7 @@ export default async function PaginaIntegraciones({ searchParams }: PageProps<"/
               );
             })}
           </ul>
+          </>
         )}
         {esDueno && disponibles.google ? (
           <p className="mt-3 text-xs text-zinc-500">

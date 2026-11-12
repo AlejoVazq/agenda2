@@ -51,7 +51,7 @@ export function FormularioRegistro() {
         <Input id="password" name="password" type="password" autoComplete="new-password" minLength={8} required />
       </Campo>
       <BotonEnviar className="w-full" tamano="lg" pendiente="Creando cuenta…">
-        Crear cuenta gratis
+        Crear cuenta y probar 7 días
       </BotonEnviar>
     </form>
   );

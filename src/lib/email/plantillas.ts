@@ -268,3 +268,15 @@ export function emailSuscripcion(para: string, a: AvisoSuscripcion): Email {
   });
   return { para, asunto: textos.asunto, html, texto, responderA: env.contactoEmail || null };
 }
+
+/** Google cortó el acceso al calendario (lo quitó el usuario o venció): hay que reconectar. */
+export function emailGoogleDesconectado(para: string, d: { profesional: string; negocio: string }): Email {
+  const { html, texto } = plantillaCuenta({
+    titulo: "Se desconectó Google Calendar",
+    intro: `Google cortó el acceso al calendario de ${d.profesional} en ${d.negocio}. Mientras tanto, los turnos nuevos no se copian a ese calendario y sus horarios ocupados no se tienen en cuenta al reservar. Para volver a conectarlo, entrá a Integraciones y tocá "Conectar".`,
+    boton: "Ir a Integraciones",
+    link: `${env.siteUrl}/panel/integraciones`,
+    pie: "Suele pasar si se quitó el permiso desde la cuenta de Google o si se cambió la contraseña de esa cuenta.",
+  });
+  return { para, asunto: `Volvé a conectar Google Calendar de ${d.profesional}`, html, texto };
+}

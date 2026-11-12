@@ -30,7 +30,7 @@ export default async function PaginaLogin({ searchParams }: PageProps<"/login">)
       <p className="mt-6 border-t border-zinc-100 pt-5 text-center text-sm text-zinc-600">
         ¿Tenés un negocio y no tenés cuenta?{" "}
         <Link href="/registro" className="font-semibold text-marca-700 hover:underline">
-          Registrate gratis
+          Probalo 7 días gratis
         </Link>
       </p>
     </Tarjeta>
