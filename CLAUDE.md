@@ -27,13 +27,14 @@ App de agenda y reservas online de turnos para negocios de servicios en Argentin
 | `npm run build` / `npm start` | Build y servidor de producción |
 | `npm run typecheck` | `next typegen` + `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm run test:db` | 55 pruebas de migraciones, roles y RLS con PGlite |
+| `npm run test:db` | 62 pruebas de migraciones, roles, RLS, suscripciones y admin con PGlite |
 | `npm run db:migrar` | Aplica migraciones pendientes (usa `DATABASE_URL_MIGRAR`) |
 | `npm run db:seed` / `db:reset` | Datos demo / borrar todo y volver a migrar + seed (solo contra una base local) |
+| `npm run admin -- agregar <mail>` | Hace admin de la plataforma a una cuenta (también `listar`, `quitar`, `quitar-2fa`). Usa `DATABASE_URL_MIGRAR` |
 
 Antes de dar algo por terminado: `test:db`, `typecheck`, `lint` y `build`.
 
-Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en `.env.development.local` (o `.env.local`), ver `.env.example`. Sin `RESEND_API_KEY` los mails salen enteros en la consola de `npm run dev` (ahí están los links de verificación y de recuperación). Seed: `demo@turnos.test / demo1234` → `/n/estudio-luna`; `barbero@turnos.test / demo1234` → `/n/peluqueria-caballeros`.
+Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en `.env.development.local` (o `.env.local`), ver `.env.example`. Sin `RESEND_API_KEY` los mails salen enteros en la consola de `npm run dev` (ahí están los links de verificación y de recuperación). Seed: `demo@turnos.test / demo1234` → `/n/estudio-luna`; `barbero@turnos.test / demo1234` → `/n/peluqueria-caballeros`; `admin@turnos.test / demo1234` → `/admin` (pide configurar el segundo factor).
 
 ## Arquitectura (lo que no se ve a simple vista)
 
@@ -57,16 +58,19 @@ Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en 
 - Tareas periódicas: **un solo endpoint** `GET /api/cron` con `Authorization: Bearer <CRON_SECRET>` (señas vencidas, recordatorios por mail y WhatsApp, sincronización con Google, limpieza de límites y links vencidos). En el servidor lo llama `deploy/agenda2-cron.timer` cada hora.
 - Se usa `after()` para mandar mails y sincronizar con Google después de responder.
 - Integraciones opcionales: si falta su variable, la función se oculta (`integracionesDisponibles()` en `src/lib/env.ts`).
+- **Suscripciones** (migración 0002, `src/lib/suscripcion.ts`): plan mensual, pagos registrados a mano desde `/admin`. El estado **se calcula** con `prueba_hasta` (7 días desde el alta), `pagado_hasta` y `suspendido_at` (`plataforma.estado_suscripcion`): prueba → activa → gracia (5 días, todo funciona con aviso) → vencida; o suspendida por el admin. Si no está habilitado, el trigger `plataforma.tg_exigir_habilitado` rechaza los turnos nuevos y toda escritura del panel (`NEGOCIO_NO_HABILITADO`): el panel queda en solo lectura y el portal muestra que no toma reservas. Siguen andando la cancelación del cliente, el cron y el admin. Las acciones que escriben con el rol del servidor (equipo, integraciones, Google) chequean `sesion.habilitado`. El dueño no puede cambiar esas columnas (no tienen `grant update`). El cron avisa por mail 3 días antes, al vencer y al bloquearse (`plataforma.reclamar_avisos_suscripcion`).
+- **Panel de la plataforma `/admin`** (`src/lib/admin.ts`, `src/app/admin`): lista de negocios, detalle (suscripción, pagos, configuración en solo lectura, contacto, notas, historial) y acciones (registrar/anular pago, extender prueba, suspender/reactivar, cambiar dirección, link de contraseña para el dueño, reenviar verificación). **Nunca muestra clientes, turnos uno por uno ni precios.** Esquema `plataforma` (administradores, pagos, notas, auditoría, últimos ingresos) sin grants a la app: todo pasa por funciones `plataforma.admin_*` que verifican en la base que `app.usuario_id()` sea admin y dejan auditoría. A quien no es admin, `/admin` le da 404. **Segundo factor (TOTP, plugin `twoFactor` de Better Auth) obligatorio** para los admins; el login pide el código en `/login/codigo`. Los admins se agregan solo desde el servidor (`npm run admin -- agregar`) y conviene que sean cuentas sin negocio.
 - **Seña con Mercado Pago apagada**: `SENA_ACTIVA = false` en `src/lib/env.ts`. No se borró nada; se activa pasándolo a `true`.
 - En Google, los eventos creados por la app llevan `extendedProperties.private.turniaTurnoId`. **No renombrar** esa clave: sirve para no importar los propios eventos como "ocupados".
 
-## Estado (2026-11-11)
+## Estado (2026-11-12)
 
 - Fases 1 a 6 y extras hechas. Supabase reemplazado por Postgres propio + Better Auth (rama `sin-supabase`), probado en local de punta a punta.
 - Objetivo: que un amigo peluquero masculino la pruebe en su local. Google Calendar puede quedar sin conectar.
 - **Publicada en https://agenda2.tech** (VPS Hostinger `187.53.106.37`, SSH como `root`) desde el 2026-11-11. El repo está en GitHub (`AlejoVazq/agenda2`). Falta cargar `RESEND_API_KEY` y hacer la prueba completa del paso 7.
 - Mail de contacto de `/privacidad`: `vaztechcontact@gmail.com`. Pendiente: revisión de textos legales.
 - Pedidos del usuario para después de publicar: pulir la estética de la reserva y marca por negocio (logo, color, portada). No agregar otras funciones sin que lo pida.
+- Suscripciones y panel `/admin` hechos en la rama `suscripciones` (fases 1 a 4), probados en local. Para usarlos en producción: publicar, registrar una cuenta solo para administrar y correr `npm run admin -- agregar <mail>` en el servidor.
 - El resto de lo pendiente está en `docs/registro-2026-11-11.md`.
 
 ## Publicar en el VPS

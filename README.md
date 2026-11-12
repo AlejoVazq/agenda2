@@ -41,6 +41,7 @@ npm run dev
 
 - Dueña: **demo@turnos.test / demo1234**, negocio "Estudio Luna" con 2 profesionales y 4 servicios → http://localhost:3000/n/estudio-luna
 - Dueño: **barbero@turnos.test / demo1234**, "Peluquería Caballeros" → http://localhost:3000/n/peluqueria-caballeros
+- Admin de la plataforma: **admin@turnos.test / demo1234** → http://localhost:3000/admin (la primera vez pide configurar el segundo factor con una app autenticadora)
 
 ---
 
@@ -56,6 +57,7 @@ npm run dev
 | `npm run db:local` | Postgres 18 local (sin Docker) |
 | `npm run db:migrar` | Aplica las migraciones pendientes (con `DATABASE_URL_MIGRAR`) |
 | `npm run db:seed` / `db:reset` | Datos demo / borrar todo, migrar y cargar el seed (solo base local) |
+| `npm run admin -- agregar <mail>` | Hace admin de la plataforma a una cuenta ya registrada (`listar`, `quitar`, `quitar-2fa`) |
 
 ---
 
@@ -204,6 +206,13 @@ src/
   3. Creá y hacé aprobar dos plantillas de categoría "Utility", en idioma Español (ARG), con 5 parámetros en el cuerpo: `{{1}}` nombre, `{{2}}` negocio, `{{3}}` servicio, `{{4}}` fecha y hora, `{{5}}` link al turno. Ejemplo de recordatorio: *"Hola {{1}}! Te recordamos tu turno en {{2}} ({{3}}) el {{4}}. Si no podés venir, cancelalo acá: {{5}}"*.
   4. Poné sus nombres en `WHATSAPP_PLANTILLA_CONFIRMACION` y `WHATSAPP_PLANTILLA_RECORDATORIO`.
   5. Cada negocio activa los avisos en Panel → Integraciones.
+
+### Suscripciones y panel de la plataforma (`/admin`)
+- Cada negocio nuevo tiene **7 días de prueba**. Después paga un plan mensual, que el admin registra a mano en `/admin` (monto, medio, meses). Si no paga: 5 días de gracia con aviso y después el panel queda en **solo lectura** y la página deja de tomar reservas (los turnos ya reservados siguen). El admin también puede suspender, reactivar y extender la prueba.
+- El dueño ve un aviso en el panel (días de prueba que le quedan, vencimiento, bloqueo) y le llegan mails 3 días antes, al vencer y al bloquearse.
+- `/admin`: negocios con filtros y búsqueda; detalle con pagos, configuración en solo lectura (para ayudarlos), contacto, notas internas e historial de todo lo que hizo el admin. No muestra clientes ni lo que factura cada negocio.
+- Se entra con contraseña **y** el código de una app autenticadora (Google Authenticator, etc.).
+- Probar: entrar como `admin@turnos.test`, configurar el segundo factor, registrar un pago a "Peluquería Caballeros", suspenderla y ver `/n/peluqueria-caballeros` y el panel de `barbero@turnos.test`.
 
 ### Extras
 - **Estadísticas** (dueño): turnos, facturación estimada, cancelaciones, reservas online, servicios y profesionales más pedidos, días con más turnos.
