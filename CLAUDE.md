@@ -68,10 +68,10 @@ Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en 
 
 - Fases 1 a 6 y extras hechas. Supabase reemplazado por Postgres propio + Better Auth (rama `sin-supabase`), probado en local de punta a punta.
 - Objetivo: que un amigo peluquero masculino la pruebe en su local. Google Calendar puede quedar sin conectar.
-- **Publicada en https://agenda2.tech** (VPS Hostinger `187.53.106.37`, SSH como `root`) desde el 2026-11-11. El repo está en GitHub (`AlejoVazq/agenda2`). Falta cargar `RESEND_API_KEY` y hacer la prueba completa del paso 7.
+- **Publicada en https://agenda2.tech** (VPS Hostinger `187.53.106.37`, SSH como `root`) desde el 2026-11-11. El repo está en GitHub (`AlejoVazq/agenda2`). `RESEND_API_KEY` cargada (clave de solo envío). Falta la prueba completa del paso 7.
 - Mail de contacto de `/privacidad`: `vaztechcontact@gmail.com`. Pendiente: revisión de textos legales.
 - Pedidos del usuario para después de publicar: pulir la estética de la reserva y marca por negocio (logo, color, portada). No agregar otras funciones sin que lo pida.
-- Suscripciones y panel `/admin` hechos en la rama `suscripciones` (fases 1 a 4), probados en local. Para usarlos en producción: publicar, registrar una cuenta solo para administrar y correr `npm run admin -- agregar <mail>` en el servidor.
+- Suscripciones y panel `/admin` publicados (migraciones 0001 a 0005 aplicadas, 2026-11-12). Falta registrar una cuenta solo para administrar y correr `npm run admin -- agregar <mail>` en el servidor.
 - El resto de lo pendiente está en `docs/registro-2026-11-11.md`.
 
 ## Publicar en el VPS
