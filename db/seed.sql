@@ -93,3 +93,7 @@ begin
     (v_neg, v_lucho, 6, '09:00', '18:00');
 end;
 $$;
+
+-- Los negocios demo quedan pagos por un año (si no, a los 7 días de prueba se bloquean).
+update public.negocios set pagado_hasta = now() + interval '1 year'
+where slug in ('estudio-luna', 'peluqueria-caballeros');

@@ -12,7 +12,8 @@
     "db:local": "node scripts/db-local.mjs",
     "db:migrar": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.development.local --env-file-if-exists=.env.migrar.local scripts/migrar.mjs",
     "db:seed": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.development.local scripts/seed.mjs",
-    "db:reset": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.development.local scripts/seed.mjs --reset"
+    "db:reset": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.development.local scripts/seed.mjs --reset",
+    "admin": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.development.local --env-file-if-exists=.env.migrar.local scripts/admin.mjs"
   },
   "dependencies": {
     "@fullcalendar/react": "^7.1.3",

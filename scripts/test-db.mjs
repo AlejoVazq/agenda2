@@ -43,6 +43,7 @@ const USUARIOS = {
   beto: "00000000-0000-4000-8000-00000000000b", // dueño negocio B
   eva: "00000000-0000-4000-8000-00000000000e", // empleada negocio A
   nadie: "00000000-0000-4000-8000-0000000000ff", // registrado sin negocio
+  admin: "00000000-0000-4000-8000-0000000000ad", // administrador de la plataforma
 };
 for (const [nombre, id] of Object.entries(USUARIOS)) {
   await db.query(`insert into auth."user" ("id", "name", "email", "emailVerified") values ($1, $2, $3, true)`, [
@@ -51,6 +52,9 @@ for (const [nombre, id] of Object.entries(USUARIOS)) {
     `${nombre}@test.com`,
   ]);
 }
+
+// Como lo hace `npm run admin -- agregar`: con el dueño de la base.
+await db.query("insert into plataforma.administradores (usuario_id) values ($1)", [USUARIOS.admin]);
 
 const ROLES = { anon: "agenda2_anonimo", servidor: "agenda2_servidor", app: "agenda2_app", auth: "agenda2_auth" };
 
@@ -111,7 +115,10 @@ console.log("\nPruebas:");
 
 await prueba("roles: agenda2_app no puede leer nada sin cambiar de rol (falla cerrado)", async () => {
   await como("app", async () => {
-    for (const t of ["public.negocios", "public.turnos", "public.clientes", 'auth."user"', 'auth."account"', "app.schema_version"]) {
+    for (const t of [
+      "public.negocios", "public.turnos", "public.clientes", 'auth."user"', 'auth."account"', "app.schema_version",
+      "plataforma.administradores", "plataforma.pagos",
+    ]) {
       await falla(q(`select * from ${t}`), /permission denied/, t);
     }
     await falla(q("select public.negocio_publico('x')"), /permission denied/, "función pública");
@@ -129,7 +136,7 @@ await prueba("anon: solo ejecuta las 5 funciones del portal público", async () 
   const filas = await q(`
     select p.proname
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname in ('public', 'app', 'auth') and has_function_privilege('agenda2_anonimo', p.oid, 'execute')
+    where n.nspname in ('public', 'app', 'auth', 'plataforma') and has_function_privilege('agenda2_anonimo', p.oid, 'execute')
       -- Los constructores del tipo rango_hora (los crea Postgres, ejecutables por todos)
       -- solo arman un rango de horas: no leen ni escriben nada.
       and not exists (select 1 from pg_type t where t.typname = p.proname and t.typnamespace = p.pronamespace)
@@ -980,6 +987,229 @@ await prueba("whatsapp: recordatorios con marca propia", async () => {
   assert.equal((await servicio("select * from public.reclamar_recordatorios_whatsapp()")).length, 0);
 });
 
+// --- Suscripciones y administración ----------------------------------------------------
+
+const DIA = 86_400_000;
+const msHasta = (fecha) => new Date(fecha).getTime() - Date.now();
+
+await prueba("suscripción: el negocio nuevo arranca con 7 días de prueba y el dueño no puede tocarla", async () => {
+  const s = await como("ana", async () => (await uno("select public.mi_suscripcion() as s")).s);
+  assert.equal(s.estado, "prueba");
+  assert.ok(msHasta(s.prueba_hasta) > 6.9 * DIA && msHasta(s.prueba_hasta) <= 7 * DIA, "7 días");
+  assert.equal(s.pagado_hasta, null);
+  await como("ana", async () => {
+    for (const col of ["prueba_hasta", "pagado_hasta", "suspendido_at"]) {
+      await falla(q(`update public.negocios set ${col} = now() + interval '1 year' where id = $1`, [negA]), /permission denied/, col);
+    }
+    await falla(q("update public.negocios set suspension_motivo = null where id = $1", [negA]), /permission denied/, "motivo");
+    for (const t of ["plataforma.administradores", "plataforma.pagos", "plataforma.notas", "plataforma.auditoria"]) {
+      await falla(q(`select * from ${t}`), /permission denied/, t);
+    }
+    await falla(q("insert into plataforma.administradores values ($1)", [USUARIOS.ana]), /permission denied/, "hacerse admin");
+    assert.equal((await uno("select plataforma.es_admin() as a")).a, false);
+  });
+});
+
+await prueba("suscripción: el estado sale de las fechas", async () => {
+  const estado = async (prueba, pagado, suspendido) =>
+    (await uno(
+      `select plataforma.estado_suscripcion(now() + $1::interval, now() + $2::interval, now() + $3::interval) as e`,
+      [prueba, pagado, suspendido],
+    )).e;
+  assert.equal(await estado("1 day", null, null), "prueba");
+  assert.equal(await estado("-1 day", null, null), "gracia");
+  assert.equal(await estado("-4 days -23 hours", null, null), "gracia");
+  assert.equal(await estado("-5 days -1 hour", null, null), "vencida");
+  assert.equal(await estado("-30 days", "1 day", null), "activa");
+  assert.equal(await estado("1 day", "20 days", null), "activa");
+  assert.equal(await estado("-60 days", "-2 days", null), "gracia");
+  assert.equal(await estado("-60 days", "-6 days", null), "vencida");
+  assert.equal(await estado("5 days", "30 days", "0 seconds"), "suspendida");
+});
+
+await prueba("suscripción: vencido = panel en solo lectura y sin turnos nuevos; el cliente cancela y el cron sigue", async () => {
+  const proximo = (await uno("select ($1::date + 7) as d", [lunes])).d;
+  const hora = async (h) =>
+    (await uno(`select (($1::date + $2::time) at time zone 'America/Argentina/Buenos_Aires') as t`, [proximo, h])).t;
+  const reservado = await reservar(
+    "select * from public.crear_reserva($1, $2, $3, $4, 'Sol', '1144001100', 'sol@mail.com')",
+    [negA, servA, profAna, await hora("11:00")],
+  );
+
+  await q("update public.negocios set prueba_hasta = now() - interval '10 days' where id = $1", [negA]);
+
+  assert.equal((await como("ana", () => uno("select public.mi_suscripcion() as s"))).s.estado, "vencida");
+  const pub = await como("anon", async () => (await uno("select public.negocio_publico('salon-ana') as d")).d);
+  assert.equal(pub.reservas_habilitadas, false);
+  assert.ok(pub.servicios.length > 0, "el portal se sigue viendo");
+
+  await falla(
+    reservar("select * from public.crear_reserva($1, $2, $3, $4, 'Luz', '1144002200', 'luz@mail.com')", [
+      negA, servA, profAna, await hora("12:00"),
+    ]),
+    /NEGOCIO_NO_HABILITADO/,
+    "reserva online",
+  );
+  await como("ana", async () => {
+    assert.ok((await q("select * from public.servicios")).length > 0, "lee igual");
+    assert.ok((await q("select * from public.turnos")).length > 0, "lee igual");
+    await falla(q("update public.servicios set nombre = 'Otro' where id = $1", [servA]), /NEGOCIO_NO_HABILITADO/, "servicio");
+    await falla(q("update public.negocios set nombre = 'Otro' where id = $1", [negA]), /NEGOCIO_NO_HABILITADO/, "negocio");
+    await falla(
+      q("insert into public.bloqueos (negocio_id, profesional_id, inicio, fin) values ($1, $2, now(), now() + interval '1 hour')", [negA, profAna]),
+      /NEGOCIO_NO_HABILITADO/,
+      "bloqueo",
+    );
+    await falla(
+      q("update public.turnos set estado = 'cancelado' where token_cancelacion = $1", [reservado.token]),
+      /NEGOCIO_NO_HABILITADO/,
+      "turno",
+    );
+    await falla(
+      q("select public.crear_turno_panel($1, $2, $3, 'Mar', '1144003300', null, null, null)", [profAna, servA, await hora("13:00")]),
+      /NEGOCIO_NO_HABILITADO/,
+      "turno desde el panel",
+    );
+  });
+
+  // El cliente puede cancelar su turno y el cron sigue andando.
+  await como("anon", () => q("select public.cancelar_turno_cliente($1)", [reservado.token]));
+  assert.equal((await uno("select estado from public.turnos where token_cancelacion = $1", [reservado.token])).estado, "cancelado");
+  await servicio("select * from public.reclamar_recordatorios()");
+
+  // Paga: vuelve a funcionar, por un mes desde hoy (la prueba ya había terminado).
+  await como("admin", () => q("select plataforma.admin_registrar_pago($1, 15000, 'transferencia', 1, 'noviembre')", [negA]));
+  const s = await como("ana", async () => (await uno("select public.mi_suscripcion() as s")).s);
+  assert.equal(s.estado, "activa");
+  assert.ok(msHasta(s.pagado_hasta) > 27 * DIA && msHasta(s.pagado_hasta) < 32 * DIA, "un mes");
+  await como("ana", () => q("update public.servicios set nombre = 'Corte' where id = $1", [servA]));
+  assert.equal((await como("anon", () => uno("select public.negocio_publico('salon-ana') as d"))).d.reservas_habilitadas, true);
+});
+
+await prueba("admin: solo un administrador usa sus funciones", async () => {
+  const llamadas = [
+    ["select * from plataforma.admin_negocios()", []],
+    ["select plataforma.admin_negocio($1)", [negB]],
+    ["select plataforma.admin_registrar_pago($1, 100, 'efectivo', 1, null)", [negB]],
+    ["select plataforma.admin_extender_prueba($1, 30)", [negB]],
+    ["select plataforma.admin_suspender($1, 'x')", [negB]],
+    ["select plataforma.admin_reactivar($1)", [negB]],
+    ["select plataforma.admin_agregar_nota($1, 'x')", [negB]],
+    ["select plataforma.admin_cambiar_slug($1, 'robado')", [negB]],
+    ["select plataforma.admin_registrar_accion('link_acceso_dueno', $1, '{}')", [negB]],
+  ];
+  for (const [sql, params] of llamadas) {
+    for (const u of ["ana", "beto", "eva", "nadie"]) {
+      await como(u, () => falla(q(sql, params), /SIN_PERMISO/, `${u}: ${sql}`));
+    }
+    for (const u of ["anon", "servidor"]) {
+      await como(u, () => falla(q(sql, params), /permission denied/, `${u}: ${sql}`));
+    }
+  }
+  const neg = await uno("select prueba_hasta, pagado_hasta, suspendido_at, slug from public.negocios where id = $1", [negB]);
+  assert.equal(neg.pagado_hasta, null);
+  assert.equal(neg.suspendido_at, null);
+  assert.equal(neg.slug, "barberia-beto");
+  assert.equal((await q("select * from plataforma.auditoria where negocio_id = $1", [negB])).length, 0);
+});
+
+await prueba("admin: lista y detalle sin datos de clientes ni precios", async () => {
+  const lista = await como("admin", () => q("select * from plataforma.admin_negocios()"));
+  const a = lista.find((n) => n.id === negA);
+  assert.equal(a.dueno_email, "ana@test.com");
+  assert.equal(a.estado, "activa");
+  assert.ok(a.profesionales >= 1);
+  assert.equal(lista.find((n) => n.id === negB).estado, "prueba");
+
+  const d = await como("admin", async () => (await uno("select plataforma.admin_negocio($1) as d", [negA])).d);
+  assert.equal(d.slug, "salon-ana");
+  assert.ok(d.equipo.some((u) => u.email === "ana@test.com" && u.rol === "dueno"));
+  assert.ok(d.profesionales.length > 0 && d.servicios.length > 0);
+  assert.ok(d.uso.clientes > 0);
+  assert.equal(d.pagos.length, 1);
+  const texto = JSON.stringify(d);
+  for (const prohibido of ["lucia@mail.com", "Lucía", "1155551234", "sol@mail.com", "precio", "token"]) {
+    assert.ok(!texto.includes(prohibido), `el detalle no muestra ${prohibido}`);
+  }
+  await como("admin", () => falla(q("select plataforma.admin_negocio($1)", [USUARIOS.nadie]), /NO_ENCONTRADO/, "inexistente"));
+});
+
+await prueba("admin: pagos encadenados, anulación, prueba, suspensión, notas, slug y auditoría", async () => {
+  const admin = (sql, params) => como("admin", () => uno(sql, params));
+  const negocio = () => uno("select * from public.negocios where id = $1", [negB]);
+  const { prueba_hasta } = await negocio();
+
+  // Pagar durante la prueba no hace perder días: arranca cuando termina la prueba.
+  const p1 = (await admin("select plataforma.admin_registrar_pago($1, 15000, 'efectivo', 1, null) as id", [negB])).id;
+  const tras1 = (await negocio()).pagado_hasta;
+  assert.equal(
+    (await uno("select ($1::timestamptz + interval '1 month') = $2::timestamptz as ok", [prueba_hasta, tras1])).ok,
+    true,
+  );
+  // El siguiente sigue desde donde terminó el anterior.
+  const p2 = (await admin("select plataforma.admin_registrar_pago($1, 28000, 'transferencia', 2, 'dic y ene') as id", [negB])).id;
+  assert.equal(
+    (await uno("select ($1::timestamptz + interval '2 months') = $2::timestamptz as ok", [tras1, (await negocio()).pagado_hasta])).ok,
+    true,
+  );
+  await como("admin", () => falla(q("select plataforma.admin_registrar_pago($1, 0, 'efectivo', 1, null)", [negB]), /check/, "monto 0"));
+  await como("admin", () => falla(q("select plataforma.admin_registrar_pago($1, 10, 'cripto', 1, null)", [negB]), /check/, "medio"));
+
+  // Anular el segundo vuelve al vencimiento del primero.
+  await como("admin", () => falla(q("select plataforma.admin_anular_pago($1, ' ')", [p2]), /FALTA_MOTIVO/, "sin motivo"));
+  await admin("select plataforma.admin_anular_pago($1, 'cargado dos veces')", [p2]);
+  assert.equal((await uno("select $1::timestamptz = $2::timestamptz as ok", [tras1, (await negocio()).pagado_hasta])).ok, true);
+  await como("admin", () => falla(q("select plataforma.admin_anular_pago($1, 'otra vez')", [p2]), /NO_ENCONTRADO/, "ya anulado"));
+  await admin("select plataforma.admin_anular_pago($1, 'prueba')", [p1]);
+  assert.equal((await negocio()).pagado_hasta, null);
+
+  // Suspensión: el dueño queda en solo lectura aunque esté en prueba.
+  await admin("select plataforma.admin_suspender($1, 'no pagó')", [negB]);
+  assert.equal((await como("beto", () => uno("select public.mi_suscripcion() as s"))).s.estado, "suspendida");
+  await como("beto", () =>
+    falla(q("update public.negocios set nombre = 'X' where id = $1", [negB]), /NEGOCIO_NO_HABILITADO/, "suspendido"),
+  );
+  await admin("select plataforma.admin_reactivar($1)", [negB]);
+  await como("beto", () => q("update public.negocios set nombre = 'Barbería Beto' where id = $1", [negB]));
+
+  await como("admin", () => falla(q("select plataforma.admin_extender_prueba($1, 0)", [negB]), /DIAS_INVALIDOS/, "0 días"));
+  await admin("select plataforma.admin_extender_prueba($1, 10)", [negB]);
+  assert.ok(msHasta((await negocio()).prueba_hasta) > 16.9 * DIA, "7 + 10 días");
+
+  await como("admin", () => falla(q("select plataforma.admin_cambiar_slug($1, 'salon-ana')", [negB]), /SLUG_OCUPADO/, "ocupado"));
+  await admin("select plataforma.admin_cambiar_slug($1, 'barberia-beto-2')", [negB]);
+  await admin("select plataforma.admin_cambiar_slug($1, 'barberia-beto')", [negB]);
+
+  await admin("select plataforma.admin_agregar_nota($1, 'Llamó por los horarios')", [negB]);
+  await admin("select plataforma.admin_registrar_accion('link_acceso_dueno', $1, '{}')", [negB]);
+  await como("admin", () =>
+    falla(q("select plataforma.admin_registrar_accion('borrar_todo', $1, '{}')", [negB]), /ACCION_INVALIDA/, "acción libre"),
+  );
+
+  const d = await como("admin", async () => (await uno("select plataforma.admin_negocio($1) as d", [negB])).d);
+  assert.equal(d.notas[0].texto, "Llamó por los horarios");
+  assert.equal(d.pagos.length, 2);
+  assert.ok(d.pagos.every((p) => p.anulado_at));
+  assert.deepEqual(
+    d.auditoria.map((a) => a.accion).reverse(),
+    [
+      "registrar_pago", "registrar_pago", "anular_pago", "anular_pago", "suspender", "reactivar",
+      "extender_prueba", "cambiar_slug", "cambiar_slug", "agregar_nota", "link_acceso_dueno",
+    ],
+  );
+  assert.ok(d.auditoria.every((a) => a.admin === "admin"));
+});
+
+await prueba("admin: avisos de vencimiento solo para el servidor", async () => {
+  const filas = await servicio("select * from plataforma.negocios_por_vencer(now(), now() + interval '30 days')");
+  const b = filas.find((f) => f.negocio_id === negB);
+  assert.equal(b.dueno_email, "beto@test.com");
+  assert.equal(b.estado, "prueba");
+  await como("ana", () =>
+    falla(q("select * from plataforma.negocios_por_vencer(now(), now())"), /permission denied/, "dueña"),
+  );
+});
+
 await prueba("cuentas: borrar un usuario borra su perfil, sus sesiones y sus accesos", async () => {
   await q(`insert into auth."session" ("expiresAt", "token", "updatedAt", "userId") values (now() + interval '1 day', 'tok-eva', now(), $1)`, [USUARIOS.eva]);
   await q(`insert into public.accesos (usuario_id, tipo, token_hash, expira_at) values ($1, 'recuperacion', repeat('a', 64), now() + interval '1 day')`, [USUARIOS.eva]);
@@ -1002,17 +1232,17 @@ await prueba("migraciones: una segunda corrida no hace nada; editar una aplicada
     await m.exec("set role agenda2_dueno");
     assert.deepEqual(await migrar(ejecutar, { carpeta, log: () => {} }), []);
 
-    writeFileSync(join(carpeta, "0002_nueva.sql"), "create table public.prueba_nueva (id int);");
-    assert.deepEqual(await migrar(ejecutar, { carpeta, log: () => {} }), ["0002_nueva.sql"]);
+    writeFileSync(join(carpeta, "9001_nueva.sql"), "create table public.prueba_nueva (id int);");
+    assert.deepEqual(await migrar(ejecutar, { carpeta, log: () => {} }), ["9001_nueva.sql"]);
     const versiones = (await m.query("select version from app.schema_version order by 1")).rows.map((r) => r.version);
-    assert.deepEqual(versiones, [1, 2]);
+    assert.deepEqual(versiones.slice(-1), [9001]);
 
-    writeFileSync(join(carpeta, "0002_nueva.sql"), "create table public.prueba_nueva (id bigint);");
+    writeFileSync(join(carpeta, "9001_nueva.sql"), "create table public.prueba_nueva (id bigint);");
     await falla(migrar(ejecutar, { carpeta, log: () => {} }), /cambió después de aplicarse/, "migración editada");
 
-    writeFileSync(join(carpeta, "0002_nueva.sql"), "create table public.prueba_nueva (id int);");
-    writeFileSync(join(carpeta, "0003_rota.sql"), "create table public.rota (id int); select 1/0;");
-    await falla(migrar(ejecutar, { carpeta, log: () => {} }), /0003_rota/, "migración con error");
+    writeFileSync(join(carpeta, "9001_nueva.sql"), "create table public.prueba_nueva (id int);");
+    writeFileSync(join(carpeta, "9002_rota.sql"), "create table public.rota (id int); select 1/0;");
+    await falla(migrar(ejecutar, { carpeta, log: () => {} }), /9002_rota/, "migración con error");
     assert.equal((await m.query("select to_regclass('public.rota') as t")).rows[0].t, null, "la migración fallida no deja nada");
     await m.close();
   } finally {
@@ -1027,6 +1257,7 @@ await prueba("seed: carga los datos demo, los usuarios entran y el negocio queda
   const neg = (await s.query("select public.negocio_publico('estudio-luna') as d")).rows[0].d;
   assert.equal(neg.servicios.length, 4);
   assert.equal(neg.profesionales.length, 2);
+  assert.equal(neg.reservas_habilitadas, true, "los demo quedan pagos");
   const pelu = (await s.query("select public.negocio_publico('peluqueria-caballeros') as d")).rows[0].d;
   assert.equal(pelu.rubro, "peluqueria_masculina");
   assert.equal(pelu.servicios.length, 4);
