@@ -52,7 +52,25 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
 
       <main className="mx-auto -mt-8 max-w-xl px-4 pb-16">
         <div className="rounded-3xl bg-white p-4 shadow-xl shadow-marca-900/10 sm:p-6">
-          <Reserva negocio={negocio} hoy={fechaLocalISO(new Date(), negocio.zona_horaria)} />
+          {negocio.reservas_habilitadas ? (
+            <Reserva negocio={negocio} hoy={fechaLocalISO(new Date(), negocio.zona_horaria)} />
+          ) : (
+            <div className="space-y-3 py-6 text-center">
+              <p className="text-lg font-bold">Por ahora no estamos tomando reservas online</p>
+              <p className="text-sm text-zinc-600">
+                {negocio.telefono ? "Escribinos por WhatsApp para coordinar tu turno." : "Comunicate con el negocio para coordinar tu turno."}
+              </p>
+              {negocio.telefono ? (
+                <a
+                  href={linkWhatsApp(negocio.telefono)}
+                  target="_blank"
+                  className="inline-flex h-11 items-center rounded-xl bg-emerald-600 px-5 font-semibold text-white hover:bg-emerald-700"
+                >
+                  Escribir por WhatsApp
+                </a>
+              ) : null}
+            </div>
+          )}
         </div>
         <footer className="mt-8 flex justify-center">
           <Link href="/" className="opacity-60 transition hover:opacity-100">

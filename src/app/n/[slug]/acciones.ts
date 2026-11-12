@@ -92,6 +92,10 @@ export async function reservar(_prev: EstadoAccion, formData: FormData): Promise
         )`),
     );
   } catch (e) {
+    // Al cliente no le corresponde el detalle de la suscripción del negocio.
+    if (e instanceof Error && e.message.includes("NEGOCIO_NO_HABILITADO")) {
+      return { error: "Este negocio no está tomando reservas online en este momento. Comunicate con el negocio." };
+    }
     return { error: mensajeDeError(e, "No pudimos tomar la reserva. Probá de nuevo.") };
   }
   if (!fila) return { error: "No pudimos tomar la reserva. Probá de nuevo." };

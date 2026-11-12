@@ -1,3 +1,5 @@
+import { MENSAJE_SOLO_LECTURA } from "@/lib/suscripcion";
+
 // Traduce errores de Postgres (node-postgres) a mensajes para el usuario.
 const MENSAJES: Record<string, string> = {
   YA_TIENE_NEGOCIO: "Tu usuario ya tiene un negocio asociado.",
@@ -6,6 +8,7 @@ const MENSAJES: Record<string, string> = {
   NO_AUTENTICADO: "Tenés que iniciar sesión.",
   DATOS_INVALIDOS: "Revisá los datos ingresados.",
   NEGOCIO_NO_DISPONIBLE: "Este negocio no está tomando reservas en este momento.",
+  NEGOCIO_NO_HABILITADO: MENSAJE_SOLO_LECTURA,
   HORARIO_NO_DISPONIBLE: "Ese horario ya no está disponible. Elegí otro, por favor.",
   LIMITE_TURNOS:
     "Ya tenés 3 turnos reservados en este negocio. Para sacar otro, comunicate con el negocio.",

@@ -3,12 +3,13 @@ import Link from "next/link";
 import { Logo } from "@/components/ui";
 import { cerrarSesion } from "@/app/(auth)/acciones";
 import { requerirPanel } from "@/lib/auth";
+import { AvisoSuscripcion } from "./aviso-suscripcion";
 import { BarraInferior, MenuLateral } from "./navegacion";
 
 // Segunda capa de seguridad: además del proxy (sesión), acá se exige que el
 // usuario pertenezca a un negocio. Las páginas solo-dueño usan requerirDueno().
 export default async function LayoutPanel({ children }: { children: ReactNode }) {
-  const { perfil, negocio, esDueno } = await requerirPanel();
+  const { perfil, negocio, esDueno, suscripcion } = await requerirPanel();
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[16rem_1fr]">
@@ -53,7 +54,10 @@ export default async function LayoutPanel({ children }: { children: ReactNode })
             <button className="rounded-lg px-2 py-1 text-sm font-medium text-zinc-600 hover:bg-zinc-100">Salir</button>
           </form>
         </header>
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">{children}</main>
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pb-28 pt-5 sm:px-6 lg:pb-12 lg:pt-8">
+          <AvisoSuscripcion suscripcion={suscripcion} esDueno={esDueno} />
+          {children}
+        </main>
       </div>
 
       <BarraInferior esDueno={esDueno} />

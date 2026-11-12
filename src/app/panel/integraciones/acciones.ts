@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { sesionParaAccion } from "@/lib/auth";
+import { MENSAJE_SOLO_LECTURA } from "@/lib/suscripcion";
 import { integracionesDisponibles } from "@/lib/env";
 import { mensajeDeError } from "@/lib/errores";
 import { desconectarGoogle, importarOcupados, sincronizarPendientes, type ConfigGoogle } from "@/lib/google";
@@ -27,6 +28,7 @@ const esquemaTokenMP = z.object({
 export async function conectarMercadoPago(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
   const sesion = await sesionParaAccion({ soloDueno: true });
   if (!sesion) return { error: "Solo el dueño puede conectar Mercado Pago." };
+  if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
   if (!integracionesDisponibles().mercadopago) return { error: "Las integraciones no están configuradas en el servidor." };
 
   const datos = esquemaTokenMP.safeParse(datosDeForm(formData));
@@ -51,6 +53,7 @@ export async function conectarMercadoPago(_prev: EstadoAccion, formData: FormDat
 export async function desconectarMercadoPago(): Promise<EstadoAccion> {
   const sesion = await sesionParaAccion({ soloDueno: true });
   if (!sesion) return { error: "Solo el dueño puede desconectar Mercado Pago." };
+  if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
   const integracion = await buscarIntegracion(sesion.negocio.id, "mercadopago");
   if (integracion) await borrarIntegracion(integracion.id);
   revalidatePath(RUTA);
@@ -60,6 +63,7 @@ export async function desconectarMercadoPago(): Promise<EstadoAccion> {
 export async function guardarSena(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
   const sesion = await sesionParaAccion({ soloDueno: true });
   if (!sesion) return { error: "Solo el dueño puede cambiar la seña." };
+  if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
 
   const datos = esquemaSena.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
@@ -85,6 +89,7 @@ export async function guardarSena(_prev: EstadoAccion, formData: FormData): Prom
 export async function guardarWhatsApp(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
   const sesion = await sesionParaAccion({ soloDueno: true });
   if (!sesion) return { error: "Solo el dueño puede cambiar esta opción." };
+  if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
 
   try {
     await comoUsuario(sesion.userId, (tx) =>

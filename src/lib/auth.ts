@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/better-auth";
 import { comoUsuario, sql } from "@/lib/db";
+import { estaHabilitado, type Suscripcion } from "@/lib/suscripcion";
 import type { Negocio, Perfil } from "@/lib/tipos";
 
 // Segunda capa de seguridad (la primera es src/proxy.ts; la tercera, RLS):
@@ -20,6 +21,9 @@ export type SesionPanel = Sesion & {
   perfil: Perfil;
   negocio: Negocio;
   esDueno: boolean;
+  suscripcion: Suscripcion;
+  /** Prueba, activa o en gracia. Si no, el panel es de solo lectura (ver src/lib/suscripcion.ts). */
+  habilitado: boolean;
 };
 
 /** Usuario con sesión válida (verificada en la base) o null. Se memoiza por request. */
@@ -35,15 +39,23 @@ export const getSesionPanel = cache(async (): Promise<SesionPanel | null> => {
   if (!sesion) return null;
 
   const fila = await comoUsuario(sesion.userId, (tx) =>
-    tx.uno<Perfil & { negocio: Negocio }>(sql`
-      select p.id, p.negocio_id, p.rol, p.nombre, p.profesional_id, to_jsonb(n) as negocio
+    tx.uno<Perfil & { negocio: Negocio; suscripcion: Suscripcion }>(sql`
+      select p.id, p.negocio_id, p.rol, p.nombre, p.profesional_id, to_jsonb(n) as negocio,
+        public.mi_suscripcion() as suscripcion
       from public.perfiles p
       join public.negocios n on n.id = p.negocio_id
       where p.id = ${sesion.userId}`),
   );
   if (!fila) return null;
-  const { negocio, ...perfil } = fila;
-  return { ...sesion, perfil, negocio, esDueno: perfil.rol === "dueno" };
+  const { negocio, suscripcion, ...perfil } = fila;
+  return {
+    ...sesion,
+    perfil,
+    negocio,
+    esDueno: perfil.rol === "dueno",
+    suscripcion,
+    habilitado: estaHabilitado(suscripcion.estado),
+  };
 });
 
 /** Para páginas del panel: exige login y pertenecer a un negocio. */

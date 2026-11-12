@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { sesionParaAccion } from "@/lib/auth";
+import { MENSAJE_SOLO_LECTURA } from "@/lib/suscripcion";
 import { borrarUsuario, crearLinkAcceso, crearUsuarioEmpleado, tieneContrasena } from "@/lib/accesos";
 import { comoServidor, comoUsuario, sql } from "@/lib/db";
 import { datosDeForm, erroresDeCampo, esquemaInvitacion } from "@/lib/validaciones";
@@ -20,6 +21,7 @@ const SIN_PERMISO = { error: "Solo el dueño puede gestionar los accesos." };
 export async function invitarEmpleado(_prev: EstadoInvitacion, formData: FormData): Promise<EstadoInvitacion> {
   const sesion = await sesionParaAccion({ soloDueno: true });
   if (!sesion) return SIN_PERMISO;
+  if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
 
   const datos = esquemaInvitacion.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
@@ -67,6 +69,7 @@ export async function invitarEmpleado(_prev: EstadoInvitacion, formData: FormDat
 export async function regenerarLink(perfilId: string): Promise<EstadoInvitacion> {
   const sesion = await sesionParaAccion({ soloDueno: true });
   if (!sesion) return SIN_PERMISO;
+  if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
   if (!z.uuid().safeParse(perfilId).success) return { error: "Usuario inválido." };
 
   const empleado = await perfilEmpleadoDelNegocio(sesion.userId, perfilId, sesion.negocio.id);
@@ -86,6 +89,7 @@ export async function regenerarLink(perfilId: string): Promise<EstadoInvitacion>
 export async function quitarAcceso(perfilId: string): Promise<EstadoAccion> {
   const sesion = await sesionParaAccion({ soloDueno: true });
   if (!sesion) return SIN_PERMISO;
+  if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
   if (!z.uuid().safeParse(perfilId).success) return { error: "Usuario inválido." };
 
   const empleado = await perfilEmpleadoDelNegocio(sesion.userId, perfilId, sesion.negocio.id);
