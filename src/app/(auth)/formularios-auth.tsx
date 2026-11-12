@@ -4,13 +4,13 @@ import Link from "next/link";
 import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { Campo, Input } from "@/components/ui";
 import type { EstadoAccion } from "@/lib/tipos";
-import { iniciarSesion, pedirRecuperacion, registrarse, restablecerPassword } from "./acciones";
+import { iniciarSesion, pedirRecuperacion, registrarse, restablecerPassword, verificarCodigo } from "./acciones";
 
 export function FormularioLogin({ next }: { next?: string }) {
   const { estado, accion, valor, intento } = useFormulario(iniciarSesion);
   return (
     <form key={intento} action={accion} className="space-y-4" noValidate>
-      <input type="hidden" name="next" value={next ?? "/panel"} />
+      <input type="hidden" name="next" value={next ?? ""} />
       <MensajeAccion estado={estado} />
       <Campo etiqueta="Email" htmlFor="email" errores={estado.errores?.email}>
         <Input id="email" name="email" type="email" autoComplete="email" inputMode="email" defaultValue={valor("email")} required />
@@ -97,6 +97,27 @@ export function FormularioRecuperar() {
       </Campo>
       <BotonEnviar className="w-full" tamano="lg" pendiente="Enviando…">
         Enviarme el link
+      </BotonEnviar>
+    </form>
+  );
+}
+
+export function FormularioCodigo({ next }: { next?: string }) {
+  const { estado, accion } = useFormulario(verificarCodigo);
+  return (
+    <form action={accion} className="space-y-4" noValidate>
+      <input type="hidden" name="next" value={next ?? ""} />
+      <MensajeAccion estado={estado} />
+      <Campo
+        etiqueta="Código"
+        htmlFor="codigo"
+        errores={estado.errores?.codigo}
+        ayuda="Los 6 números de tu app autenticadora. Si no la tenés a mano, usá uno de tus códigos de respaldo."
+      >
+        <Input id="codigo" name="codigo" autoComplete="one-time-code" inputMode="numeric" autoFocus required />
+      </Campo>
+      <BotonEnviar className="w-full" tamano="lg" pendiente="Verificando…">
+        Verificar
       </BotonEnviar>
     </form>
   );

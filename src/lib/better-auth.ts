@@ -1,6 +1,7 @@
 import "server-only";
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import { twoFactor } from "better-auth/plugins";
 import { Pool } from "pg";
 import { env } from "@/lib/env";
 import { MARCA } from "@/lib/marca";
@@ -106,6 +107,14 @@ export const auth = betterAuth({
   // con la redirect https://<dominio>/api/auth/callback/google y habilitar esa
   // ruta en src/app/api/auth/[...all]/route.ts.
 
-  // nextCookies tiene que ir último: deja que las Server Actions escriban la cookie.
-  plugins: [nextCookies()],
+  plugins: [
+    // Segundo factor (app autenticadora). Obligatorio para los administradores de
+    // la plataforma (src/lib/admin.ts); el resto de las cuentas no lo activa. Con
+    // él activado, el login pide el código (src/app/(auth)/login/codigo).
+    // No se usa "recordar este dispositivo" (nunca se pasa trustDevice): cada
+    // login de un admin pide el código.
+    twoFactor({ issuer: MARCA.nombre }),
+    // nextCookies tiene que ir último: deja que las Server Actions escriban la cookie.
+    nextCookies(),
+  ],
 });

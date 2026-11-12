@@ -179,8 +179,13 @@ await prueba("auth: Better Auth solo ve su esquema; el resto no lee contraseñas
   await como("auth", async () => {
     await q('select * from auth."user"');
     await q('select * from auth."account"');
+    await q('select * from auth."twoFactor"');
     await falla(q("select * from public.negocios"), /permission denied/, "auth en public");
   });
+  // Los secretos del segundo factor: solo Better Auth.
+  for (const u of ["ana", "anon", "servidor", "admin"]) {
+    await como(u, () => falla(q('select * from auth."twoFactor"'), /permission denied/, `${u} lee secretos 2FA`));
+  }
   for (const u of ["ana", "anon"]) {
     await como(u, () => falla(q('select * from auth."user"'), /permission denied/, `${u} lee usuarios`));
   }
@@ -1132,6 +1137,18 @@ await prueba("admin: lista y detalle sin datos de clientes ni precios", async ()
     assert.ok(!texto.includes(prohibido), `el detalle no muestra ${prohibido}`);
   }
   await como("admin", () => falla(q("select plataforma.admin_negocio($1)", [USUARIOS.nadie]), /NO_ENCONTRADO/, "inexistente"));
+
+  // Último ingreso: lo anota la base al abrirse la sesión y queda aunque se cierre.
+  await como("auth", () =>
+    q(`insert into auth."session" ("expiresAt", "token", "updatedAt", "userId") values (now() + interval '1 day', 'tok-ana', now(), $1)`, [USUARIOS.ana]),
+  );
+  await como("auth", () => q(`delete from auth."session" where "token" = 'tok-ana'`));
+  const tras = await como("admin", async () => (await uno("select plataforma.admin_negocio($1) as d", [negA])).d);
+  const ana = tras.equipo.find((u) => u.email === "ana@test.com");
+  assert.ok(ana.ultimo_ingreso && Date.now() - new Date(ana.ultimo_ingreso).getTime() < 60_000, "último ingreso");
+  const fila = (await como("admin", () => q("select * from plataforma.admin_negocios()"))).find((n) => n.id === negA);
+  assert.ok(fila.ultimo_ingreso, "último ingreso en la lista");
+  await como("ana", () => falla(q("select * from plataforma.ultimos_ingresos"), /permission denied/, "dueña"));
 });
 
 await prueba("admin: pagos encadenados, anulación, prueba, suspensión, notas, slug y auditoría", async () => {

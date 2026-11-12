@@ -3,9 +3,17 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { APIError } from "better-auth/api";
+import { esAdministrador } from "@/lib/auth";
 import { auth } from "@/lib/better-auth";
 import { dentroDelLimite } from "@/lib/limites";
-import { datosDeForm, erroresDeCampo, esquemaLogin, esquemaPassword, esquemaRegistro } from "@/lib/validaciones";
+import {
+  datosDeForm,
+  erroresDeCampo,
+  esquemaCodigo,
+  esquemaLogin,
+  esquemaPassword,
+  esquemaRegistro,
+} from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
 
 const DEMASIADOS = { error: "Hiciste demasiados intentos. Esperá unos minutos y probá de nuevo." };
@@ -14,6 +22,11 @@ const DEMASIADOS = { error: "Hiciste demasiados intentos. Esperá unos minutos y
 function destinoSeguro(next: FormDataEntryValue | null, porDefecto = "/panel") {
   const valor = typeof next === "string" ? next : "";
   return valor.startsWith("/") && !valor.startsWith("//") && !valor.includes("\\") ? valor : porDefecto;
+}
+
+/** Sin destino pedido: el admin va a /admin; el resto, al panel. */
+async function destinoTrasLogin(next: FormDataEntryValue | null, userId: string) {
+  return destinoSeguro(next, userId && (await esAdministrador(userId)) ? "/admin" : "/panel");
 }
 
 function codigoDe(e: unknown): string | undefined {
@@ -25,8 +38,9 @@ export async function iniciarSesion(_prev: EstadoAccion, formData: FormData): Pr
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
   if (!(await dentroDelLimite("login", 10, 600))) return DEMASIADOS;
 
+  let resultado: Awaited<ReturnType<typeof auth.api.signInEmail>>;
   try {
-    await auth.api.signInEmail({
+    resultado = await auth.api.signInEmail({
       body: { email: datos.data.email, password: datos.data.password },
       headers: await headers(),
     });
@@ -38,7 +52,37 @@ export async function iniciarSesion(_prev: EstadoAccion, formData: FormData): Pr
     return { error: "Email o contraseña incorrectos." };
   }
 
-  redirect(destinoSeguro(formData.get("next")));
+  // Con segundo factor (admins), Better Auth no abre la sesión todavía: deja una
+  // cookie firmada de 10 minutos y falta el código de la app autenticadora.
+  const next = formData.get("next");
+  if ("twoFactorRedirect" in resultado && resultado.twoFactorRedirect) {
+    redirect(typeof next === "string" && next ? `/login/codigo?next=${encodeURIComponent(destinoSeguro(next))}` : "/login/codigo");
+  }
+  redirect(await destinoTrasLogin(next, "user" in resultado ? resultado.user.id : ""));
+}
+
+/** Segundo paso del login: el código de la app autenticadora o uno de respaldo. */
+export async function verificarCodigo(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
+  const datos = esquemaCodigo.safeParse(datosDeForm(formData));
+  if (!datos.success) return { errores: erroresDeCampo(datos.error) };
+  if (!(await dentroDelLimite("codigo", 10, 600))) return DEMASIADOS;
+
+  let userId: string;
+  try {
+    const { codigo } = datos.data;
+    const r = /^\d{6}$/.test(codigo)
+      ? await auth.api.verifyTOTP({ body: { code: codigo }, headers: await headers() })
+      : await auth.api.verifyBackupCode({ body: { code: codigo }, headers: await headers() });
+    userId = r.user.id;
+  } catch (e) {
+    const codigo = codigoDe(e);
+    if (codigo === "INVALID_TWO_FACTOR_COOKIE") {
+      return { error: "Pasaron más de 10 minutos. Volvé a ingresar con tu email y contraseña." };
+    }
+    if (!(e instanceof APIError)) console.error("[codigo]", e);
+    return { error: "El código no es correcto. Probá de nuevo." };
+  }
+  redirect(await destinoTrasLogin(formData.get("next"), userId));
 }
 
 export async function registrarse(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {

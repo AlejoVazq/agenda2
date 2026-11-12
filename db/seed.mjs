@@ -9,6 +9,8 @@ export const USUARIOS_DEMO = [
   { id: "11111111-1111-4111-8111-111111111111", nombre: "Sofía", email: "demo@turnos.test" },
   { id: "11111111-1111-4111-8111-111111111112", nombre: "Mateo", email: "barbero@turnos.test" },
 ];
+/** Administrador de la plataforma (/admin). Al entrar pide configurar el segundo factor. */
+export const ADMIN_DEMO = { id: "11111111-1111-4111-8111-1111111111ad", nombre: "Admin", email: "admin@turnos.test" };
 export const CLAVE_DEMO = "demo1234";
 
 /**
@@ -19,7 +21,7 @@ export async function cargarSeed(ejecutar) {
   const hash = await hashPassword(CLAVE_DEMO);
   await ejecutar("begin");
   try {
-    for (const u of USUARIOS_DEMO) {
+    for (const u of [...USUARIOS_DEMO, ADMIN_DEMO]) {
       await ejecutar(
         `insert into auth."user" ("id", "name", "email", "emailVerified") values ($1, $2, $3, true)`,
         [u.id, u.nombre, u.email],
@@ -31,6 +33,7 @@ export async function cargarSeed(ejecutar) {
       );
     }
     await ejecutar(readFileSync(join(import.meta.dirname, "seed.sql"), "utf8"));
+    await ejecutar("insert into plataforma.administradores (usuario_id) values ($1)", [ADMIN_DEMO.id]);
     await ejecutar("commit");
   } catch (e) {
     await ejecutar("rollback");

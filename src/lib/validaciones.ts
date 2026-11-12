@@ -82,6 +82,14 @@ export const esquemaLogin = z.object({
   password: z.string().min(1, "Ingresá tu contraseña"),
 });
 
+/** Código de la app autenticadora (6 dígitos) o uno de respaldo (10 caracteres). */
+export const esquemaCodigo = z.object({
+  codigo: z.preprocess(
+    (v) => (typeof v === "string" ? v.replace(/\s+/g, "") : v),
+    z.string().regex(/^(\d{6}|[A-Za-z0-9]{5}-?[A-Za-z0-9]{5})$/, "Ingresá el código de 6 números"),
+  ),
+});
+
 export const esquemaRegistro = z.object({
   nombre: texto(2, 80, "Tu nombre"),
   email: z.preprocess((v) => (typeof v === "string" ? v.trim().toLowerCase() : v), z.email("Ingresá un email válido")),

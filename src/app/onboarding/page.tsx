@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Logo, Tarjeta } from "@/components/ui";
 import { cerrarSesion } from "@/app/(auth)/acciones";
-import { getSesion, getSesionPanel } from "@/lib/auth";
+import { esAdministrador, getSesion, getSesionPanel } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { FormularioOnboarding } from "./formulario";
 
@@ -12,6 +12,8 @@ export default async function PaginaOnboarding() {
   const sesion = await getSesion();
   if (!sesion) redirect("/login");
   if (await getSesionPanel()) redirect("/panel");
+  // Las cuentas de administrador no tienen negocio.
+  if (await esAdministrador(sesion.userId)) redirect("/admin");
 
   const nombre = sesion.nombre;
 

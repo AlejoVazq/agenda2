@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { comoUsuario, sql } from "@/lib/db";
-import { getSesion, getSesionPanel } from "@/lib/auth";
+import { esAdministrador, getSesion, getSesionPanel } from "@/lib/auth";
 import { mensajeDeError } from "@/lib/errores";
 import { datosDeForm, erroresDeCampo, esquemaOnboarding } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
@@ -11,6 +11,8 @@ export async function crearNegocio(_prev: EstadoAccion, formData: FormData): Pro
   const sesion = await getSesion();
   if (!sesion) redirect("/login");
   if (await getSesionPanel()) redirect("/panel");
+  // Las cuentas de administrador no tienen negocio.
+  if (await esAdministrador(sesion.userId)) redirect("/admin");
 
   const datos = esquemaOnboarding.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };

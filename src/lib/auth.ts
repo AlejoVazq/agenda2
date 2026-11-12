@@ -15,6 +15,8 @@ export type Sesion = {
   userId: string;
   email: string;
   nombre: string;
+  /** Tiene activado el segundo factor (obligatorio para los admins de la plataforma). */
+  dosFactores: boolean;
 };
 
 export type SesionPanel = Sesion & {
@@ -30,7 +32,18 @@ export type SesionPanel = Sesion & {
 export const getSesion = cache(async (): Promise<Sesion | null> => {
   const datos = await auth.api.getSession({ headers: await headers() }).catch(() => null);
   if (!datos?.user) return null;
-  return { userId: datos.user.id, email: datos.user.email, nombre: datos.user.name };
+  return {
+    userId: datos.user.id,
+    email: datos.user.email,
+    nombre: datos.user.name,
+    dosFactores: Boolean(datos.user.twoFactorEnabled),
+  };
+});
+
+/** ¿Es administrador de la plataforma? (plataforma.administradores, ver src/lib/admin.ts) */
+export const esAdministrador = cache(async (userId: string): Promise<boolean> => {
+  const fila = await comoUsuario(userId, (tx) => tx.uno<{ admin: boolean }>(sql`select plataforma.es_admin() as admin`));
+  return Boolean(fila?.admin);
 });
 
 /** Perfil + negocio del usuario actual, o null si no pertenece a ningún negocio. */
@@ -63,7 +76,7 @@ export async function requerirPanel(): Promise<SesionPanel> {
   const sesion = await getSesion();
   if (!sesion) redirect("/login");
   const panel = await getSesionPanel();
-  if (!panel) redirect("/onboarding");
+  if (!panel) redirect((await esAdministrador(sesion.userId)) ? "/admin" : "/onboarding");
   return panel;
 }
 

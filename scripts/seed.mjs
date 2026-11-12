@@ -27,6 +27,7 @@ const ejecutar = (sql, params) => cliente.query(sql, params);
 try {
   if (process.argv.includes("--reset")) {
     await ejecutar(`
+      drop schema if exists plataforma cascade;
       drop schema if exists auth cascade;
       drop schema if exists app cascade;
       drop schema if exists extensions cascade;
@@ -36,7 +37,7 @@ try {
     await migrar(ejecutar);
   }
   await cargarSeed(ejecutar);
-  console.log("✓ datos demo: demo@turnos.test y barbero@turnos.test (contraseña demo1234)");
+  console.log("✓ datos demo: demo@turnos.test y barbero@turnos.test; admin: admin@turnos.test (contraseña demo1234)");
 } catch (e) {
   console.error(`✗ ${e.message}`);
   process.exitCode = 1;
