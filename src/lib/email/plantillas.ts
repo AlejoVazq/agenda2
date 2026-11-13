@@ -140,9 +140,13 @@ export function emailNuevaReserva(
     negocio: string;
     zona_horaria: string;
     sena?: number | null;
+    /** El cliente canceló desde su link (mismo mail, otro título). */
+    cancelada?: boolean;
   },
 ): Email {
   const cuando = formatFechaHora(d.inicio, d.zona_horaria);
+  const titulo = d.cancelada ? "Un cliente canceló su turno" : d.pendiente ? "Nueva reserva para confirmar" : "Nueva reserva online";
+  const asunto = d.cancelada ? "Canceló" : d.pendiente ? "Reserva para confirmar" : "Nueva reserva";
   const link = `${env.siteUrl}/panel/turnos/${d.turnoId}`;
   const filas: [string, string][] = [
     ["Cliente", d.cliente],
@@ -152,20 +156,22 @@ export function emailNuevaReserva(
     ["Con", d.profesional],
   ];
   if (d.sena) filas.push(["Seña", `${formatPrecio(d.sena)} (pagada por Mercado Pago)`]);
+  const nota = d.cancelada ? "El horario ya quedó libre en tu página de reservas." : null;
   const html = `<!doctype html><html lang="es"><body style="font-family:Arial,Helvetica,sans-serif;color:#14231c;background:#f3eee4;padding:24px 12px">
   <div style="max-width:480px;margin:auto;background:#fff;border-radius:20px;padding:24px">
     <p style="margin:0;font-size:13px;font-weight:bold;color:#1f4d3a">${escapar(d.negocio)}</p>
-    <h1 style="margin:6px 0 16px;font-size:20px">${d.pendiente ? "Nueva reserva para confirmar" : "Nueva reserva online"}</h1>
+    <h1 style="margin:6px 0 16px;font-size:20px">${titulo}</h1>
     <table style="font-size:14px;width:100%">${filas
       .map(([k, v]) => `<tr><td style="padding:6px 0;color:#776f63;width:80px">${escapar(k)}</td><td style="padding:6px 0;font-weight:bold">${escapar(v)}</td></tr>`)
-      .join("")}</table>
+      .join("")}</table>${nota ? `
+    <p style="margin:16px 0 0;font-size:14px;color:#776f63">${escapar(nota)}</p>` : ""}
     <p style="margin:20px 0 0"><a href="${link}" style="display:inline-block;background:#1f4d3a;color:#fff;text-decoration:none;font-weight:bold;padding:11px 18px;border-radius:12px">Ver en el panel</a></p>
   </div></body></html>`;
   return {
     para,
-    asunto: `${d.pendiente ? "Reserva para confirmar" : "Nueva reserva"}: ${d.cliente}, ${cuando}`,
+    asunto: `${asunto}: ${d.cliente}, ${cuando}`,
     html,
-    texto: [`${d.negocio}: nueva reserva`, ...filas.map(([k, v]) => `${k}: ${v}`), "", link].join("\n"),
+    texto: [`${d.negocio}: ${titulo.toLowerCase()}`, ...filas.map(([k, v]) => `${k}: ${v}`), ...(nota ? ["", nota] : []), "", link].join("\n"),
   };
 }
 

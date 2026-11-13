@@ -88,7 +88,7 @@ Ir en este orden salvo que el usuario diga otra cosa.
 2. **Prueba completa del paso 7** (abajo) con mails reales; el recordatorio por mail nunca se probó de punta a punta.
 3. **Revisión de textos legales** (`/privacidad`, `/terminos`) antes de sumar más locales.
 4. **Detalles anotados el 2026-11-06**: resueltos el 2026-11-13 (migración 0008 y app): alias de mail (`public.clave_email`), aviso y "Quitar límite" de la ficha con la misma regla que la reserva, "+ Turno" desde la ficha con los datos del cliente, botón atrás en la reserva (`?paso=`), 90 días de anticipación (tope 92), estadísticas sin "$ 0" para servicios sin precio. Ya no pasaban: el link de confirmación (con Better Auth se puede abrir varias veces en 24 h) y el celular ya registrado (el turno usa `nombre_reserva`). **Quedan, a decidir con el usuario** (son funciones nuevas o reglas):
-   - el negocio no recibe aviso cuando un cliente cancela;
+   - ~~el negocio no recibe aviso cuando un cliente cancela~~: hecho el 2026-11-13 (`notificarCancelacionCliente`, mail al dueño y al profesional de esa agenda);
    - con menos de 2 h de anticipación no se puede cancelar online (la política de cancelación lo impide desde que se reserva);
    - no hay botón para borrar un cliente.
 5. **Ideas conversadas, sin hacer**: color propio y foto de portada por negocio (el logo ya está), tiempos de espera en servicios de peluquería (tintura), login con Google (comentado en `better-auth.ts`).

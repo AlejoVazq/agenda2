@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { comoAnonimo, comoServidor, sql } from "@/lib/db";
+import { notificarCancelacionCliente } from "@/lib/email/notificar";
 import { sincronizarGoogleDespues } from "@/lib/google";
 import { crearPagoSena } from "@/lib/mercadopago";
 import { mensajeDeError } from "@/lib/errores";
@@ -28,7 +29,10 @@ export async function cancelarTurno(token: string, _prev: EstadoAccion): Promise
   }
 
   const id = await turnoIdDeToken(token);
-  if (id) sincronizarGoogleDespues(id);
+  if (id) {
+    sincronizarGoogleDespues(id);
+    notificarCancelacionCliente(id);
+  }
 
   revalidatePath(`/t/${token}`);
   return { ok: true, mensaje: "Tu turno fue cancelado." };

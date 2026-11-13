@@ -59,27 +59,23 @@ function leerTurno(turnoId: string) {
   );
 }
 
-/**
- * Avisa al dueño (y al empleado de esa agenda, si tiene usuario) que entró una
- * reserva online. Corre después de responder al cliente.
- */
-export function notificarNuevaReserva(turnoId: string) {
-  if (!process.env.RESEND_API_KEY) return;
+/** Dueño y, si tiene usuario, el profesional de esa agenda. */
+function equipoAvisado(t: TurnoEmail) {
+  return comoServidor((tx) =>
+    tx.varios<{ email: string }>(sql`
+      select u."email" as email
+      from public.perfiles p
+      join auth."user" u on u."id" = p.id
+      where p.negocio_id = ${t.negocio_id}
+        and (p.rol = 'dueno' or p.profesional_id = ${t.profesional_id})`),
+  );
+}
 
+function avisarAlEquipo(turnoId: string, tipo: "nueva" | "cancelada") {
   after(async () => {
     const t = await leerTurno(turnoId);
     if (!t) return;
-
-    const destinatarios = await comoServidor((tx) =>
-      tx.varios<{ email: string }>(sql`
-        select u."email" as email
-        from public.perfiles p
-        join auth."user" u on u."id" = p.id
-        where p.negocio_id = ${t.negocio_id}
-          and (p.rol = 'dueno' or p.profesional_id = ${t.profesional_id})`),
-    );
-
-    for (const { email } of destinatarios) {
+    for (const { email } of await equipoAvisado(t)) {
       await enviarEmail(
         emailNuevaReserva(email, {
           turnoId: t.id,
@@ -92,10 +88,24 @@ export function notificarNuevaReserva(turnoId: string) {
           negocio: t.negocio.nombre,
           zona_horaria: t.negocio.zona_horaria,
           sena: t.pago_estado === "aprobado" ? t.sena_monto : null,
+          cancelada: tipo === "cancelada",
         }),
       );
     }
   });
+}
+
+/**
+ * Avisa al dueño (y al empleado de esa agenda, si tiene usuario) que entró una
+ * reserva online. Corre después de responder al cliente.
+ */
+export function notificarNuevaReserva(turnoId: string) {
+  avisarAlEquipo(turnoId, "nueva");
+}
+
+/** Avisa al dueño (y al profesional) que el cliente canceló desde su link: el horario quedó libre. */
+export function notificarCancelacionCliente(turnoId: string) {
+  avisarAlEquipo(turnoId, "cancelada");
 }
 
 /** Mail de confirmación al cliente que reservó online. */
