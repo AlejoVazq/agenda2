@@ -52,7 +52,7 @@ export function BotonEnviar({
   ...props
 }: ComponentProps<"button"> & {
   pendiente?: string;
-  variante?: "primario" | "secundario" | "fantasma" | "peligro" | "oscuro" | "coral";
+  variante?: "primario" | "secundario" | "fantasma" | "peligro" | "oscuro" | "acento";
   tamano?: "sm" | "md" | "lg";
 }) {
   const { pending } = useFormStatus();

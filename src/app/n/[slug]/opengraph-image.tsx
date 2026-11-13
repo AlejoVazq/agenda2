@@ -1,5 +1,8 @@
+/* eslint-disable @next/next/no-img-element -- next/og (Satori) solo entiende <img> */
 import { ImageResponse } from "next/og";
+import { ISOTIPO_DATA_URI } from "@/lib/isotipo";
 import { MARCA } from "@/lib/marca";
+import { logoDataUri } from "@/lib/logo";
 import { getNegocioPublico } from "@/lib/publico";
 import { RUBROS, type Rubro } from "@/lib/tipos";
 
@@ -14,6 +17,7 @@ export default async function Imagen({ params }: { params: Promise<{ slug: strin
   const nombre = negocio?.nombre ?? MARCA.nombre;
   const rubro = negocio ? (RUBROS[negocio.rubro as Rubro] ?? "Turnos online") : "Turnos online";
   const inicial = nombre.trim().charAt(0).toUpperCase();
+  const logo = negocio ? await logoDataUri(slug) : null;
 
   return new ImageResponse(
     (
@@ -26,12 +30,21 @@ export default async function Imagen({ params }: { params: Promise<{ slug: strin
           justifyContent: "space-between",
           padding: 72,
           background:
-            "radial-gradient(ellipse 70% 90% at 100% 0%, rgba(106,67,246,0.75), transparent), radial-gradient(ellipse 60% 80% at 0% 100%, rgba(255,106,61,0.4), transparent), #15111d",
+            "radial-gradient(ellipse 70% 90% at 100% 0%, rgba(79,146,114,0.6), transparent), radial-gradient(ellipse 60% 80% at 0% 100%, rgba(226,98,43,0.38), transparent), #0e1c16",
           color: "white",
           fontFamily: "sans-serif",
         }}
       >
         <div style={{ display: "flex", alignItems: "center" }}>
+          {logo ? (
+            <img
+              src={logo}
+              width={112}
+              height={112}
+              style={{ borderRadius: 28, background: "white", padding: 10, objectFit: "contain", marginRight: 28 }}
+              alt=""
+            />
+          ) : (
           <div
             style={{
               display: "flex",
@@ -49,7 +62,8 @@ export default async function Imagen({ params }: { params: Promise<{ slug: strin
           >
             {inicial}
           </div>
-          <div style={{ display: "flex", fontSize: 28, fontWeight: 700, letterSpacing: 4, textTransform: "uppercase", color: "#ffab8a" }}>
+          )}
+          <div style={{ display: "flex", fontSize: 28, fontWeight: 700, letterSpacing: 4, textTransform: "uppercase", color: "#f0a277" }}>
             {rubro}
           </div>
         </div>
@@ -62,22 +76,7 @@ export default async function Imagen({ params }: { params: Promise<{ slug: strin
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", fontSize: 30, color: "rgba(255,255,255,0.7)" }}>
-          <div
-            style={{
-              display: "flex",
-              width: 48,
-              height: 48,
-              borderRadius: 14,
-              background: "linear-gradient(135deg, #7d5fff, #3b2290)",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: 800,
-              color: "white",
-              marginRight: 16,
-            }}
-          >
-            2
-          </div>
+          <img src={ISOTIPO_DATA_URI} width={48} height={48} style={{ marginRight: 16 }} alt="" />
           Turnos con {MARCA.nombre}
         </div>
       </div>

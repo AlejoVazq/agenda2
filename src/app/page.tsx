@@ -107,8 +107,8 @@ export default function Inicio() {
         <section className="relative">
           <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden>
             <div className="absolute -top-40 right-[-10%] size-[38rem] rounded-full bg-marca-300/40 blur-3xl" />
-            <div className="absolute left-[-15%] top-40 size-[28rem] rounded-full bg-coral-200/50 blur-3xl" />
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,rgb(26_21_35/0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgb(26_21_35/0.04)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]" />
+            <div className="absolute left-[-15%] top-40 size-[28rem] rounded-full bg-acento-200/50 blur-3xl" />
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,rgb(20_35_28/0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgb(20_35_28/0.04)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]" />
           </div>
 
           <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 pb-20 pt-10 sm:px-6 sm:pt-16 lg:grid-cols-[1.1fr_0.9fr] lg:gap-8 lg:pb-28 lg:pt-20">
@@ -122,13 +122,13 @@ export default function Inicio() {
               <h1 className="mt-6 animate-aparecer font-display text-[2.75rem] font-bold leading-[1.02] tracking-[-0.035em] retraso-1 sm:text-6xl lg:text-7xl">
                 Tus clientes{" "}
                 <span className="relative whitespace-nowrap">
-                  <span className="relative z-10 bg-gradient-to-r from-marca-700 via-marca-600 to-coral-500 bg-clip-text text-transparent">
+                  <span className="relative z-10 bg-gradient-to-r from-marca-700 via-marca-600 to-acento-500 bg-clip-text text-transparent">
                     reservan solos.
                   </span>
                   <svg
                     viewBox="0 0 300 18"
                     preserveAspectRatio="none"
-                    className="absolute -bottom-1.5 left-0 h-3 w-full text-coral-400/70 sm:-bottom-2"
+                    className="absolute -bottom-1.5 left-0 h-3 w-full text-acento-400/70 sm:-bottom-2"
                     aria-hidden
                   >
                     <path d="M3 13c60-8 140-11 294-6" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
@@ -161,13 +161,13 @@ export default function Inicio() {
 
             {/* Maqueta: celular + notificaciones flotando */}
             <div className="relative mx-auto flex h-[34rem] w-full max-w-md animate-aparecer items-center justify-center retraso-3">
-              <div className="absolute inset-x-6 bottom-6 top-10 rounded-[3rem] bg-gradient-to-br from-marca-400 via-marca-600 to-coral-400 shadow-flotante">
+              <div className="absolute inset-x-6 bottom-6 top-10 rounded-[3rem] bg-gradient-to-br from-marca-400 via-marca-600 to-acento-400 shadow-flotante">
                 <div className="fondo-puntos absolute inset-0 rounded-[3rem]" />
               </div>
               <CelularReserva className="relative rotate-[-3deg]" />
               <Notificacion
                 className="absolute -left-2 top-2 animate-flotar sm:-left-12"
-                tono="coral"
+                tono="acento"
                 icono={<Icono nombre="campana" className="size-4.5" />}
                 titulo="Nuevo turno · 17:30"
                 texto="Corte + barba con Nico"
@@ -194,7 +194,7 @@ export default function Inicio() {
                   aria-hidden={i >= rubros.length}
                 >
                   {r}
-                  <span className="size-1.5 rounded-full bg-coral-400" />
+                  <span className="size-1.5 rounded-full bg-acento-400" />
                 </li>
               ))}
             </ul>
@@ -233,7 +233,7 @@ export default function Inicio() {
         <section id="funciones" className="relative scroll-mt-20 overflow-hidden bg-noche text-white">
           <div className="relative mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
             <div className="pointer-events-none absolute -left-40 top-0 size-[30rem] rounded-full bg-marca-700/30 blur-3xl" aria-hidden />
-            <div className="pointer-events-none absolute -right-40 bottom-0 size-[26rem] rounded-full bg-coral-500/15 blur-3xl" aria-hidden />
+            <div className="pointer-events-none absolute -right-40 bottom-0 size-[26rem] rounded-full bg-acento-500/15 blur-3xl" aria-hidden />
             <Encabezado
               oscuro
               etiqueta="Funciones"
@@ -246,7 +246,7 @@ export default function Inicio() {
                 <p>Un link con el nombre de tu local, listo para compartir. Se ve perfecto en el celular y carga al instante.</p>
                 <div className="mt-6 flex items-center gap-2 overflow-hidden rounded-2xl bg-white/5 p-2 pl-4 ring-1 ring-white/10">
                   <span className="truncate font-mono text-sm text-white/80">
-                    agenda2.tech/n/<span className="text-coral-300">tu-negocio</span>
+                    agenda2.tech/n/<span className="text-acento-300">tu-negocio</span>
                   </span>
                   <span className="ml-auto shrink-0 rounded-xl bg-white px-3 py-1.5 text-xs font-bold text-tinta">Copiar</span>
                 </div>
@@ -299,7 +299,7 @@ export default function Inicio() {
               </ul>
             </div>
             <div className="relative">
-              <div className="absolute -inset-6 -z-10 rounded-[3rem] bg-gradient-to-tr from-marca-100 via-fondo to-coral-100" aria-hidden />
+              <div className="absolute -inset-6 -z-10 rounded-[3rem] bg-gradient-to-tr from-marca-100 via-fondo to-acento-100" aria-hidden />
               <PanelMaqueta />
             </div>
           </div>
@@ -338,7 +338,7 @@ export default function Inicio() {
               <div className="relative overflow-hidden bg-gradient-to-br from-marca-700 via-marca-800 to-noche p-8 text-white">
                 <div className="fondo-puntos absolute inset-0" aria-hidden />
                 <div className="relative">
-                  <p className="text-sm font-semibold uppercase tracking-[0.14em] text-coral-300">Para empezar</p>
+                  <p className="text-sm font-semibold uppercase tracking-[0.14em] text-acento-300">Para empezar</p>
                   <p className="mt-3 font-display text-6xl font-bold tracking-tight">7 días</p>
                   <p className="mt-1 text-lg text-white/80">gratis, con todas las funciones.</p>
                   <p className="mt-6 text-sm text-white/70">
@@ -399,7 +399,7 @@ export default function Inicio() {
 
         {/* --- Llamado final --- */}
         <section className="px-4 py-16 sm:px-6 sm:py-24">
-          <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-noche bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(106_67_246/0.55),transparent),radial-gradient(ellipse_50%_70%_at_100%_100%,rgb(255_106_61/0.35),transparent)] px-6 py-16 text-center text-white sm:px-12 sm:py-24">
+          <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-noche bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_50%_70%_at_100%_100%,rgb(226_98_43/0.35),transparent)] px-6 py-16 text-center text-white sm:px-12 sm:py-24">
             <div className="fondo-puntos pointer-events-none absolute inset-0" aria-hidden />
             <div className="relative">
               <h2 className="mx-auto max-w-2xl font-display text-4xl font-bold leading-[1.05] sm:text-6xl">
@@ -409,7 +409,7 @@ export default function Inicio() {
                 Creá tu agenda hoy y compartí el link esta misma tarde. Los primeros 7 días van por nuestra cuenta.
               </p>
               <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <BotonLink href="/registro" tamano="lg" variante="coral">
+                <BotonLink href="/registro" tamano="lg" variante="acento">
                   Empezar gratis
                 </BotonLink>
                 <BotonLink href="/login" tamano="lg" variante="fantasma" className="text-white hover:bg-white/10">
@@ -463,7 +463,7 @@ function Encabezado({
 }) {
   return (
     <div className={cx("relative max-w-2xl", alineado === "centro" && "mx-auto text-center")}>
-      <p className={cx("text-sm font-bold uppercase tracking-[0.16em]", oscuro ? "text-coral-300" : "text-coral-600")}>{etiqueta}</p>
+      <p className={cx("text-sm font-bold uppercase tracking-[0.16em]", oscuro ? "text-acento-300" : "text-acento-600")}>{etiqueta}</p>
       <h2 className="mt-3 text-4xl font-bold leading-[1.05] sm:text-5xl">{titulo}</h2>
       {texto ? <p className={cx("mt-4 text-lg", oscuro ? "text-white/65" : "text-zinc-600")}>{texto}</p> : null}
     </div>
@@ -488,7 +488,7 @@ function Bento({
         className,
       )}
     >
-      <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-marca-500 to-marca-700 text-white shadow-[0_8px_20px_-8px_rgb(125_95_255/0.8)]">
+      <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-marca-500 to-marca-700 text-white shadow-[0_8px_20px_-8px_rgb(79_146_114/0.8)]">
         <Icono nombre={icono} />
       </span>
       <h3 className="mt-5 text-xl font-bold">{titulo}</h3>

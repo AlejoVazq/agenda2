@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Logo } from "@/components/ui";
 import { fechaLocalISO } from "@/lib/fechas";
+import { urlLogo, versionLogo } from "@/lib/logo";
 import { getNegocioPublico, linkWhatsApp } from "@/lib/publico";
 import { RUBROS, type Rubro } from "@/lib/tipos";
 import { Reserva } from "./reserva";
@@ -22,6 +23,7 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
   const negocio = await getNegocioPublico(slug);
   if (!negocio) notFound();
 
+  const logo = urlLogo(negocio.slug, await versionLogo(negocio.id));
   const iniciales = negocio.nombre
     .split(/\s+/)
     .filter((p) => /^[\p{L}\p{N}]/u.test(p))
@@ -31,18 +33,27 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
 
   return (
     <div className="min-h-dvh bg-fondo">
-      <header className="relative overflow-hidden bg-noche bg-[radial-gradient(ellipse_70%_90%_at_100%_0%,rgb(106_67_246/0.55),transparent),radial-gradient(ellipse_60%_80%_at_0%_100%,rgb(255_106_61/0.28),transparent)] text-white">
+      <header className="relative overflow-hidden bg-noche bg-[radial-gradient(ellipse_70%_90%_at_100%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_60%_80%_at_0%_100%,rgb(226_98_43/0.28),transparent)] text-white">
         <div className="fondo-puntos pointer-events-none absolute inset-0 opacity-60" aria-hidden />
         <div className="relative mx-auto max-w-xl px-4 pb-20 pt-8 sm:pt-12">
           <div className="flex animate-aparecer items-center gap-4">
-            <span
-              className="grid size-16 shrink-0 place-items-center rounded-2xl bg-white/10 font-display text-2xl font-bold ring-1 ring-white/20 backdrop-blur"
-              aria-hidden
-            >
-              {iniciales || "·"}
-            </span>
+            {logo ? (
+              // eslint-disable-next-line @next/next/no-img-element -- imagen propia, ya chica (≤512 px)
+              <img
+                src={logo}
+                alt={`Logo de ${negocio.nombre}`}
+                className="size-18 shrink-0 rounded-2xl bg-white object-contain p-1.5 shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)] ring-1 ring-white/20"
+              />
+            ) : (
+              <span
+                className="grid size-16 shrink-0 place-items-center rounded-2xl bg-white/10 font-display text-2xl font-bold ring-1 ring-white/20 backdrop-blur"
+                aria-hidden
+              >
+                {iniciales || "·"}
+              </span>
+            )}
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-coral-300">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-acento-300">
                 {RUBROS[negocio.rubro as Rubro] ?? "Turnos online"}
               </p>
               <h1 className="mt-1 font-display text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{negocio.nombre}</h1>
@@ -58,7 +69,7 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
                 target="_blank"
                 className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-white/10 py-1.5 pl-2.5 pr-3.5 text-sm font-medium text-white/90 ring-1 ring-white/15 transition hover:bg-white/15"
               >
-                <svg viewBox="0 0 24 24" fill="none" className="size-4 shrink-0 text-coral-300" aria-hidden>
+                <svg viewBox="0 0 24 24" fill="none" className="size-4 shrink-0 text-acento-300" aria-hidden>
                   <path d="M12 21s-7-6.1-7-11.5a7 7 0 1 1 14 0C19 14.9 12 21 12 21z" stroke="currentColor" strokeWidth="2" />
                   <circle cx="12" cy="9.5" r="2.5" stroke="currentColor" strokeWidth="2" />
                 </svg>

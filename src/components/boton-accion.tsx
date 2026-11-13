@@ -22,7 +22,7 @@ export function BotonAccion({
   children: ReactNode;
   /** Texto del botón de confirmación; si se omite, ejecuta directo. */
   confirmar?: string;
-  variante?: "primario" | "secundario" | "fantasma" | "peligro" | "oscuro" | "coral";
+  variante?: "primario" | "secundario" | "fantasma" | "peligro" | "oscuro" | "acento";
   tamano?: "sm" | "md" | "lg";
   pendiente?: string;
   className?: string;

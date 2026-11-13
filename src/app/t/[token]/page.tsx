@@ -90,7 +90,7 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
     <div className="relative min-h-dvh overflow-x-clip bg-fondo">
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-80 overflow-hidden" aria-hidden>
         <div className="absolute -right-24 -top-32 size-96 rounded-full bg-marca-200/60 blur-3xl" />
-        <div className="absolute -left-24 -top-16 size-80 rounded-full bg-coral-100/80 blur-3xl" />
+        <div className="absolute -left-24 -top-16 size-80 rounded-full bg-acento-100/80 blur-3xl" />
       </div>
       <main className="relative mx-auto max-w-md px-4 pb-16 pt-10">
         {encabezado ? (
@@ -134,11 +134,11 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
         ) : null}
 
         <div className="animate-aparecer overflow-hidden rounded-[2rem] bg-white shadow-flotante ring-1 ring-zinc-200/60 retraso-1">
-          <div className="relative overflow-hidden bg-noche bg-[radial-gradient(ellipse_80%_100%_at_100%_0%,rgb(106_67_246/0.6),transparent)] px-5 pb-6 pt-5 text-white">
+          <div className="relative overflow-hidden bg-noche bg-[radial-gradient(ellipse_80%_100%_at_100%_0%,rgb(79_146_114/0.6),transparent)] px-5 pb-6 pt-5 text-white">
             <div className="fondo-puntos pointer-events-none absolute inset-0 opacity-60" aria-hidden />
             <div className="relative flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-coral-300">{turno.negocio.nombre}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-acento-300">{turno.negocio.nombre}</p>
                 <p className="mt-1 font-display text-2xl font-bold leading-tight">{turno.servicio}</p>
               </div>
               <Insignia color={esperandoSena ? "ambar" : senaVencida ? "rojo" : colorEstado[turno.estado]}>{etiquetaEstado}</Insignia>

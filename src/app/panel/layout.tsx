@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Isotipo, Logo } from "@/components/ui";
 import { cerrarSesion } from "@/app/(auth)/acciones";
 import { requerirPanel } from "@/lib/auth";
+import { urlLogo, versionLogo } from "@/lib/logo";
 import { AvisoSuscripcion } from "./aviso-suscripcion";
 import { BarraInferior, MenuLateral } from "./navegacion";
 
@@ -10,6 +11,7 @@ import { BarraInferior, MenuLateral } from "./navegacion";
 // usuario pertenezca a un negocio. Las páginas solo-dueño usan requerirDueno().
 export default async function LayoutPanel({ children }: { children: ReactNode }) {
   const { perfil, negocio, esDueno, suscripcion } = await requerirPanel();
+  const logo = urlLogo(negocio.slug, await versionLogo(negocio.id));
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[16rem_1fr]">
@@ -18,9 +20,14 @@ export default async function LayoutPanel({ children }: { children: ReactNode })
           <Logo />
         </Link>
         <div className="mt-6 flex items-center gap-3 rounded-2xl border border-zinc-200/80 bg-white px-3 py-2.5 shadow-suave">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-marca-500 to-marca-800 font-display text-sm font-bold text-white" aria-hidden>
-            {negocio.nombre.trim().charAt(0).toUpperCase()}
-          </span>
+          {logo ? (
+            // eslint-disable-next-line @next/next/no-img-element -- imagen propia, ya chica (≤512 px)
+            <img src={logo} alt="" className="size-9 shrink-0 rounded-xl object-contain ring-1 ring-zinc-200/80" />
+          ) : (
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-marca-500 to-marca-800 font-display text-sm font-bold text-white" aria-hidden>
+              {negocio.nombre.trim().charAt(0).toUpperCase()}
+            </span>
+          )}
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{negocio.nombre}</p>
             <p className="truncate text-xs text-zinc-500">
@@ -53,7 +60,12 @@ export default async function LayoutPanel({ children }: { children: ReactNode })
       <div className="flex min-w-0 flex-col">
         <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-zinc-200/80 bg-fondo/85 px-4 py-3 backdrop-blur-xl lg:hidden">
           <Link href="/panel" className="flex min-w-0 items-center gap-2.5">
-            <Isotipo className="size-8" />
+            {logo ? (
+              // eslint-disable-next-line @next/next/no-img-element -- imagen propia, ya chica (≤512 px)
+              <img src={logo} alt="" className="size-8 shrink-0 rounded-lg object-contain ring-1 ring-zinc-200/80" />
+            ) : (
+              <Isotipo className="size-8" />
+            )}
             <span className="min-w-0">
             <p className="truncate font-display text-base font-bold">{negocio.nombre}</p>
             <p className="text-xs text-zinc-500">

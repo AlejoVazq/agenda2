@@ -100,7 +100,7 @@ export async function eventosEnRango(desde: string, hasta: string, profesionalId
       fin: t.fin,
       profesional_id: t.profesional_id,
       titulo: `${t.nombre_reserva ?? t.cliente?.nombre ?? "Cliente"} · ${t.servicio?.nombre ?? ""}`,
-      color: t.profesional?.color ?? "#7434ee",
+      color: t.profesional?.color ?? "#2f7556",
       turno: t,
     })),
     ...bloqueos.map<EventoAgenda>((b) => ({

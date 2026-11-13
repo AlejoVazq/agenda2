@@ -198,8 +198,8 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
                       className={cx(
                         "grid size-14 place-items-center rounded-full font-display text-xl font-bold",
                         id === CUALQUIERA
-                          ? "bg-coral-100 text-coral-600"
-                          : "bg-gradient-to-br from-marca-500 to-marca-800 text-white shadow-[0_8px_18px_-8px_rgb(89_50_224/0.7)]",
+                          ? "bg-acento-100 text-acento-600"
+                          : "bg-gradient-to-br from-marca-500 to-marca-800 text-white shadow-[0_8px_18px_-8px_rgb(31_77_58/0.7)]",
                       )}
                     >
                       {id === CUALQUIERA ? "★" : nombre.slice(0, 1).toUpperCase()}
@@ -241,7 +241,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
                       className={cx(
                         "flex w-16 flex-col items-center rounded-2xl border py-2.5 transition",
                         activo
-                          ? "border-marca-700 bg-marca-700 text-white shadow-[0_8px_18px_-8px_rgb(89_50_224/0.8)]"
+                          ? "border-marca-700 bg-marca-700 text-white shadow-[0_8px_18px_-8px_rgb(31_77_58/0.8)]"
                           : disponible
                             ? "border-zinc-200 bg-white hover:border-marca-300 hover:bg-marca-50/50"
                             : "border-transparent bg-zinc-100/70 text-zinc-300",
@@ -374,7 +374,7 @@ function Pasos({ paso }: { paso: Paso }) {
             key={p}
             className={cx(
               "h-1.5 flex-1 rounded-full transition-colors duration-500",
-              i < actual ? "bg-marca-600" : i === actual ? "bg-gradient-to-r from-marca-600 to-coral-500" : "bg-zinc-200",
+              i < actual ? "bg-marca-600" : i === actual ? "bg-gradient-to-r from-marca-600 to-acento-500" : "bg-zinc-200",
             )}
           />
         ))}
@@ -397,7 +397,7 @@ function Resumen({
   onCambiar: () => void;
 }) {
   return (
-    <div className="mb-6 flex items-start gap-3 rounded-2xl bg-gradient-to-br from-marca-50 to-coral-50/70 p-4 ring-1 ring-marca-100">
+    <div className="mb-6 flex items-start gap-3 rounded-2xl bg-gradient-to-br from-marca-50 to-acento-50/70 p-4 ring-1 ring-marca-100">
       <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-marca-700 shadow-suave" aria-hidden>
         <svg viewBox="0 0 24 24" fill="none" className="size-5">
           <path d="m5 12 5 5L20 7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />

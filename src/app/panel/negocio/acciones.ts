@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { sesionParaAccion } from "@/lib/auth";
 import { comoUsuario, esErrorPg, sql } from "@/lib/db";
 import { mensajeDeError } from "@/lib/errores";
+import { borrarLogo, guardarLogo, LOGO_MAX_BYTES, tipoDeImagen } from "@/lib/logo";
+import { MENSAJE_SOLO_LECTURA } from "@/lib/suscripcion";
 import { datosDeForm, erroresDeCampo, esquemaNegocio } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
 
@@ -33,4 +35,42 @@ export async function guardarNegocio(_prev: EstadoAccion, formData: FormData): P
 
   revalidatePath("/panel", "layout");
   return { ok: true, mensaje: "Cambios guardados." };
+}
+
+// --- Logo ------------------------------------------------------------------------------
+
+export async function subirLogo(formData: FormData): Promise<EstadoAccion> {
+  const sesion = await sesionParaAccion({ soloDueno: true });
+  if (!sesion) return { error: "Solo el dueño puede cambiar el logo." };
+  if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
+
+  const archivo = formData.get("logo");
+  if (!(archivo instanceof File) || archivo.size === 0) return { error: "Elegí una imagen." };
+  if (archivo.size > LOGO_MAX_BYTES) return { error: "La imagen es muy pesada (máximo 512 KB)." };
+  const datos = Buffer.from(await archivo.arrayBuffer());
+  const tipo = tipoDeImagen(datos);
+  if (!tipo) return { error: "Formato no admitido: usá PNG, JPG o WebP." };
+
+  try {
+    await guardarLogo(sesion.negocio.id, tipo, datos);
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+  revalidatePath("/panel", "layout");
+  revalidatePath(`/n/${sesion.negocio.slug}`, "layout");
+  return { ok: true, mensaje: "Logo actualizado." };
+}
+
+export async function quitarLogo(): Promise<EstadoAccion> {
+  const sesion = await sesionParaAccion({ soloDueno: true });
+  if (!sesion) return { error: "Solo el dueño puede cambiar el logo." };
+  if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
+  try {
+    await borrarLogo(sesion.negocio.id);
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+  revalidatePath("/panel", "layout");
+  revalidatePath(`/n/${sesion.negocio.slug}`, "layout");
+  return { ok: true, mensaje: "Logo quitado." };
 }

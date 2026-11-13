@@ -127,10 +127,10 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
         />
       </div>
 
-      <div className="relative mb-8 flex flex-col gap-4 overflow-hidden rounded-3xl bg-noche bg-[radial-gradient(ellipse_70%_120%_at_100%_0%,rgb(106_67_246/0.55),transparent),radial-gradient(ellipse_50%_100%_at_0%_100%,rgb(255_106_61/0.22),transparent)] p-5 text-white sm:flex-row sm:items-center sm:justify-between sm:p-6">
+      <div className="relative mb-8 flex flex-col gap-4 overflow-hidden rounded-3xl bg-noche bg-[radial-gradient(ellipse_70%_120%_at_100%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_50%_100%_at_0%_100%,rgb(226_98_43/0.22),transparent)] p-5 text-white sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div className="fondo-puntos pointer-events-none absolute inset-0 opacity-60" aria-hidden />
         <div className="relative min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-coral-300">Tu link de reservas</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-acento-300">Tu link de reservas</p>
           <a href={linkPublico} target="_blank" className="mt-1 block truncate font-display text-lg font-semibold hover:underline">
             {linkPublico.replace(/^https?:\/\//, "")}
           </a>
@@ -193,7 +193,7 @@ function ListaTurnos({
       {turnos.map((t) => (
         <li key={t.id}>
           <Link href={`/panel/turnos/${t.id}`} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-marca-50/40">
-            <span className="h-10 w-1 shrink-0 rounded-full" style={{ background: t.profesional?.color ?? "#7434ee" }} />
+            <span className="h-10 w-1 shrink-0 rounded-full" style={{ background: t.profesional?.color ?? "#2f7556" }} />
             <div className="w-14 shrink-0">
               <p className="font-bold tabular-nums">{formatHora(t.inicio, tz)}</p>
               {conFecha ? (
@@ -235,13 +235,13 @@ function Dato({
     <div
       className={
         (destacado
-          ? "border-coral-200 bg-gradient-to-br from-coral-50 to-white "
+          ? "border-acento-200 bg-gradient-to-br from-acento-50 to-white "
           : "border-zinc-200/80 bg-white ") +
         "rounded-3xl border px-4 py-3.5 shadow-suave " +
         (className ?? "")
       }
     >
-      <p className={"font-display text-3xl font-bold tabular-nums " + (destacado ? "text-coral-600" : "text-tinta")}>{valor}</p>
+      <p className={"font-display text-3xl font-bold tabular-nums " + (destacado ? "text-acento-600" : "text-tinta")}>{valor}</p>
       <p className="truncate text-xs font-medium text-zinc-500">{texto}</p>
     </div>
   );

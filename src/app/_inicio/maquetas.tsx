@@ -18,7 +18,7 @@ export function CelularReserva({ className }: { className?: string }) {
   return (
     <div
       className={cx(
-        "relative w-[17.5rem] rounded-[2.6rem] bg-noche p-2.5 shadow-[0_40px_80px_-24px_rgb(34_19_84/0.55),0_0_0_1px_rgb(255_255_255/0.06)_inset]",
+        "relative w-[17.5rem] rounded-[2.6rem] bg-noche p-2.5 shadow-[0_40px_80px_-24px_rgb(11_29_22/0.55),0_0_0_1px_rgb(255_255_255/0.06)_inset]",
         className,
       )}
       aria-hidden
@@ -29,13 +29,13 @@ export function CelularReserva({ className }: { className?: string }) {
 
         <div className="relative overflow-hidden bg-noche px-4 pb-10 pt-10 text-white">
           <div className="absolute -right-10 -top-10 size-36 rounded-full bg-marca-600/50 blur-2xl" />
-          <div className="absolute -bottom-12 left-6 size-28 rounded-full bg-coral-500/30 blur-2xl" />
+          <div className="absolute -bottom-12 left-6 size-28 rounded-full bg-acento-500/30 blur-2xl" />
           <div className="relative flex items-center gap-2.5">
             <span className="grid size-9 place-items-center rounded-xl bg-white/10 font-display text-sm font-bold ring-1 ring-white/15">
               BN
             </span>
             <div>
-              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-coral-300">Barbería</p>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-acento-300">Barbería</p>
               <p className="font-display text-base font-bold leading-tight">Barbería Norte</p>
             </div>
           </div>
@@ -77,7 +77,7 @@ export function CelularReserva({ className }: { className?: string }) {
                 key={h}
                 className={cx(
                   "rounded-lg border py-1.5 text-center text-[10px] font-semibold tabular-nums",
-                  h === "17:30" ? "border-coral-500 bg-coral-500 text-white" : "border-zinc-200 bg-white",
+                  h === "17:30" ? "border-acento-500 bg-acento-500 text-white" : "border-zinc-200 bg-white",
                   (h === "16:00" || h === "18:30") && "border-transparent bg-zinc-100 text-zinc-300 line-through",
                 )}
               >
@@ -106,11 +106,11 @@ export function Notificacion({
   titulo: string;
   texto: string;
   className?: string;
-  tono?: "marca" | "coral" | "verde";
+  tono?: "marca" | "acento" | "verde";
 }) {
   const tonos = {
     marca: "bg-marca-100 text-marca-700",
-    coral: "bg-coral-100 text-coral-600",
+    acento: "bg-acento-100 text-acento-600",
     verde: "bg-emerald-100 text-emerald-700",
   }[tono];
   return (
@@ -131,10 +131,10 @@ export function Notificacion({
 }
 
 const TURNOS_HOY = [
-  { hora: "09:30", cliente: "Martín R.", servicio: "Corte clásico", prof: "Nico", color: "#6a43f6" },
-  { hora: "10:15", cliente: "Lucas F.", servicio: "Corte + barba", prof: "Santi", color: "#0d9488" },
-  { hora: "11:00", cliente: "Tomás G.", servicio: "Perfilado de barba", prof: "Nico", color: "#6a43f6" },
-  { hora: "12:30", cliente: "Joaquín P.", servicio: "Corte + lavado", prof: "Santi", color: "#0d9488" },
+  { hora: "09:30", cliente: "Martín R.", servicio: "Corte clásico", prof: "Nico", color: "#2f7556" },
+  { hora: "10:15", cliente: "Lucas F.", servicio: "Corte + barba", prof: "Santi", color: "#e2622b" },
+  { hora: "11:00", cliente: "Tomás G.", servicio: "Perfilado de barba", prof: "Nico", color: "#2f7556" },
+  { hora: "12:30", cliente: "Joaquín P.", servicio: "Corte + lavado", prof: "Santi", color: "#e2622b" },
 ];
 
 /** Vista del panel del negocio: turnos de hoy y números rápidos. */
@@ -177,15 +177,15 @@ export function PanelMaqueta({ className }: { className?: string }) {
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-1">
           <Numero valor="38" texto="turnos esta semana" />
           <Numero valor="92%" texto="asistencia" tono="verde" />
-          <Numero valor="11" texto="clientes nuevos" tono="coral" />
+          <Numero valor="11" texto="clientes nuevos" tono="acento" />
         </div>
       </div>
     </div>
   );
 }
 
-function Numero({ valor, texto, tono = "marca" }: { valor: string; texto: string; tono?: "marca" | "verde" | "coral" }) {
-  const color = { marca: "text-marca-700", verde: "text-emerald-600", coral: "text-coral-600" }[tono];
+function Numero({ valor, texto, tono = "marca" }: { valor: string; texto: string; tono?: "marca" | "verde" | "acento" }) {
+  const color = { marca: "text-marca-700", verde: "text-emerald-600", acento: "text-acento-600" }[tono];
   return (
     <div className="rounded-2xl bg-zinc-50 px-3.5 py-3">
       <p className={cx("font-display text-2xl font-bold tabular-nums", color)}>{valor}</p>

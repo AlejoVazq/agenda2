@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
+import { ISOTIPO_A, ISOTIPO_DOS } from "@/lib/isotipo";
 import { MARCA } from "@/lib/marca";
 
 export function cx(...clases: (string | false | null | undefined)[]) {
@@ -8,19 +9,19 @@ export function cx(...clases: (string | false | null | undefined)[]) {
 
 // --- Botones -------------------------------------------------------------------------
 
-type Variante = "primario" | "secundario" | "fantasma" | "peligro" | "oscuro" | "coral";
+type Variante = "primario" | "secundario" | "fantasma" | "peligro" | "oscuro" | "acento";
 type Tamano = "sm" | "md" | "lg";
 
 const VARIANTES: Record<Variante, string> = {
   primario:
-    "bg-marca-700 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(34_19_84/0.2),0_6px_16px_-6px_rgb(89_50_224/0.55)] hover:bg-marca-800 active:bg-marca-900",
+    "bg-marca-700 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(11_29_22/0.2),0_6px_16px_-6px_rgb(31_77_58/0.55)] hover:bg-marca-800 active:bg-marca-900",
   secundario: "bg-white text-tinta border border-zinc-200 shadow-suave hover:border-marca-300 hover:bg-marca-50/60",
   fantasma: "text-marca-700 hover:bg-marca-50",
   peligro: "bg-white text-red-700 border border-red-200 hover:bg-red-50",
-  coral:
-    "bg-coral-500 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_10px_30px_-10px_rgb(255_106_61/0.7)] hover:bg-coral-600 active:bg-coral-700",
+  acento:
+    "bg-acento-500 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2),0_10px_30px_-10px_rgb(226_98_43/0.7)] hover:bg-acento-600 active:bg-acento-700",
   oscuro:
-    "bg-tinta text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.12),0_6px_16px_-6px_rgb(26_21_35/0.5)] hover:bg-zinc-800 active:bg-black",
+    "bg-tinta text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.12),0_6px_16px_-6px_rgb(20_35_28/0.5)] hover:bg-zinc-800 active:bg-black",
 };
 
 const TAMANOS: Record<Tamano, string> = {
@@ -63,7 +64,7 @@ export function BotonLink({
 const claseInput = cx(
   "block w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-base sm:text-sm text-tinta",
   "placeholder:text-zinc-400 transition-colors",
-  "shadow-[0_1px_2px_rgb(26_21_35/0.03)] hover:border-zinc-300 focus:border-marca-500 focus:outline-none focus:ring-4 focus:ring-marca-100",
+  "shadow-[0_1px_2px_rgb(20_35_28/0.03)] hover:border-zinc-300 focus:border-marca-500 focus:outline-none focus:ring-4 focus:ring-marca-100",
   "disabled:bg-zinc-50 disabled:text-zinc-500",
   "aria-[invalid=true]:border-red-400 aria-[invalid=true]:focus:ring-red-100",
 );
@@ -222,26 +223,16 @@ export function Vacio({ titulo, descripcion, accion }: { titulo: string; descrip
   );
 }
 
-/** Isotipo: el "2" de Agenda2 con el punto coral (un turno reservado). Mismo dibujo que `src/app/icon.svg`. */
+/** Isotipo: una A con el 2 entrelazado (la base del 2 es la barra de la A). Mismo dibujo que `src/app/icon.svg`. */
 export function Isotipo({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 64 64" className={cx("size-8 shrink-0", className)} aria-hidden>
-      <defs>
-        <linearGradient id="isotipo-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#7d5fff" />
-          <stop offset="1" stopColor="#3b2290" />
-        </linearGradient>
-      </defs>
-      <rect width="64" height="64" rx="18" fill="url(#isotipo-g)" />
-      <path
-        d="M21.5 25.5c0-6.4 4.7-10.5 10.5-10.5s10.5 3.9 10.5 9.6c0 5-3.2 8-7.6 11.9L21.5 48.5h21.5"
-        fill="none"
-        stroke="#fff"
-        strokeWidth="6.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="50" cy="14" r="5" fill="#ff6a3d" />
+      <rect width="64" height="64" rx="16" fill="#1f4d3a" />
+      <g fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path d={ISOTIPO_A} stroke="#f3eee4" strokeWidth="7" />
+        <path d={ISOTIPO_DOS} stroke="#1f4d3a" strokeWidth="10" />
+        <path d={ISOTIPO_DOS} stroke="#e2622b" strokeWidth="5.5" />
+      </g>
     </svg>
   );
 }
@@ -254,7 +245,7 @@ export function Logo({ className, claro }: { className?: string; claro?: boolean
       <Isotipo />
       <span className={cx("font-display text-xl font-bold tracking-tight", claro ? "text-white" : "text-tinta")}>
         {palabra}
-        {numero ? <span className={claro ? "text-coral-400" : "text-marca-600"}>{numero}</span> : null}
+        {numero ? <span className={claro ? "text-acento-400" : "text-acento-500"}>{numero}</span> : null}
       </span>
     </span>
   );

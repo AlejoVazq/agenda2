@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 /*
- * Identidad visual de Agenda2 (2026-11-12).
- * - Violeta índigo como color de marca, coral como acento cálido.
+ * Identidad visual de Agenda2 (2026-11-12, paleta verde pino y hueso).
+ * - Verde pino como color de marca, naranja quemado como acento, arena para detalles.
  * - Neutros cálidos (papel) en lugar de grises fríos: los `zinc-*` de todo el código toman estos valores.
  * - Bricolage Grotesque para títulos (con carácter) y Plus Jakarta Sans para el texto.
  */
@@ -10,48 +10,53 @@
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-bricolage), var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
 
-  --color-marca-50: #f5f3ff;
-  --color-marca-100: #ece8ff;
-  --color-marca-200: #dad2ff;
-  --color-marca-300: #bdaeff;
-  --color-marca-400: #9b85ff;
-  --color-marca-500: #7d5fff;
-  --color-marca-600: #6a43f6;
-  --color-marca-700: #5932e0;
-  --color-marca-800: #4827b5;
-  --color-marca-900: #3b2290;
-  --color-marca-950: #221354;
+  /* Verde pino (marca). */
+  --color-marca-50: #eef5f1;
+  --color-marca-100: #d8e9df;
+  --color-marca-200: #b2d2c0;
+  --color-marca-300: #82b49a;
+  --color-marca-400: #4f9272;
+  --color-marca-500: #2f7556;
+  --color-marca-600: #255f46;
+  --color-marca-700: #1f4d3a;
+  --color-marca-800: #1a4031;
+  --color-marca-900: #153428;
+  --color-marca-950: #0b1d16;
 
-  --color-coral-50: #fff5f0;
-  --color-coral-100: #ffe8dd;
-  --color-coral-200: #ffcdb8;
-  --color-coral-300: #ffab8a;
-  --color-coral-400: #ff8a60;
-  --color-coral-500: #ff6a3d;
-  --color-coral-600: #ee4f23;
-  --color-coral-700: #c63c17;
+  /* Naranja quemado (acento). */
+  --color-acento-50: #fdf4ee;
+  --color-acento-100: #fbe5d6;
+  --color-acento-200: #f6c7a8;
+  --color-acento-300: #f0a277;
+  --color-acento-400: #ea7f4c;
+  --color-acento-500: #e2622b;
+  --color-acento-600: #c94e1c;
+  --color-acento-700: #a73d17;
 
-  /* Neutros cálidos. */
-  --color-zinc-50: #faf8f5;
-  --color-zinc-100: #f3f0eb;
-  --color-zinc-200: #e7e2db;
-  --color-zinc-300: #d5cec5;
-  --color-zinc-400: #a59d94;
-  --color-zinc-500: #7b736b;
-  --color-zinc-600: #5e5750;
-  --color-zinc-700: #48423d;
-  --color-zinc-800: #2f2a27;
-  --color-zinc-900: #1f1b19;
-  --color-zinc-950: #13100e;
+  /* Arena: detalles y bordes cálidos. */
+  --color-arena: #d9c9a8;
 
-  --color-fondo: #fbf9f6;
-  --color-tinta: #1a1523;
-  --color-noche: #15111d;
+  /* Neutros cálidos tipo papel. */
+  --color-zinc-50: #f9f6f0;
+  --color-zinc-100: #f1ece2;
+  --color-zinc-200: #e4ddd0;
+  --color-zinc-300: #d0c7b7;
+  --color-zinc-400: #a1988a;
+  --color-zinc-500: #776f63;
+  --color-zinc-600: #5a544b;
+  --color-zinc-700: #45403a;
+  --color-zinc-800: #2c2925;
+  --color-zinc-900: #1d1b18;
+  --color-zinc-950: #12110f;
+
+  --color-fondo: #f3eee4;
+  --color-tinta: #14231c;
+  --color-noche: #0e1c16;
 
   --radius-4xl: 2rem;
 
-  --shadow-suave: 0 1px 2px rgb(26 21 35 / 0.04), 0 4px 16px -4px rgb(26 21 35 / 0.06);
-  --shadow-flotante: 0 2px 6px rgb(26 21 35 / 0.04), 0 24px 48px -16px rgb(59 34 144 / 0.22);
+  --shadow-suave: 0 1px 2px rgb(20 35 28 / 0.04), 0 4px 16px -4px rgb(20 35 28 / 0.06);
+  --shadow-flotante: 0 2px 6px rgb(20 35 28 / 0.04), 0 24px 48px -16px rgb(31 77 58 / 0.22);
 
   --animate-aparecer: aparecer 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-flotar: flotar 6s ease-in-out infinite;
@@ -85,10 +90,10 @@
   @keyframes latido {
     0%,
     100% {
-      box-shadow: 0 0 0 0 rgb(255 106 61 / 0.45);
+      box-shadow: 0 0 0 0 rgb(226 98 43 / 0.45);
     }
     50% {
-      box-shadow: 0 0 0 8px rgb(255 106 61 / 0);
+      box-shadow: 0 0 0 8px rgb(226 98 43 / 0);
     }
   }
 }
@@ -157,10 +162,10 @@ input[type="datetime-local"] {
 
 /* FullCalendar (tema "forma"): colores de la marca. Más específico que la paleta importada. */
 html:root {
-  --fc-forma-primary: #5932e0;
-  --fc-forma-primary-over: #4827b5;
-  --fc-forma-primary-down: #3b2290;
-  --fc-forma-event: #6a43f6;
-  --fc-forma-highlight: #6a43f626;
-  --fc-forma-background-event: #a59d94;
+  --fc-forma-primary: #1f4d3a;
+  --fc-forma-primary-over: #1a4031;
+  --fc-forma-primary-down: #153428;
+  --fc-forma-event: #2f7556;
+  --fc-forma-highlight: #2f755626;
+  --fc-forma-background-event: #a1988a;
 }

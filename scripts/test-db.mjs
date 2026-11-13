@@ -577,7 +577,7 @@ await prueba("aislamiento: ninguna tabla con negocio_id deja ver filas de otro n
   assert.ok(tablas.length >= 9, tablas.join(", "));
   for (const t of tablas) {
     const { n: deA } = await uno(`select count(*)::int as n from public.${t} where negocio_id = $1`, [negA]);
-    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones"].includes(t), `${t} sin datos de prueba`);
+    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones", "negocio_logos"].includes(t), `${t} sin datos de prueba`);
     for (const [u, ajeno] of [["beto", negA], ["nadie", negA], ["ana", negB], ["eva", negB]]) {
       const filas = await como(u, () => q(`select * from public.${t} where negocio_id = $1`, [ajeno]).catch(() => []));
       assert.equal(filas.length, 0, `${u} ve ${t} de otro negocio`);
@@ -1257,6 +1257,30 @@ await prueba("avisos: el cron reclama cada aviso de vencimiento una sola vez por
     falla(q("select * from plataforma.reclamar_avisos_suscripcion()"), /permission denied/, "dueña"),
   );
   await fijarPrueba("20 days");
+});
+
+await prueba("logo: solo el servidor lee y escribe los logos; tamaño y tipo acotados", async () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
+  await servicio("insert into public.negocio_logos (negocio_id, tipo, datos) values ($1, 'image/png', $2)", [negA, png]);
+  for (const quien of ["ana", "beto", "eva", "anon", "app"]) {
+    await como(quien, () => falla(q("select * from public.negocio_logos"), /permission denied/, `${quien} lee`));
+    await como(quien, () =>
+      falla(q("insert into public.negocio_logos (negocio_id, tipo, datos) values ($1, 'image/png', $2)", [negB, png]), /permission denied/, `${quien} escribe`),
+    );
+  }
+  await falla(
+    servicio("update public.negocio_logos set tipo = 'image/svg+xml' where negocio_id = $1", [negA]),
+    /check constraint/,
+    "svg",
+  );
+  await falla(
+    servicio("update public.negocio_logos set datos = decode(repeat('00', 524289), 'hex') where negocio_id = $1", [negA]),
+    /check constraint/,
+    "más de 512 KB",
+  );
+  const [fila] = await servicio("select octet_length(datos) as n from public.negocio_logos where negocio_id = $1", [negA]);
+  assert.equal(fila.n, 10);
+  await servicio("delete from public.negocio_logos where negocio_id = $1", [negA]);
 });
 
 await prueba("cuentas: borrar un usuario borra su perfil, sus sesiones y sus accesos", async () => {

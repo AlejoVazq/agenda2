@@ -109,7 +109,7 @@ export default async function PaginaTurnos({ searchParams }: PageProps<"/panel/t
                 {lista.map((t) => (
                   <li key={t.id}>
                     <Link href={`/panel/turnos/${t.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50">
-                      <span className="h-10 w-1 shrink-0 rounded-full" style={{ background: t.profesional?.color ?? "#7434ee" }} />
+                      <span className="h-10 w-1 shrink-0 rounded-full" style={{ background: t.profesional?.color ?? "#2f7556" }} />
                       <p className="w-12 shrink-0 font-bold tabular-nums">{formatHora(t.inicio, tz)}</p>
                       <div className="min-w-0 flex-1">
                         <p className={t.estado === "cancelado" ? "truncate font-medium text-zinc-400 line-through" : "truncate font-medium"}>

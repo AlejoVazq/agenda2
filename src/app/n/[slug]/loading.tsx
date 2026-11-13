@@ -1,7 +1,7 @@
 export default function CargandoNegocio() {
   return (
     <div className="min-h-dvh bg-fondo" aria-busy="true" aria-label="Cargando">
-      <div className="bg-noche bg-[radial-gradient(ellipse_70%_90%_at_100%_0%,rgb(106_67_246/0.45),transparent)]">
+      <div className="bg-noche bg-[radial-gradient(ellipse_70%_90%_at_100%_0%,rgb(79_146_114/0.45),transparent)]">
         <div className="mx-auto flex max-w-xl animate-pulse items-center gap-4 px-4 pb-20 pt-8 sm:pt-12">
           <div className="size-16 rounded-2xl bg-white/10" />
           <div className="space-y-2">

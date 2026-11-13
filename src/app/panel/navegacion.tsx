@@ -59,7 +59,7 @@ export function MenuLateral({ esDueno }: { esDueno: boolean }) {
           className={cx(
             "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
             activo(pathname, i.href)
-              ? "bg-tinta text-white shadow-[0_6px_16px_-8px_rgb(26_21_35/0.6)] [&_svg]:text-coral-300"
+              ? "bg-tinta text-white shadow-[0_6px_16px_-8px_rgb(20_35_28/0.6)] [&_svg]:text-acento-300"
               : "text-zinc-600 hover:bg-zinc-100 hover:text-tinta",
           )}
         >
