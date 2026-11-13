@@ -29,6 +29,7 @@ type Props = {
   servicios: Pick<Servicio, "id" | "nombre" | "duracion_min">[];
   asignaciones: { profesional_id: string; servicio_id: string }[];
   abrirNuevo: boolean;
+  clienteNuevo?: ValoresIniciales["cliente"];
   nombreNegocio: string;
 };
 
@@ -46,7 +47,9 @@ export function Agenda(props: Props) {
   const [filtro, setFiltro] = useState<string>(esDueno ? "" : (miProfesionalId ?? ""));
   const [seleccionado, setSeleccionado] = useState<EventoAgenda | null>(null);
   const [nuevo, setNuevo] = useState<ValoresIniciales | null>(
-    props.abrirNuevo ? { fecha: fechaLocalISO(new Date(), tz), hora: "10:00", profesional_id: miProfesionalId ?? undefined } : null,
+    props.abrirNuevo
+      ? { fecha: fechaLocalISO(new Date(), tz), hora: "10:00", profesional_id: miProfesionalId ?? undefined, cliente: props.clienteNuevo }
+      : null,
   );
   const [aviso, setAviso] = useState<{ tipo: "error" | "exito"; texto: string } | null>(null);
   const [pendiente, iniciar] = useTransition();

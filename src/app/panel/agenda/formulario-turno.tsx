@@ -7,7 +7,13 @@ import { formatDuracion } from "@/lib/fechas";
 import type { EstadoAccion, Profesional, Servicio } from "@/lib/tipos";
 import { crearTurnoPanel } from "./acciones";
 
-export type ValoresIniciales = { fecha: string; hora: string; profesional_id?: string };
+export type ValoresIniciales = {
+  fecha: string;
+  hora: string;
+  profesional_id?: string;
+  /** Al pedir un turno desde la ficha de un cliente, llega con sus datos. */
+  cliente?: { nombre: string; telefono: string; email: string | null };
+};
 
 export function FormularioTurno({
   profesionales,
@@ -68,14 +74,14 @@ export function FormularioTurno({
         </Campo>
       </div>
       <Campo etiqueta="Cliente" htmlFor="t-cli" errores={e.cliente_nombre}>
-        <Input id="t-cli" name="cliente_nombre" autoComplete="off" placeholder="Nombre y apellido" defaultValue={valor("cliente_nombre")} required />
+        <Input id="t-cli" name="cliente_nombre" autoComplete="off" placeholder="Nombre y apellido" defaultValue={valor("cliente_nombre", inicial.cliente?.nombre)} required />
       </Campo>
       <div className="grid gap-3 sm:grid-cols-2">
         <Campo etiqueta="Celular" htmlFor="t-tel" errores={e.cliente_telefono}>
-          <Input id="t-tel" name="cliente_telefono" type="tel" inputMode="tel" placeholder="341 555 1234" defaultValue={valor("cliente_telefono")} required />
+          <Input id="t-tel" name="cliente_telefono" type="tel" inputMode="tel" placeholder="341 555 1234" defaultValue={valor("cliente_telefono", inicial.cliente?.telefono)} required />
         </Campo>
         <Campo etiqueta="Email" htmlFor="t-mail" errores={e.cliente_email} ayuda="Opcional">
-          <Input id="t-mail" name="cliente_email" type="email" inputMode="email" defaultValue={valor("cliente_email")} />
+          <Input id="t-mail" name="cliente_email" type="email" inputMode="email" defaultValue={valor("cliente_email", inicial.cliente?.email ?? undefined)} />
         </Campo>
       </div>
       <Campo etiqueta="Notas" htmlFor="t-notas" errores={e.notas} ayuda="Opcional, solo las ve el negocio.">

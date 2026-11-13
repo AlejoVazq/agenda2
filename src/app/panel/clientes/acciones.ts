@@ -44,7 +44,8 @@ export async function quitarLimiteCliente(id: string): Promise<EstadoAccion> {
   let n: number;
   try {
     n = await comoUsuario(sesion.userId, (tx) =>
-      tx.ejecutar(sql`update public.clientes set ausencias_perdonadas_at = now() where id = ${id}`),
+      // Todas las fichas de la misma persona (celular o mail), igual que la regla de reserva.
+      tx.uno<{ n: number }>(sql`select public.quitar_limite_cliente(${id}) as n`).then((f) => f?.n ?? 0),
     );
   } catch (e) {
     return { error: mensajeDeError(e) };

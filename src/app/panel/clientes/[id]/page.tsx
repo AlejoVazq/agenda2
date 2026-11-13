@@ -31,7 +31,7 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
   const { negocio, userId } = await requerirDueno();
   if (!z.uuid().safeParse(id).success) notFound();
 
-  const [c, turnos] = await comoUsuario(userId, (tx) =>
+  const [c, turnos, limite] = await comoUsuario(userId, (tx) =>
     Promise.all([
       tx.uno<Cliente & { created_at: string; ausencias_perdonadas_at: string | null }>(sql`
         select id, nombre, telefono, email, notas, created_at, ausencias_perdonadas_at
@@ -46,6 +46,8 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
         where t.cliente_id = ${id}
         order by t.inicio desc
         limit 100`),
+      // Misma regla que crear_reserva: cruza celular y mail, sin las perdonadas.
+      tx.uno<{ n: number }>(sql`select public.inasistencias_que_limitan(${id}) as n`),
     ]),
   );
   if (!c) notFound();
@@ -56,8 +58,7 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
   const canceladosCliente = turnos.filter((t) => t.estado === "cancelado" && t.cancelado_por === "cliente").length;
   const gastado = atendidos.reduce((total, t) => total + Number(t.precio ?? 0), 0);
   const ausencias = turnos.filter((t) => t.estado === "ausente");
-  // Misma regla que crear_reserva: las ausencias perdonadas ya no limitan.
-  const limitado = ausencias.filter((t) => !c.ausencias_perdonadas_at || new Date(t.inicio) > new Date(c.ausencias_perdonadas_at)).length >= 3;
+  const limitado = (limite?.n ?? 0) >= 3;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -74,7 +75,7 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
             >
               WhatsApp
             </a>
-            <BotonLink href="/panel/agenda?nuevo=1" tamano="sm">
+            <BotonLink href={`/panel/agenda?nuevo=1&cliente=${c.id}`} tamano="sm">
               + Turno
             </BotonLink>
           </>

@@ -25,7 +25,7 @@ export async function consultarDias(entrada: {
 }): Promise<string[]> {
   const datos = esquemaConsultaHorarios
     .omit({ fecha: true })
-    .extend({ desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), dias: z.number().int().min(1).max(62) })
+    .extend({ desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), dias: z.number().int().min(1).max(92) })
     .safeParse(entrada);
   if (!datos.success) return [];
   const d = datos.data;

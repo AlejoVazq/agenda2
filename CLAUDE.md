@@ -27,7 +27,7 @@ App de agenda y reservas online de turnos para negocios de servicios en Argentin
 | `npm run build` / `npm start` | Build y servidor de producción |
 | `npm run typecheck` | `next typegen` + `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm run test:db` | 64 pruebas de migraciones, roles, RLS, suscripciones y admin con PGlite |
+| `npm run test:db` | 67 pruebas de migraciones, roles, RLS, suscripciones y admin con PGlite |
 | `npm run db:migrar` | Aplica migraciones pendientes (usa `DATABASE_URL_MIGRAR`) |
 | `npm run db:seed` / `db:reset` | Datos demo / borrar todo y volver a migrar + seed (solo contra una base local) |
 | `npm run admin -- agregar <mail>` | Hace admin de la plataforma a una cuenta (también `listar`, `quitar`, `quitar-2fa`). Usa `DATABASE_URL_MIGRAR` |
@@ -87,15 +87,10 @@ Ir en este orden salvo que el usuario diga otra cosa.
 1. Borrar el negocio de prueba `pollobarber` desde `/admin` si el usuario quiere (la 0007 está publicada).
 2. **Prueba completa del paso 7** (abajo) con mails reales; el recordatorio por mail nunca se probó de punta a punta.
 3. **Revisión de textos legales** (`/privacidad`, `/terminos`) antes de sumar más locales.
-4. **Detalles anotados el 2026-11-06** (`docs/registro-2026-11-06.md`, "Sin arreglar"; verificar si siguen antes de tocarlos):
+4. **Detalles anotados el 2026-11-06**: resueltos el 2026-11-13 (migración 0008 y app): alias de mail (`public.clave_email`), aviso y "Quitar límite" de la ficha con la misma regla que la reserva, "+ Turno" desde la ficha con los datos del cliente, botón atrás en la reserva (`?paso=`), 90 días de anticipación (tope 92), estadísticas sin "$ 0" para servicios sin precio. Ya no pasaban: el link de confirmación (con Better Auth se puede abrir varias veces en 24 h) y el celular ya registrado (el turno usa `nombre_reserva`). **Quedan, a decidir con el usuario** (son funciones nuevas o reglas):
    - el negocio no recibe aviso cuando un cliente cancela;
-   - algunos proveedores de mail abren solos el link de confirmación y lo vencen;
-   - en el panel, un celular ya registrado deja el turno a nombre del cliente anterior;
-   - los alias de mail (`juan+1@…`) cuentan como otro mail (esquiva límites);
-   - con menos de 2 h de anticipación no se puede cancelar online;
-   - no hay botón para borrar un cliente;
-   - el aviso de límite de la ficha cuenta solo esa ficha aunque la regla cruce mail y celular;
-   - menores: "+ Turno" abre vacío, el botón atrás sale de la reserva, servicios sin precio suman $0 en estadísticas, la opción de 90 días rinde 61.
+   - con menos de 2 h de anticipación no se puede cancelar online (la política de cancelación lo impide desde que se reserva);
+   - no hay botón para borrar un cliente.
 5. **Ideas conversadas, sin hacer**: color propio y foto de portada por negocio (el logo ya está), tiempos de espera en servicios de peluquería (tintura), login con Google (comentado en `better-auth.ts`).
 6. **Integraciones sin probar con cuentas reales**: Google Calendar (conectar y pasar la verificación, `docs/verificacion-google.md`), WhatsApp Cloud API (opcional), Mercado Pago (apagado a propósito con `SENA_ACTIVA`).
 7. **Mantenimiento**: copiar los backups fuera del VPS cada tanto; borrar restos locales de Supabase (variables viejas en `.env.local`, carpeta `supabase/`, `agenda2-migracion-supabase.md` suelto en la raíz).

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { Aviso, Campo, Input, cx } from "@/components/ui";
@@ -10,17 +11,27 @@ import type { EstadoAccion } from "@/lib/tipos";
 import { consultarDias, consultarHorarios, reservar, type Horario } from "./acciones";
 
 type Paso = "servicio" | "profesional" | "horario" | "datos";
+const PASOS: Paso[] = ["servicio", "profesional", "horario", "datos"];
 const CUALQUIERA = "cualquiera";
 
 export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string }) {
   const tz = negocio.zona_horaria;
-  const [paso, setPaso] = useState<Paso>("servicio");
   const [servicio, setServicio] = useState<ServicioPublico | null>(null);
   const [profesionalId, setProfesionalId] = useState<string>(CUALQUIERA);
   const [dias, setDias] = useState<string[] | null>(null);
   const [fecha, setFecha] = useState<string | null>(null);
   const [horarios, setHorarios] = useState<Horario[] | null>(null);
   const [horario, setHorario] = useState<Horario | null>(null);
+  // El paso va en la dirección (?paso=…) para que el botón atrás del celular vuelva al
+  // paso anterior en lugar de salir de la página. Si falta lo elegido antes, se retrocede.
+  const pedido = useSearchParams().get("paso") as Paso | null;
+  const pasoUrl: Paso = pedido && PASOS.includes(pedido) ? pedido : "servicio";
+  const paso: Paso = !servicio ? "servicio" : pasoUrl === "datos" && !horario ? "horario" : pasoUrl;
+  function setPaso(nuevo: Paso, reemplazar = false) {
+    const url = nuevo === "servicio" ? window.location.pathname : `?paso=${nuevo}`;
+    if (reemplazar) window.history.replaceState(null, "", url);
+    else window.history.pushState(null, "", url);
+  }
   const [cargandoDias, iniciarDias] = useTransition();
   const [cargandoHorarios, iniciarHorarios] = useTransition();
   const [avisoHorario, setAvisoHorario] = useState<string | null>(null);
@@ -33,14 +44,14 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
       setAvisoHorario(resultado.error);
       setHorario(null);
       setHorarios(null);
-      setPaso("horario");
+      setPaso("horario", true);
     }
     return resultado;
   });
 
   const nombresProf = useMemo(() => new Map(negocio.profesionales.map((p) => [p.id, p.nombre])), [negocio]);
   const profesionalesDelServicio = (servicio?.profesional_ids ?? []).filter((id) => nombresProf.has(id));
-  const horizonte = Math.min(negocio.anticipacion_max_dias + 1, 62);
+  const horizonte = Math.min(negocio.anticipacion_max_dias + 1, 92);
 
   // Cargar días con disponibilidad al elegir servicio/profesional.
   useEffect(() => {

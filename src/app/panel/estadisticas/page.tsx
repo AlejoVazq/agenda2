@@ -15,10 +15,12 @@ type Estadisticas = {
   cancelados_cliente: number;
   online: number;
   ingresos: number;
+  /** Turnos confirmados o atendidos de servicios sin precio: no suman a la facturación. */
+  sin_precio: number;
   senas: number;
   clientes_nuevos: number;
-  por_servicio: { nombre: string; cantidad: number; ingresos: number }[];
-  por_profesional: { nombre: string; color: string; cantidad: number; ingresos: number }[];
+  por_servicio: { nombre: string; cantidad: number; ingresos: number | null }[];
+  por_profesional: { nombre: string; color: string; cantidad: number; ingresos: number | null }[];
   por_dia_semana: { dia: number; cantidad: number }[];
 };
 
@@ -98,7 +100,12 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Dato titulo="Turnos" valor={String(e.activos)} detalle={`${e.total} reservados en total${ausentes ? ` · ${ausentes} no asistieron` : ""}`} />
-            <Dato titulo="Facturación estimada" valor={formatPrecio(e.ingresos) ?? "$ 0"} detalle="Confirmados y atendidos" />
+            <Dato titulo="Facturación estimada" valor={formatPrecio(e.ingresos) ?? "$ 0"} detalle={
+                e.sin_precio
+                  ? `Confirmados y atendidos · ${e.sin_precio} ${e.sin_precio === 1 ? "turno" : "turnos"} sin precio cargado`
+                  : "Confirmados y atendidos"
+              }
+            />
             <Dato
               titulo="Cancelaciones"
               valor={`${tasaCancelacion}%`}

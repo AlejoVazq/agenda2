@@ -7,9 +7,20 @@ import { Agenda } from "./agenda";
 
 export const metadata: Metadata = { title: "Agenda" };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function PaginaAgenda({ searchParams }: PageProps<"/panel/agenda">) {
-  const { nuevo } = await searchParams;
+  const { nuevo, cliente: clienteId } = await searchParams;
   const { negocio, perfil, esDueno, userId } = await requerirPanel();
+
+  // "+ Turno" desde la ficha de un cliente (solo el dueño lee fichas; RLS lo vuelve a filtrar).
+  const cliente =
+    esDueno && typeof clienteId === "string" && UUID.test(clienteId)
+      ? await comoUsuario(userId, (tx) =>
+          tx.uno<{ nombre: string; telefono: string; email: string | null }>(sql`
+            select nombre, telefono, email from public.clientes where id = ${clienteId}`),
+        )
+      : null;
 
   const [profs, servs, asign] = await comoUsuario(userId, (tx) =>
     Promise.all([
@@ -45,6 +56,7 @@ export default async function PaginaAgenda({ searchParams }: PageProps<"/panel/a
           servicios={servs}
           asignaciones={asign}
           abrirNuevo={nuevo === "1"}
+          clienteNuevo={cliente ?? undefined}
           nombreNegocio={negocio.nombre}
         />
       )}

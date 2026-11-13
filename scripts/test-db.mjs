@@ -681,6 +681,64 @@ await prueba("inasistencias: con 3 limita a un turno a la vez hasta que se quita
   assert.equal(await ingresos(), atendido - 1000);
 });
 
+await prueba("alias de mail: +etiqueta, puntos de Gmail y mayúsculas son la misma persona", async () => {
+  const clave = async (e) => (await uno("select public.clave_email($1) as c", [e])).c;
+  assert.equal(await clave("  J.U.A.N+promo@GoogleMail.com "), "juan@gmail.com");
+  assert.equal(await clave("ana+turnos@mail.com"), "ana@mail.com");
+  assert.equal(await clave("ana.perez@mail.com"), "ana.perez@mail.com", "los puntos solo se ignoran en Gmail");
+  assert.equal(await clave(null), null);
+
+  const r = await reservarAna(0, "16:00", "Alias", "1166660000", "Ali.As+uno@gmail.com");
+  await falla(reservarAna(0, "15:00", "Alias", "1166661111", "alias@googlemail.com"), /LIMITE_DIARIO/, "googlemail sin puntos");
+  await falla(reservarAna(0, "15:00", "Alias", "1166661111", "aliAS+dos@GMAIL.com"), /LIMITE_DIARIO/, "otra etiqueta");
+  // El mail queda guardado como lo escribió.
+  assert.equal((await uno("select email_reserva from public.turnos where id = $1", [r.turno_id])).email_reserva, "ali.as+uno@gmail.com");
+  await como("anon", () => q("select public.cancelar_turno_cliente($1)", [r.token]));
+});
+
+await prueba("ficha: el límite de inasistencias cruza celular y mail, y se quita en todas las fichas", async () => {
+  const turno = await uno("select * from public.turnos where negocio_id = $1 limit 1", [negA]);
+  const ficha = async (tel) =>
+    (await uno("insert into public.clientes (negocio_id, nombre, telefono, email) values ($1, 'Cruz', $2, 'cruz@mail.com') returning id", [negA, tel])).id;
+  const fichaA = await ficha("1155550000");
+  const fichaB = await ficha("1155551111");
+  for (const dias of [10, 11, 12]) {
+    await q(
+      "insert into public.turnos (negocio_id, profesional_id, servicio_id, cliente_id, inicio, fin, estado, precio) values ($1, $2, $3, $4, now() - make_interval(days => $5), now() - make_interval(days => $5) + interval '1 hour', 'ausente', 1000)",
+      [negA, turno.profesional_id, turno.servicio_id, fichaA, dias],
+    );
+  }
+  const limite = (id) => como("ana", async () => (await uno("select public.inasistencias_que_limitan($1) as n", [id])).n);
+  assert.equal(await limite(fichaA), 3);
+  assert.equal(await limite(fichaB), 3, "la otra ficha con el mismo mail también");
+  await como("eva", async () => assert.equal((await uno("select public.inasistencias_que_limitan($1) as n", [fichaB])).n, 0, "empleada no ve fichas"));
+
+  const tocadas = await como("ana", async () => (await uno("select public.quitar_limite_cliente($1) as n", [fichaB])).n);
+  assert.equal(tocadas, 2);
+  assert.equal(await limite(fichaA), 0);
+  await q("delete from public.turnos where cliente_id = $1", [fichaA]);
+  await q("delete from public.clientes where id = any($1)", [[fichaA, fichaB]]);
+});
+
+await prueba("reserva hasta 90 días y estadísticas sin precio", async () => {
+  await q("update public.negocios set anticipacion_max_dias = 90 where id = $1", [negA]);
+  const { n } = await como("anon", () =>
+    uno("select count(*)::int as n from public.dias_disponibles($1, $2, $3::date, 91, $4)", [negA, servA, lunes, profAna]),
+  );
+  assert.ok(n >= 12, `lunes en 90 días: ${n}`);
+  await q("update public.negocios set anticipacion_max_dias = 30 where id = $1", [negA]);
+
+  const est = () => como("ana", async () => (await uno("select public.estadisticas_negocio(now() - interval '30 days', now() + interval '60 days') as e")).e);
+  const antes = (await est()).sin_precio;
+  const cliente = (await uno("select id from public.clientes where negocio_id = $1 limit 1", [negA])).id;
+  const { id } = await uno(
+    "insert into public.turnos (negocio_id, profesional_id, servicio_id, cliente_id, inicio, fin, estado, precio) values ($1, $2, $3, $4, now() + interval '50 days', now() + interval '50 days 1 hour', 'confirmado', null) returning id",
+    [negA, profAna, servA, cliente],
+  );
+  assert.equal((await est()).sin_precio, antes + 1);
+  await q("delete from public.turnos where id = $1", [id]);
+});
+
 await prueba("rubros: peluquería separada, con sus servicios típicos cargados", async () => {
   await como("nadie", () =>
     falla(q("select public.crear_negocio('Viejo', 'rubro-viejo', 'peluqueria', 'Nadie')"), /negocios_rubro_check/, "rubro viejo"),
