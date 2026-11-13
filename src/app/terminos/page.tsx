@@ -18,9 +18,10 @@ export default function PaginaTerminos() {
       <h2 className="font-bold text-tinta">Para los negocios: prueba y plan</h2>
       <p>
         Cada negocio nuevo tiene 7 días de prueba sin cargo. Después, para seguir usándolo hay que contratar el plan
-        mensual. Si el plan vence, hay 5 días de gracia en los que todo sigue funcionando; pasado ese plazo el panel queda
-        en solo lectura y la página deja de tomar reservas nuevas, hasta que se renueve. Los turnos ya reservados se
-        mantienen. Podemos suspender una cuenta por falta de pago o por uso indebido.
+        mensual. Avisamos por mail unos días antes del vencimiento. Si el plan vence, hay 5 días de gracia en los que el
+        panel queda en solo lectura pero la página sigue tomando reservas; pasado ese plazo la cuenta se apaga: no se puede
+        entrar al panel y la página deja de tomar reservas nuevas, hasta que se renueve. Los turnos ya reservados y los
+        datos se mantienen. Podemos dar de baja una cuenta por falta de pago o por uso indebido.
       </p>
       <h2 className="font-bold text-tinta">Reservas</h2>
       <p>

@@ -71,6 +71,26 @@ export type NegocioAdmin = {
   auditoria: { accion: string; detalle: Record<string, unknown>; admin: string | null; created_at: string }[];
 };
 
+/** Lo que queda de un negocio eliminado (plataforma.admin_eliminados, migración 0007). */
+export type NegocioEliminado = {
+  negocio_id: string;
+  admin: string | null;
+  created_at: string;
+  detalle: {
+    nombre: string;
+    slug: string;
+    alta: string;
+    estado: string;
+    borro_cuentas: boolean;
+    dueno: { nombre: string; email: string } | null;
+    cuentas: string[];
+    turnos: number;
+    clientes: number;
+    pagos: number;
+    total_pagado: number;
+  };
+};
+
 export const MEDIOS_PAGO = {
   transferencia: "Transferencia",
   efectivo: "Efectivo",
@@ -83,10 +103,13 @@ export const ACCIONES_AUDITORIA: Record<string, string> = {
   registrar_pago: "Registró un pago",
   anular_pago: "Anuló un pago",
   extender_prueba: "Extendió la prueba",
-  suspender: "Suspendió el negocio",
+  suspender: "Dio de baja el negocio",
   reactivar: "Reactivó el negocio",
+  eliminar_cuentas: "Eliminó las cuentas del equipo",
+  eliminar_negocio: "Eliminó el negocio",
   agregar_nota: "Agregó una nota",
   cambiar_slug: "Cambió la dirección",
   link_acceso_dueno: "Generó un link de acceso para el dueño",
   reenviar_verificacion: "Reenvió el mail de verificación",
+  aviso_whatsapp: "Le avisó por WhatsApp",
 };

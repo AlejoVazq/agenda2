@@ -27,6 +27,8 @@ const MENSAJES: Record<string, string> = {
   DIAS_INVALIDOS: "Elegí entre 1 y 90 días.",
   NO_ENCONTRADO: "No encontramos ese registro (¿ya estaba anulado?).",
   SLUG_OCUPADO: "Esa dirección ya la usa otro negocio.",
+  CONFIRMACION_INCORRECTA: "El nombre no coincide. Escribilo igual que como figura arriba.",
+  NADA_QUE_BORRAR: "Marcá qué querés eliminar.",
 };
 
 function error(e: unknown): EstadoAccion {
@@ -112,7 +114,7 @@ export async function suspender(_prev: EstadoAccion, formData: FormData): Promis
   return comoAdmin(formData, esquemaSuspender, async (admin, d) => {
     const p = d as z.infer<typeof esquemaSuspender>;
     await comoUsuario(admin.userId, (tx) => tx.uno(sql`select plataforma.admin_suspender(${p.negocio_id}, ${p.motivo ?? null})`));
-    return "Negocio suspendido: el panel quedó en solo lectura y la página no toma reservas.";
+    return "Negocio dado de baja: no entra al panel y su página no toma reservas. Sus datos quedan guardados.";
   });
 }
 
@@ -121,8 +123,40 @@ const soloNegocio = z.object({ negocio_id: uuid });
 export async function reactivar(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
   return comoAdmin(formData, soloNegocio, async (admin, d) => {
     await comoUsuario(admin.userId, (tx) => tx.uno(sql`select plataforma.admin_reactivar(${d.negocio_id as string})`));
-    return "Negocio reactivado.";
+    return "Negocio reactivado: vuelve a funcionar según lo que tenga pago.";
   });
+}
+
+const casilla = z.preprocess((v) => v === "on" || v === "true", z.boolean());
+const esquemaEliminar = z.object({
+  negocio_id: uuid,
+  confirmacion: z.string().trim().min(1, "Escribí el nombre del negocio").max(200),
+  borrar_negocio: casilla,
+  borrar_cuentas: casilla,
+});
+
+/**
+ * Elimina el negocio (con todos sus datos), las cuentas de su equipo, o las dos cosas.
+ * No se puede deshacer; la base pide el nombre exacto y deja el resumen en la auditoría.
+ */
+export async function eliminar(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
+  const admin = await sesionAdminParaAccion();
+  if (!admin) return SIN_PERMISO;
+  const r = esquemaEliminar.safeParse(datosDeForm(formData));
+  if (!r.success) return { errores: erroresDeCampo(r.error) };
+  const p = r.data;
+  if (!p.borrar_negocio && !p.borrar_cuentas) return { error: MENSAJES.NADA_QUE_BORRAR };
+  try {
+    await comoUsuario(admin.userId, (tx) =>
+      tx.uno(sql`select plataforma.admin_eliminar(${p.negocio_id}, ${p.confirmacion}, ${p.borrar_negocio}, ${p.borrar_cuentas})`),
+    );
+  } catch (e) {
+    return error(e);
+  }
+  revalidatePath("/admin");
+  if (p.borrar_negocio) redirect("/admin?eliminado=1");
+  revalidatePath(`/admin/negocios/${p.negocio_id}`);
+  return { ok: true, mensaje: "Cuentas eliminadas. El negocio quedó sin equipo." };
 }
 
 // --- Ayuda al negocio -----------------------------------------------------------------
@@ -187,6 +221,17 @@ export async function reenviarVerificacion(_prev: EstadoAccion, formData: FormDa
     );
     return `Le reenviamos el mail de confirmación a ${dueno.email}.`;
   });
+}
+
+/** Deja en el historial que el admin abrió el aviso por WhatsApp (el mensaje lo manda él). */
+export async function registrarAvisoWhatsApp(negocioId: string, estado: string): Promise<void> {
+  const admin = await sesionAdminParaAccion();
+  if (!admin || !uuid.safeParse(negocioId).success) return;
+  const detalle = JSON.stringify({ estado: String(estado).slice(0, 20) });
+  await comoUsuario(admin.userId, (tx) =>
+    tx.uno(sql`select plataforma.admin_registrar_accion('aviso_whatsapp', ${negocioId}, ${detalle}::jsonb)`),
+  ).catch((e) => console.error("[admin] aviso_whatsapp", e));
+  revalidatePath(`/admin/negocios/${negocioId}`);
 }
 
 // --- Segundo factor del admin -------------------------------------------------------------

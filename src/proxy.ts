@@ -4,7 +4,7 @@ import { auth } from "@/lib/better-auth";
 
 // Primera capa de seguridad (la segunda es el layout/acciones del panel, que
 // verifican perfil y rol en el servidor; la tercera es RLS en la base).
-const RUTAS_PRIVADAS = ["/panel", "/onboarding", "/admin"];
+const RUTAS_PRIVADAS = ["/panel", "/onboarding", "/admin", "/pausado"];
 const RUTAS_SOLO_INVITADOS = ["/login", "/registro"];
 
 function coincide(pathname: string, rutas: string[]) {
@@ -40,5 +40,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/panel/:path*", "/onboarding/:path*", "/admin/:path*", "/login", "/registro"],
+  matcher: ["/panel/:path*", "/onboarding/:path*", "/admin/:path*", "/pausado", "/login", "/registro"],
 };

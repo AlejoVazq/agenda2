@@ -5,7 +5,7 @@ import { comoUsuario, sql } from "@/lib/db";
 /**
  * ¿El usuario actual puede conectar/desconectar el Google Calendar de este
  * profesional? El dueño, para cualquier profesional de su negocio; un empleado,
- * solo para su propia agenda. Con la suscripción vencida o suspendida, nadie
+ * solo para su propia agenda. Fuera de prueba o plan activo (gracia, apagado o baja), nadie
  * (el panel queda en solo lectura).
  */
 export async function sesionConPermisoSobreProfesional(profesionalId: string) {

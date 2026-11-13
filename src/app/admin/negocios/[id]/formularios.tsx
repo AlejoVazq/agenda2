@@ -1,18 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { BotonCopiar } from "@/components/copiar";
-import { Aviso, Boton, Campo, Input, Select, Textarea } from "@/components/ui";
+import { Aviso, Boton, Campo, Casilla, Input, Select, Textarea } from "@/components/ui";
 import type { EstadoAccion } from "@/lib/tipos";
 import {
   agregarNota,
   anularPago,
   cambiarSlug,
+  eliminar,
   extenderPrueba,
   linkAccesoDueno,
   reactivar,
   reenviarVerificacion,
+  registrarAvisoWhatsApp,
   registrarPago,
   suspender,
 } from "../../acciones";
@@ -124,6 +126,7 @@ export function FormularioSuspension({ negocioId, suspendido }: { negocioId: str
         <Oculto negocioId={negocioId} />
         <MensajeAccion estado={estadoR} />
         <BotonEnviar pendiente="Reactivando…">Reactivar negocio</BotonEnviar>
+        <p className="text-xs text-zinc-500">Vuelve a funcionar según lo que tenga pago (o la prueba).</p>
       </form>
     );
   }
@@ -132,8 +135,11 @@ export function FormularioSuspension({ negocioId, suspendido }: { negocioId: str
       <div className="space-y-2">
         <MensajeAccion estado={estadoS} />
         <Boton type="button" variante="secundario" className="text-red-700" onClick={() => setConfirmar(true)}>
-          Suspender…
+          Dar de baja…
         </Boton>
+        <p className="text-xs text-zinc-500">
+          Lo apaga ya, aunque tenga días pagos: no entra al panel y su página no toma reservas. Se puede reactivar.
+        </p>
       </div>
     );
   }
@@ -143,19 +149,98 @@ export function FormularioSuspension({ negocioId, suspendido }: { negocioId: str
       <Campo
         etiqueta="Motivo (lo ve el dueño)"
         htmlFor="susp-motivo"
-        ayuda="El panel queda en solo lectura y la página no toma reservas nuevas. Los turnos ya reservados siguen."
+        ayuda="No entra al panel y su página no toma reservas nuevas. Los turnos ya reservados y sus datos quedan."
       >
         <Input id="susp-motivo" name="motivo" placeholder="Ej: falta el pago de noviembre" />
       </Campo>
       <div className="flex gap-2">
-        <BotonEnviar variante="peligro" pendiente="Suspendiendo…">
-          Suspender
+        <BotonEnviar variante="peligro" pendiente="Dando de baja…">
+          Dar de baja
         </BotonEnviar>
         <Boton type="button" variante="fantasma" onClick={() => setConfirmar(false)}>
           Cancelar
         </Boton>
       </div>
     </form>
+  );
+}
+
+export function FormularioEliminar({
+  negocioId,
+  nombre,
+  cuentas,
+}: {
+  negocioId: string;
+  nombre: string;
+  cuentas: { email: string; rol: "dueno" | "empleado" }[];
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const { estado, accion, valor } = useFormulario(eliminar);
+  if (!abierto) {
+    return (
+      <div className="space-y-2">
+        <MensajeAccion estado={estado} />
+        <Boton type="button" variante="peligro" onClick={() => setAbierto(true)}>
+          Eliminar…
+        </Boton>
+        <p className="text-xs text-zinc-500">Borra para siempre. Para frenarlo un tiempo, mejor dalo de baja.</p>
+      </div>
+    );
+  }
+  return (
+    <form action={accion} className="space-y-3" noValidate>
+      <Oculto negocioId={negocioId} />
+      <MensajeAccion estado={estado} />
+      <Casilla
+        name="borrar_negocio"
+        defaultChecked
+        etiqueta="El negocio y todos sus datos"
+        descripcion="Página, equipo, servicios, horarios, clientes, turnos, logo, pagos y notas."
+      />
+      <Casilla
+        name="borrar_cuentas"
+        defaultChecked={cuentas.length > 0}
+        disabled={cuentas.length === 0}
+        etiqueta="Las cuentas del dueño y su equipo"
+        descripcion={
+          cuentas.length === 0
+            ? "No tiene cuentas."
+            : `${cuentas.map((c) => c.email).join(", ")}. Si no las borrás, pueden volver a entrar y crear otro negocio.`
+        }
+      />
+      <Campo
+        etiqueta={<>Para confirmar, escribí <span className="font-semibold">{nombre}</span></>}
+        htmlFor="eliminar-confirmacion"
+        errores={estado.errores?.confirmacion}
+      >
+        <Input id="eliminar-confirmacion" name="confirmacion" autoComplete="off" defaultValue={valor("confirmacion")} />
+      </Campo>
+      <Aviso tipo="error">No se puede deshacer. Queda registrado en el historial de administración.</Aviso>
+      <div className="flex gap-2">
+        <BotonEnviar variante="peligro" pendiente="Eliminando…">
+          Eliminar para siempre
+        </BotonEnviar>
+        <Boton type="button" variante="fantasma" onClick={() => setAbierto(false)}>
+          Cancelar
+        </Boton>
+      </div>
+    </form>
+  );
+}
+
+/** Abre WhatsApp con el aviso ya escrito y lo deja en el historial. */
+export function BotonAvisoWhatsApp({ negocioId, estado, href }: { negocioId: string; estado: string; href: string }) {
+  const [, iniciar] = useTransition();
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener"
+      onClick={() => iniciar(() => registrarAvisoWhatsApp(negocioId, estado))}
+      className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700"
+    >
+      Avisar por WhatsApp
+    </a>
   );
 }
 

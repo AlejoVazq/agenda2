@@ -25,7 +25,7 @@ export type NegocioPublico = {
   cancelacion_min_horas: number;
   anticipacion_max_dias: number;
   pago_plazo_min: number;
-  /** False si la suscripción del negocio venció o está suspendida. */
+  /** False si la cuenta del negocio está apagada (pasó la gracia) o dada de baja. */
   reservas_habilitadas: boolean;
   servicios: ServicioPublico[];
   profesionales: { id: string; nombre: string }[];

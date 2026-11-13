@@ -1032,7 +1032,7 @@ await prueba("suscripción: el estado sale de las fechas", async () => {
   assert.equal(await estado("5 days", "30 days", "0 seconds"), "suspendida");
 });
 
-await prueba("suscripción: vencido = panel en solo lectura y sin turnos nuevos; el cliente cancela y el cron sigue", async () => {
+await prueba("suscripción: gracia = solo lectura con reservas; apagado = sin reservas; el cliente cancela y el cron sigue", async () => {
   const proximo = (await uno("select ($1::date + 7) as d", [lunes])).d;
   const hora = async (h) =>
     (await uno(`select (($1::date + $2::time) at time zone 'America/Argentina/Buenos_Aires') as t`, [proximo, h])).t;
@@ -1041,6 +1041,29 @@ await prueba("suscripción: vencido = panel en solo lectura y sin turnos nuevos;
     [negA, servA, profAna, await hora("11:00")],
   );
 
+  // Gracia (venció hace menos de 5 días): panel en solo lectura, la página sigue tomando reservas.
+  await q("update public.negocios set prueba_hasta = now() - interval '1 day' where id = $1", [negA]);
+  assert.equal((await como("ana", () => uno("select public.mi_suscripcion() as s"))).s.estado, "gracia");
+  assert.equal(
+    (await como("anon", () => uno("select public.negocio_publico('salon-ana') as d"))).d.reservas_habilitadas,
+    true,
+  );
+  const enGracia = await reservar(
+    "select * from public.crear_reserva($1, $2, $3, $4, 'Iris', '1144004400', 'iris@mail.com')",
+    [negA, servA, profAna, await hora("14:00")],
+  );
+  assert.ok(enGracia.token, "reserva online en gracia");
+  await como("ana", async () => {
+    await falla(q("update public.servicios set nombre = 'Otro' where id = $1", [servA]), /NEGOCIO_NO_HABILITADO/, "servicio en gracia");
+    await falla(
+      q("select public.crear_turno_panel($1, $2, $3, 'Mar', '1144003300', null, null, null)", [profAna, servA, await hora("15:00")]),
+      /NEGOCIO_NO_HABILITADO/,
+      "turno desde el panel en gracia",
+    );
+  });
+  await como("anon", () => q("select public.cancelar_turno_cliente($1)", [enGracia.token]));
+
+  // Apagado (pasó la gracia): tampoco toma reservas.
   await q("update public.negocios set prueba_hasta = now() - interval '10 days' where id = $1", [negA]);
 
   assert.equal((await como("ana", () => uno("select public.mi_suscripcion() as s"))).s.estado, "vencida");
@@ -1199,6 +1222,7 @@ await prueba("admin: pagos encadenados, anulación, prueba, suspensión, notas, 
 
   await admin("select plataforma.admin_agregar_nota($1, 'Llamó por los horarios')", [negB]);
   await admin("select plataforma.admin_registrar_accion('link_acceso_dueno', $1, '{}')", [negB]);
+  await admin(`select plataforma.admin_registrar_accion('aviso_whatsapp', $1, '{"estado": "prueba"}')`, [negB]);
   await como("admin", () =>
     falla(q("select plataforma.admin_registrar_accion('borrar_todo', $1, '{}')", [negB]), /ACCION_INVALIDA/, "acción libre"),
   );
@@ -1211,7 +1235,7 @@ await prueba("admin: pagos encadenados, anulación, prueba, suspensión, notas, 
     d.auditoria.map((a) => a.accion).reverse(),
     [
       "registrar_pago", "registrar_pago", "anular_pago", "anular_pago", "suspender", "reactivar",
-      "extender_prueba", "cambiar_slug", "cambiar_slug", "agregar_nota", "link_acceso_dueno",
+      "extender_prueba", "cambiar_slug", "cambiar_slug", "agregar_nota", "link_acceso_dueno", "aviso_whatsapp",
     ],
   );
   assert.ok(d.auditoria.every((a) => a.admin === "admin"));
@@ -1256,6 +1280,22 @@ await prueba("avisos: el cron reclama cada aviso de vencimiento una sola vez por
   await como("ana", () =>
     falla(q("select * from plataforma.reclamar_avisos_suscripcion()"), /permission denied/, "dueña"),
   );
+
+  // Prueba: el aviso sale recién en los últimos 2 días.
+  await fijarPrueba("3 days");
+  assert.deepEqual(await reclamar(), [], "prueba a 3 días");
+
+  // Plan pago: el aviso sale 4 días antes (el día 26 de un mes de 30).
+  const fijarPago = (intervalo) =>
+    q("update public.negocios set prueba_hasta = now() - interval '60 days', pagado_hasta = now() + $2::interval where id = $1", [
+      negB, intervalo,
+    ]);
+  await fijarPago("5 days");
+  assert.deepEqual(await reclamar(), [], "plan a 5 días");
+  await fijarPago("3 days 23 hours");
+  const [plan] = await reclamar();
+  assert.equal(plan.tipo, "por_vencer");
+  assert.equal(plan.estado, "activa");
   await fijarPrueba("20 days");
 });
 
@@ -1292,6 +1332,54 @@ await prueba("cuentas: borrar un usuario borra su perfil, sus sesiones y sus acc
   assert.equal((await q("select * from public.accesos where usuario_id = $1", [USUARIOS.eva])).length, 0);
   // Sus turnos quedan en el negocio.
   assert.ok((await q("select * from public.turnos where profesional_id = $1", [profEva])).length > 0);
+});
+
+await prueba("admin: eliminar negocio y/o cuentas, con confirmación y registro", async () => {
+  const admin = (sql, params) => como("admin", () => uno(sql, params));
+  // Un negocio de prueba con dueño y una empleada.
+  const ids = { dueno: "00000000-0000-4000-8000-0000000000d1", empleada: "00000000-0000-4000-8000-0000000000d2" };
+  for (const [n, id] of Object.entries(ids)) {
+    await q(`insert into auth."user" ("id", "name", "email", "emailVerified") values ($1, $2, $3, true)`, [id, n, `${n}@borrar.com`]);
+  }
+  await q(`insert into auth."session" ("expiresAt", "token", "updatedAt", "userId") values (now() + interval '1 day', 'tok-borrar', now(), $1)`, [ids.dueno]);
+  await db.query("select set_config('app.usuario_id', $1, false)", [ids.dueno]);
+  await db.exec("set role agenda2_usuario");
+  const neg = (await uno("select public.crear_negocio('Prueba Borrar', 'prueba-borrar', 'otro', 'Dueño', null, null, true) as id")).id;
+  await db.exec("reset role");
+  await db.query("select set_config('app.usuario_id', '', false)");
+  await q("insert into public.perfiles (id, negocio_id, rol, nombre) values ($1, $2, 'empleado', 'Empleada')", [ids.empleada, neg]);
+  await admin("select plataforma.admin_registrar_pago($1, 15000, 'efectivo', 1, null)", [neg]);
+
+  // Solo un admin, con el nombre exacto y algo para borrar.
+  await como("beto", () => falla(q("select plataforma.admin_eliminar($1, 'Prueba Borrar', true, true)", [neg]), /SIN_PERMISO/, "dueño ajeno"));
+  await como("admin", () => falla(q("select plataforma.admin_eliminar($1, 'Otro nombre', true, true)", [neg]), /CONFIRMACION_INCORRECTA/, "nombre"));
+  await como("admin", () => falla(q("select plataforma.admin_eliminar($1, 'Prueba Borrar', false, false)", [neg]), /NADA_QUE_BORRAR/, "nada"));
+
+  // Solo las cuentas: el negocio queda sin equipo.
+  const r1 = (await admin("select plataforma.admin_eliminar($1, ' prueba borrar ', false, true) as r", [neg])).r;
+  assert.deepEqual(r1.cuentas, ["dueno@borrar.com", "empleada@borrar.com"]);
+  assert.equal((await q('select * from auth."user" where "id" = any($1)', [Object.values(ids)])).length, 0);
+  assert.equal((await q('select * from auth."session" where "userId" = $1', [ids.dueno])).length, 0);
+  assert.equal((await q("select * from public.perfiles where negocio_id = $1", [neg])).length, 0);
+  assert.ok(await uno("select id from public.negocios where id = $1", [neg]), "el negocio sigue");
+
+  // Ahora el negocio, con todos sus datos.
+  const r2 = (await admin("select plataforma.admin_eliminar($1, 'Prueba Borrar', true, false) as r", [neg])).r;
+  assert.equal(r2.slug, "prueba-borrar");
+  assert.equal(Number(r2.total_pagado), 15000);
+  assert.equal(await uno("select id from public.negocios where id = $1", [neg]), undefined);
+  for (const t of ["public.profesionales", "public.servicios", "plataforma.pagos"]) {
+    assert.equal((await q(`select * from ${t} where negocio_id = $1`, [neg])).length, 0, t);
+  }
+
+  // Queda el registro, y la cuenta de un admin nunca se borra.
+  const eliminados = await como("admin", () => q("select * from plataforma.admin_eliminados()"));
+  assert.equal(eliminados[0].negocio_id, neg);
+  assert.equal(eliminados[0].detalle.nombre, "Prueba Borrar");
+  const acciones = (await q("select accion from plataforma.auditoria where negocio_id = $1 order by id", [neg])).map((a) => a.accion);
+  assert.deepEqual(acciones, ["registrar_pago", "eliminar_cuentas", "eliminar_negocio"]);
+  await como("ana", () => falla(q("select * from plataforma.admin_eliminados()"), /SIN_PERMISO/, "dueña lee eliminados"));
+  assert.ok(await uno('select "id" from auth."user" where "id" = $1', [USUARIOS.admin]));
 });
 
 await db.close();

@@ -2,6 +2,7 @@ import "server-only";
 import { env } from "@/lib/env";
 import { formatFechaHora, formatFechaLarga, formatHora, formatPrecio } from "@/lib/fechas";
 import { MARCA } from "@/lib/marca";
+import { DIAS_GRACIA } from "@/lib/suscripcion";
 import type { Email } from "./enviar";
 
 export type DatosTurnoEmail = {
@@ -241,22 +242,22 @@ export function emailSuscripcion(para: string, a: AvisoSuscripcion): Email {
         ? {
             asunto: `Tu prueba de ${MARCA.nombre} termina el ${formatFechaLarga(a.vence)}`,
             titulo: "Tu período de prueba está por terminar",
-            intro: `Hola ${nombre}, la prueba de ${a.negocio} termina el ${formatFechaLarga(a.vence)}. Para seguir tomando turnos online después, contratá el plan mensual.${contacto}`,
+            intro: `Hola ${nombre}, la prueba de ${a.negocio} termina el ${formatFechaLarga(a.vence)}. Para seguir usando el panel y tomando turnos online después, contratá el plan mensual.${contacto}`,
           }
         : {
             asunto: `Tu plan de ${MARCA.nombre} vence el ${formatFechaLarga(a.vence)}`,
             titulo: "Tu plan está por vencer",
-            intro: `Hola ${nombre}, el plan de ${a.negocio} vence el ${formatFechaLarga(a.vence)}. Renovalo para que tu página siga tomando reservas.${contacto}`,
+            intro: `Hola ${nombre}, el plan de ${a.negocio} vence el ${formatFechaLarga(a.vence)}. Renovalo antes para seguir usando el panel con normalidad: si vence, queda en solo lectura y a los ${DIAS_GRACIA} días se apaga.${contacto}`,
           },
     vencio: {
       asunto: `Tu suscripción de ${MARCA.nombre} venció`,
       titulo: "Tu suscripción venció",
-      intro: `Hola ${nombre}, la suscripción de ${a.negocio} venció, pero todo sigue funcionando${a.fin_servicio ? ` hasta el ${formatFechaLarga(a.fin_servicio)}` : ""}. Después, el panel queda en solo lectura y tu página deja de tomar reservas.${contacto}`,
+      intro: `Hola ${nombre}, la suscripción de ${a.negocio} venció: el panel quedó en solo lectura, pero tu página sigue tomando reservas${a.fin_servicio ? ` hasta el ${formatFechaLarga(a.fin_servicio)}` : ""}. Si no se renueva, ese día se apaga: no vas a poder entrar al panel y tu página deja de tomar turnos. Tus datos quedan guardados.${contacto}`,
     },
     bloqueado: {
       asunto: `${a.negocio} dejó de tomar reservas online`,
-      titulo: "Tu página dejó de tomar reservas",
-      intro: `Hola ${nombre}, como la suscripción de ${a.negocio} no se renovó, tu página ya no toma reservas nuevas y el panel quedó en solo lectura. Los turnos que ya estaban reservados siguen en pie. Para volver a activarla, renová el plan.${contacto}`,
+      titulo: "Tu cuenta se apagó",
+      intro: `Hola ${nombre}, como la suscripción de ${a.negocio} no se renovó, la cuenta se apagó: tu página ya no toma reservas nuevas y no se puede entrar al panel. Los turnos que ya estaban reservados siguen en pie y todos tus datos quedan guardados: apenas renueves, vuelve todo como estaba.${contacto}`,
     },
   }[a.tipo];
   const { html, texto } = plantillaCuenta({

@@ -4,15 +4,18 @@ import { EncabezadoPagina, Insignia, Tarjeta, cx } from "@/components/ui";
 import { requerirAdmin } from "@/lib/admin";
 import { comoUsuario, esErrorPg, sql } from "@/lib/db";
 import { formatDuracion, formatFechaCorta, formatFechaHora, formatPrecio } from "@/lib/fechas";
-import { diasHasta } from "@/lib/suscripcion";
 import { DIAS_SEMANA, RUBROS, type Rubro } from "@/lib/tipos";
 import { linkWhatsApp } from "@/lib/whatsapp";
 import { InsigniaEstado } from "../../estado";
+import { LineaMembresia } from "../../membresia";
+import { convieneAvisar, textoAvisoWhatsApp } from "../../aviso-whatsapp";
 import { ACCIONES_AUDITORIA, MEDIOS_PAGO, type NegocioAdmin } from "../../tipos";
 import {
   AnularPago,
+  BotonAvisoWhatsApp,
   BotonLinkAcceso,
   BotonReenviarVerificacion,
+  FormularioEliminar,
   FormularioExtender,
   FormularioNota,
   FormularioPago,
@@ -50,6 +53,8 @@ function textoDetalle(accion: string, d: Record<string, unknown>) {
       return `${d.dias} días`;
     case "suspender":
       return d.motivo ? String(d.motivo) : "";
+    case "eliminar_cuentas":
+      return Array.isArray(d.cuentas) ? d.cuentas.join(", ") : "";
     case "cambiar_slug":
       return `${d.antes} → ${d.despues}`;
     default:
@@ -75,7 +80,6 @@ export default async function PaginaNegocioAdmin({ params }: PageProps<"/admin/n
   }
 
   const dueno = n.equipo.find((u) => u.rol === "dueno");
-  const vence = n.pagado_hasta && n.pagado_hasta > n.prueba_hasta ? n.pagado_hasta : n.prueba_hasta;
 
   return (
     <div className="space-y-5">
@@ -98,24 +102,8 @@ export default async function PaginaNegocioAdmin({ params }: PageProps<"/admin/n
 
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <div className="space-y-5">
-          <Seccion titulo="Suscripción">
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Dato etiqueta="Prueba hasta">{formatFechaCorta(n.prueba_hasta)}</Dato>
-              <Dato etiqueta="Pago hasta">{n.pagado_hasta ? formatFechaCorta(n.pagado_hasta) : "—"}</Dato>
-              <Dato etiqueta={n.estado === "gracia" || n.estado === "vencida" ? "Venció" : "Vence"}>
-                {formatFechaCorta(vence)}
-                {n.estado === "prueba" || n.estado === "activa" ? ` (${diasHasta(vence)} d)` : null}
-              </Dato>
-              <Dato etiqueta="Se bloquea">
-                {n.estado === "suspendida" ? "Ya (suspendido)" : n.fin_servicio ? formatFechaCorta(n.fin_servicio) : "—"}
-              </Dato>
-            </dl>
-            {n.estado === "suspendida" ? (
-              <p className="rounded-lg bg-zinc-100 px-3 py-2 text-sm">
-                Suspendido el {formatFechaCorta(n.suspendido_at!)}
-                {n.suspension_motivo ? `: ${n.suspension_motivo}` : ""}.
-              </p>
-            ) : null}
+          <Seccion titulo="Membresía">
+            <LineaMembresia n={n} />
             <div className="border-t border-zinc-100 pt-3">
               <h3 className="mb-2 text-sm font-semibold">Registrar pago</h3>
               <FormularioPago negocioId={n.id} />
@@ -239,7 +227,16 @@ export default async function PaginaNegocioAdmin({ params }: PageProps<"/admin/n
             ) : (
               <p className="text-sm text-zinc-500">Sin dueño.</p>
             )}
-            {n.telefono ? (
+            {n.telefono && convieneAvisar(n) ? (
+              <div className="space-y-1">
+                <BotonAvisoWhatsApp
+                  negocioId={n.id}
+                  estado={n.estado}
+                  href={linkWhatsApp(n.telefono, textoAvisoWhatsApp(n, dueno?.nombre ?? null))}
+                />
+                <p className="text-xs text-zinc-500">Abre el chat con {n.telefono} y el mensaje del vencimiento ya escrito.</p>
+              </div>
+            ) : n.telefono ? (
               <a
                 href={linkWhatsApp(n.telefono)}
                 target="_blank"
@@ -271,7 +268,7 @@ export default async function PaginaNegocioAdmin({ params }: PageProps<"/admin/n
             </div>
           </Seccion>
 
-          <Seccion titulo="Prueba y suspensión">
+          <Seccion titulo="Prueba y baja">
             <FormularioExtender negocioId={n.id} />
             <div className="border-t border-zinc-100 pt-3">
               <FormularioSuspension negocioId={n.id} suspendido={n.estado === "suspendida"} />
@@ -293,6 +290,14 @@ export default async function PaginaNegocioAdmin({ params }: PageProps<"/admin/n
                 ))}
               </ul>
             ) : null}
+          </Seccion>
+
+          <Seccion titulo="Eliminar" className="border-red-200">
+            <FormularioEliminar
+              negocioId={n.id}
+              nombre={n.nombre}
+              cuentas={n.equipo.map((u) => ({ email: u.email, rol: u.rol }))}
+            />
           </Seccion>
         </div>
       </div>

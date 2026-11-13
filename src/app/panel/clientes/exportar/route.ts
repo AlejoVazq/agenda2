@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSesionPanel } from "@/lib/auth";
 import { comoUsuario, sql } from "@/lib/db";
+import { estaApagado } from "@/lib/suscripcion";
 
 // Exporta la lista de clientes del negocio en CSV (para Excel / Google Sheets).
 
@@ -13,7 +14,7 @@ function celda(valor: unknown) {
 
 export async function GET() {
   const sesion = await getSesionPanel();
-  if (!sesion?.esDueno) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  if (!sesion?.esDueno || estaApagado(sesion.suscripcion.estado)) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
   let data: { nombre: string; telefono: string; email: string | null; notas: string | null; created_at: string; turnos: number; ultimo: string | null }[];
   try {

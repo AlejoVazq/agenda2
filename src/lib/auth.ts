@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/better-auth";
 import { comoUsuario, sql } from "@/lib/db";
-import { estaHabilitado, type Suscripcion } from "@/lib/suscripcion";
+import { estaApagado, estaHabilitado, type Suscripcion } from "@/lib/suscripcion";
 import type { Negocio, Perfil } from "@/lib/tipos";
 
 // Segunda capa de seguridad (la primera es src/proxy.ts; la tercera, RLS):
@@ -24,7 +24,7 @@ export type SesionPanel = Sesion & {
   negocio: Negocio;
   esDueno: boolean;
   suscripcion: Suscripcion;
-  /** Prueba, activa o en gracia. Si no, el panel es de solo lectura (ver src/lib/suscripcion.ts). */
+  /** Prueba o activa. Si no, el panel es de solo lectura o está apagado (ver src/lib/suscripcion.ts). */
   habilitado: boolean;
 };
 
@@ -71,12 +71,16 @@ export const getSesionPanel = cache(async (): Promise<SesionPanel | null> => {
   };
 });
 
-/** Para páginas del panel: exige login y pertenecer a un negocio. */
+/**
+ * Para páginas del panel: exige login y pertenecer a un negocio. Si la suscripción
+ * está apagada (vencida después de la gracia, o dada de baja), no se entra: va a /pausado.
+ */
 export async function requerirPanel(): Promise<SesionPanel> {
   const sesion = await getSesion();
   if (!sesion) redirect("/login");
   const panel = await getSesionPanel();
   if (!panel) redirect((await esAdministrador(sesion.userId)) ? "/admin" : "/onboarding");
+  if (estaApagado(panel.suscripcion.estado)) redirect("/pausado");
   return panel;
 }
 
@@ -93,7 +97,7 @@ export async function requerirDueno(): Promise<SesionPanel> {
  */
 export async function sesionParaAccion(opciones: { soloDueno?: boolean } = {}) {
   const panel = await getSesionPanel();
-  if (!panel) return null;
+  if (!panel || estaApagado(panel.suscripcion.estado)) return null;
   if (opciones.soloDueno && !panel.esDueno) return null;
   return panel;
 }
