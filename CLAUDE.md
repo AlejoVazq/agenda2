@@ -51,7 +51,7 @@ Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en 
 - Migraciones (`db/migrar.mjs`): tabla `app.schema_version` con checksum; **nunca se edita una migración aplicada**, se crea una nueva `NNNN_nombre.sql`. Cada una corre en su transacción, con candado.
 - Ninguna función nueva queda ejecutable por `public` (`alter default privileges` en la migración 0001): cada permiso se da explícito. `test:db` verifica que el anónimo ejecute solo las 5 públicas.
 - Anti-superposición: `EXCLUDE USING gist` por profesional en `turnos`. Candado por local para reservas simultáneas.
-- Reglas de reserva online: email obligatorio, 1 turno por fecha por mail, máx. 3 futuros por local (mail o celular), con 3 inasistencias solo 1 a la vez (el dueño lo quita con "Quitar límite"). Cancelados no cuentan; el panel no tiene límites. Límite por IP (hash) en `src/lib/limites.ts`.
+- Reglas de reserva online: email obligatorio, 1 turno por fecha por mail, máx. 3 futuros por local (mail o celular), con 3 inasistencias solo 1 a la vez (el dueño lo quita con "Quitar límite"). Cancelados no cuentan; el panel no tiene límites. Los límites comparan el mail con `public.clave_email` (sin `+etiqueta`; en Gmail, sin puntos). Cancelar online: hasta el plazo del negocio o, si es más tarde, dentro de los 15 minutos de haber reservado (`public.cancelable_hasta`). Límite por IP (hash) en `src/lib/limites.ts`.
 - Celulares normalizados (`normalizarTelefono` en TS y `normalizar_telefono` en SQL).
 - Turno del cliente: `/t/[token]` (64 hex, `noindex`), con cancelación, `.ics` y pago.
 - Secretos de terceros (tokens de Google y MP) cifrados AES-256-GCM con `INTEGRACIONES_CLAVE` en `integraciones_secretos` (solo el rol del servidor).
@@ -89,7 +89,7 @@ Ir en este orden salvo que el usuario diga otra cosa.
 3. **Revisión de textos legales** (`/privacidad`, `/terminos`) antes de sumar más locales.
 4. **Detalles anotados el 2026-11-06**: resueltos el 2026-11-13 (migración 0008 y app): alias de mail (`public.clave_email`), aviso y "Quitar límite" de la ficha con la misma regla que la reserva, "+ Turno" desde la ficha con los datos del cliente, botón atrás en la reserva (`?paso=`), 90 días de anticipación (tope 92), estadísticas sin "$ 0" para servicios sin precio. Ya no pasaban: el link de confirmación (con Better Auth se puede abrir varias veces en 24 h) y el celular ya registrado (el turno usa `nombre_reserva`). **Quedan, a decidir con el usuario** (son funciones nuevas o reglas):
    - ~~el negocio no recibe aviso cuando un cliente cancela~~: hecho el 2026-11-13 (`notificarCancelacionCliente`, mail al dueño y al profesional de esa agenda);
-   - con menos de 2 h de anticipación no se puede cancelar online (la política de cancelación lo impide desde que se reserva);
+   - ~~con menos de 2 h de anticipación no se puede cancelar online~~: hecho el 2026-11-13, 15 minutos para arrepentirse;
    - no hay botón para borrar un cliente.
 5. **Ideas conversadas, sin hacer**: color propio y foto de portada por negocio (el logo ya está), tiempos de espera en servicios de peluquería (tintura), login con Google (comentado en `better-auth.ts`).
 6. **Integraciones sin probar con cuentas reales**: Google Calendar (conectar y pasar la verificación, `docs/verificacion-google.md`), WhatsApp Cloud API (opcional), Mercado Pago (apagado a propósito con `SENA_ACTIVA`).

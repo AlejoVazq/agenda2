@@ -460,17 +460,29 @@ await prueba("token: ver_turno y cancelar_turno_cliente", async () => {
   assert.equal(slots.length, 26);
 });
 
-await prueba("token: no se puede cancelar fuera del plazo de la política", async () => {
+await prueba("token: fuera del plazo no se cancela, salvo en los 15 minutos de haber reservado", async () => {
   const t = await uno(
-    `insert into public.turnos (negocio_id, profesional_id, servicio_id, cliente_id, inicio, fin)
-     select negocio_id, $1, servicio_id, cliente_id, now() + interval '1 hour', now() + interval '2 hours'
+    `insert into public.turnos (negocio_id, profesional_id, servicio_id, cliente_id, inicio, fin, created_at)
+     select negocio_id, $1, servicio_id, cliente_id, now() + interval '1 hour', now() + interval '2 hours', now() - interval '20 minutes'
      from public.turnos limit 1
      returning token_cancelacion`,
     [profAna],
   );
-  await como("anon", () =>
-    falla(q("select public.cancelar_turno_cliente($1)", [t.token_cancelacion]), /FUERA_DE_PLAZO/, "fuera de plazo"),
-  );
+  await como("anon", async () => {
+    const v = (await uno("select public.ver_turno($1) as v", [t.token_cancelacion])).v;
+    assert.equal(v.puede_cancelar, false);
+    await falla(q("select public.cancelar_turno_cliente($1)", [t.token_cancelacion]), /FUERA_DE_PLAZO/, "fuera de plazo");
+  });
+
+  // Recién reservado (dentro del plazo de 2 h): se puede arrepentir.
+  await q("update public.turnos set created_at = now() - interval '5 minutes' where token_cancelacion = $1", [t.token_cancelacion]);
+  await como("anon", async () => {
+    const v = (await uno("select public.ver_turno($1) as v", [t.token_cancelacion])).v;
+    assert.equal(v.puede_cancelar, true);
+    assert.equal(v.por_arrepentimiento, true);
+    assert.ok(new Date(v.cancelable_hasta).getTime() - Date.now() < 11 * 60_000, "hasta los 15 minutos");
+    await q("select public.cancelar_turno_cliente($1)", [t.token_cancelacion]);
+  });
 });
 
 // --- Dueño y empleado ----------------------------------------------------------------

@@ -263,9 +263,11 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
               <div>
                 <CancelarTurno token={token} />
                 <p className="mt-2 text-center text-xs text-zinc-500">
-                  {turno.cancelacion_min_horas > 0
-                    ? `Podés cancelar online hasta el ${formatFechaHora(turno.cancelable_hasta, tz)}.`
-                    : "Podés cancelar online hasta el momento del turno."}
+                  {turno.por_arrepentimiento
+                    ? `Como recién reservaste, podés cancelarlo online hasta las ${formatHora(turno.cancelable_hasta, tz)} (15 minutos).`
+                    : turno.cancelacion_min_horas > 0
+                      ? `Podés cancelar online hasta el ${formatFechaHora(turno.cancelable_hasta, tz)}.`
+                      : "Podés cancelar online hasta el momento del turno."}
                   {turno.pago_estado === "aprobado" ? " La devolución de la seña la coordinás con el negocio." : ""}
                 </p>
               </div>

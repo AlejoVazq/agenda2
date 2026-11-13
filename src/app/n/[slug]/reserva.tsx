@@ -347,7 +347,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
             </BotonEnviar>
             <p className="text-center text-xs text-zinc-500">
               {negocio.cancelacion_min_horas > 0
-                ? `Podés cancelar online hasta ${negocio.cancelacion_min_horas} ${negocio.cancelacion_min_horas === 1 ? "hora" : "horas"} antes.`
+                ? `Podés cancelar online hasta ${negocio.cancelacion_min_horas} ${negocio.cancelacion_min_horas === 1 ? "hora" : "horas"} antes (o en los 15 minutos después de reservar).`
                 : "Podés cancelar online hasta el momento del turno."}{" "}
               Usamos tus datos para gestionar tu turno y sus avisos.{" "}
               <Link href="/privacidad" target="_blank" className="underline">

@@ -43,6 +43,8 @@ export type TurnoPublico = {
   negocio: { nombre: string; slug: string; telefono: string | null; direccion: string | null; zona_horaria: string };
   cancelacion_min_horas: number;
   cancelable_hasta: string;
+  /** Se puede cancelar solo porque reservó hace menos de 15 minutos. */
+  por_arrepentimiento: boolean;
   cancelado_por: "cliente" | "negocio" | "sistema" | null;
   sena_monto: number | null;
   pago_estado: "pendiente" | "aprobado" | "vencido" | "reembolsar" | "devuelta" | null;

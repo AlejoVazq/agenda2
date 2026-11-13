@@ -10,6 +10,10 @@
 -- * Ficha del cliente: el aviso de "3 inasistencias" y "Quitar límite" miraban solo esa
 --   ficha, pero crear_reserva cruza celular y mail. Ahora usan la misma regla
 --   (inasistencias_que_limitan / quitar_limite_cliente, con RLS: solo el dueño).
+-- * Cancelar online: quien reservó dentro del plazo de cancelación del negocio no podía
+--   cancelar nunca. Ahora cualquiera puede arrepentirse dentro de los 15 minutos de
+--   haber reservado (si el turno no empezó). public.cancelable_hasta() es la regla única
+--   que usan ver_turno y cancelar_turno_cliente.
 -- * Estadísticas: los turnos de servicios sin precio no suman "$ 0"; se cuentan aparte
 --   (sin_precio) y por servicio/profesional el ingreso queda en null si no hay precios.
 -- =============================================================================
@@ -325,3 +329,97 @@ $$;
 grant execute on function public.turnos_de_la_persona(uuid) to agenda2_usuario;
 grant execute on function public.inasistencias_que_limitan(uuid) to agenda2_usuario;
 grant execute on function public.quitar_limite_cliente(uuid) to agenda2_usuario;
+
+-- Hasta cuándo se puede cancelar online: el plazo del negocio o, si es más tarde, los
+-- 15 minutos desde que se reservó (nunca después de que empiece el turno).
+create or replace function public.cancelable_hasta(p_inicio timestamptz, p_reservado timestamptz, p_horas integer)
+returns timestamptz
+language sql
+immutable
+parallel safe
+set search_path = ''
+as $$
+  select greatest(
+    p_inicio - make_interval(hours => p_horas),
+    least(p_reservado + interval '15 minutes', p_inicio)
+  );
+$$;
+
+create or replace function public.ver_turno(p_token text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'id', t.id,
+    'estado', t.estado,
+    'inicio', t.inicio,
+    'fin', t.fin,
+    'precio', t.precio,
+    'servicio', s.nombre,
+    'profesional', p.nombre,
+    'cliente', coalesce(t.nombre_reserva, c.nombre),
+    'negocio', jsonb_build_object(
+      'nombre', n.nombre, 'slug', n.slug, 'telefono', n.telefono,
+      'direccion', n.direccion, 'zona_horaria', n.zona_horaria
+    ),
+    'cancelacion_min_horas', n.cancelacion_min_horas,
+    'cancelable_hasta', public.cancelable_hasta(t.inicio, t.created_at, n.cancelacion_min_horas),
+    -- Solo se puede porque está dentro de los 15 minutos de haber reservado.
+    'por_arrepentimiento', now() > t.inicio - make_interval(hours => n.cancelacion_min_horas)
+                           and now() <= public.cancelable_hasta(t.inicio, t.created_at, n.cancelacion_min_horas),
+    'cancelado_por', t.cancelado_por,
+    'sena_monto', t.sena_monto,
+    'pago_estado', case
+      when t.pago_estado = 'pendiente' and t.pago_vence_at < now() then 'vencido'
+      else t.pago_estado
+    end,
+    'pago_vence_at', t.pago_vence_at,
+    'puede_cancelar', t.estado in ('pendiente', 'confirmado')
+                      and now() <= public.cancelable_hasta(t.inicio, t.created_at, n.cancelacion_min_horas)
+  )
+  from public.turnos t
+  join public.negocios n on n.id = t.negocio_id
+  join public.servicios s on s.id = t.servicio_id
+  join public.profesionales p on p.id = t.profesional_id
+  join public.clientes c on c.id = t.cliente_id
+  where p_token ~ '^[0-9a-f]{64}$'
+    and t.token_cancelacion = p_token;
+$$;
+
+create or replace function public.cancelar_turno_cliente(p_token text)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_turno public.turnos;
+  v_horas integer;
+begin
+  if p_token is null or p_token !~ '^[0-9a-f]{64}$' then
+    raise exception 'TURNO_NO_ENCONTRADO' using errcode = 'P0001';
+  end if;
+
+  select t.* into v_turno from public.turnos t where t.token_cancelacion = p_token for update;
+  if not found then
+    raise exception 'TURNO_NO_ENCONTRADO' using errcode = 'P0001';
+  end if;
+
+  if v_turno.estado not in ('pendiente', 'confirmado') then
+    raise exception 'NO_CANCELABLE' using errcode = 'P0001';
+  end if;
+
+  select cancelacion_min_horas into v_horas from public.negocios where id = v_turno.negocio_id;
+  if now() > public.cancelable_hasta(v_turno.inicio, v_turno.created_at, v_horas) then
+    raise exception 'FUERA_DE_PLAZO' using errcode = 'P0001';
+  end if;
+
+  update public.turnos
+  set estado = 'cancelado', cancelado_at = now(), cancelado_por = 'cliente'
+  where id = v_turno.id;
+end;
+$$;
