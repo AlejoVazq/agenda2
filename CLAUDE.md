@@ -6,7 +6,7 @@ App de agenda y reservas online de turnos para negocios de servicios en Argentin
 
 - Todo en **español es-AR**: código, nombres de archivos, variables, textos y commits.
 - Fechas en UTC (`timestamptz`), se muestran en `America/Argentina/Buenos_Aires` (helpers en `src/lib/fechas.ts`, usa `temporal-polyfill`).
-- El README tiene el detalle de cada fase y cómo probarla; `docs/registro-2026-11-11.md`, la última sesión (salida de Supabase) y lo pendiente.
+- El README tiene el detalle de cada fase y cómo probarla; `docs/registro-2026-11-13.md`, la última sesión (membresía, /admin, detalles de uso).
 
 ## Stack
 
