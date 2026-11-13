@@ -127,8 +127,8 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
         />
       </div>
 
-      <div className="relative mb-8 flex flex-col gap-4 overflow-hidden rounded-3xl bg-noche bg-[radial-gradient(ellipse_70%_120%_at_100%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_50%_100%_at_0%_100%,rgb(226_98_43/0.22),transparent)] p-5 text-white sm:flex-row sm:items-center sm:justify-between sm:p-6">
-        <div className="fondo-puntos pointer-events-none absolute inset-0 opacity-60" aria-hidden />
+      <div className="relative mb-8 flex flex-col gap-4 overflow-hidden rounded-3xl bg-noche bg-[radial-gradient(ellipse_70%_120%_at_100%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_50%_100%_at_0%_100%,rgb(130_180_154/0.14),transparent)] p-5 text-white sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="fondo-grano pointer-events-none absolute inset-0 opacity-60" aria-hidden />
         <div className="relative min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-acento-300">Tu link de reservas</p>
           <a href={linkPublico} target="_blank" className="mt-1 block truncate font-display text-lg font-semibold hover:underline">

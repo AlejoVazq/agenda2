@@ -27,8 +27,8 @@ export default function LayoutAuth({ children }: { children: ReactNode }) {
       </div>
 
       {/* Panel de marca (solo escritorio) */}
-      <aside className="relative hidden overflow-hidden bg-noche bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(79_146_114/0.6),transparent),radial-gradient(ellipse_70%_60%_at_0%_100%,rgb(226_98_43/0.3),transparent)] p-12 text-white lg:flex lg:flex-col lg:justify-between">
-        <div className="fondo-puntos pointer-events-none absolute inset-0" aria-hidden />
+      <aside className="relative hidden overflow-hidden bg-noche bg-[radial-gradient(ellipse_80%_60%_at_100%_0%,rgb(79_146_114/0.6),transparent),radial-gradient(ellipse_70%_60%_at_0%_100%,rgb(130_180_154/0.14),transparent)] p-12 text-white lg:flex lg:flex-col lg:justify-between">
+        <div className="fondo-grano pointer-events-none absolute inset-0" aria-hidden />
         <p className="relative text-sm font-semibold uppercase tracking-[0.16em] text-acento-300">Turnos online</p>
         <div className="relative">
           <p className="max-w-md font-display text-5xl font-bold leading-[1.05] tracking-tight">

@@ -20,7 +20,7 @@ export default function Imagen() {
           justifyContent: "space-between",
           padding: 72,
           background:
-            "radial-gradient(ellipse 70% 90% at 100% 0%, rgba(79,146,114,0.6), transparent), radial-gradient(ellipse 60% 80% at 0% 100%, rgba(226,98,43,0.38), transparent), #0e1c16",
+            "radial-gradient(ellipse 70% 90% at 100% 0%, rgba(79,146,114,0.6), transparent), radial-gradient(ellipse 60% 80% at 0% 100%, rgba(130,180,154,0.16), transparent), #0e1c16",
           color: "white",
           fontFamily: "sans-serif",
         }}

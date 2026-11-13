@@ -108,7 +108,7 @@ export default function Inicio() {
           <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden>
             <div className="absolute -top-40 right-[-10%] size-[38rem] rounded-full bg-marca-300/40 blur-3xl" />
             <div className="absolute left-[-15%] top-40 size-[28rem] rounded-full bg-acento-200/50 blur-3xl" />
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,rgb(20_35_28/0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgb(20_35_28/0.04)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_at_top,black_30%,transparent_75%)]" />
+            <div className="fondo-grano absolute inset-0 opacity-70" />
           </div>
 
           <div className="mx-auto grid max-w-6xl items-center gap-14 px-4 pb-20 pt-10 sm:px-6 sm:pt-16 lg:grid-cols-[1.1fr_0.9fr] lg:gap-8 lg:pb-28 lg:pt-20">
@@ -162,7 +162,7 @@ export default function Inicio() {
             {/* Maqueta: celular + notificaciones flotando */}
             <div className="relative mx-auto flex h-[34rem] w-full max-w-md animate-aparecer items-center justify-center retraso-3">
               <div className="absolute inset-x-6 bottom-6 top-10 rounded-[3rem] bg-gradient-to-br from-marca-400 via-marca-600 to-acento-400 shadow-flotante">
-                <div className="fondo-puntos absolute inset-0 rounded-[3rem]" />
+                <div className="fondo-grano absolute inset-0 rounded-[3rem]" />
               </div>
               <CelularReserva className="relative rotate-[-3deg]" />
               <Notificacion
@@ -233,7 +233,7 @@ export default function Inicio() {
         <section id="funciones" className="relative scroll-mt-20 overflow-hidden bg-noche text-white">
           <div className="relative mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
             <div className="pointer-events-none absolute -left-40 top-0 size-[30rem] rounded-full bg-marca-700/30 blur-3xl" aria-hidden />
-            <div className="pointer-events-none absolute -right-40 bottom-0 size-[26rem] rounded-full bg-acento-500/15 blur-3xl" aria-hidden />
+            <div className="pointer-events-none absolute -right-40 bottom-0 size-[26rem] rounded-full bg-marca-400/15 blur-3xl" aria-hidden />
             <Encabezado
               oscuro
               etiqueta="Funciones"
@@ -336,7 +336,7 @@ export default function Inicio() {
             <Encabezado etiqueta="Precio" titulo="Un solo plan, con todo incluido" texto="Sin letra chica y sin cobrarte por cada turno." />
             <div className="mx-auto mt-12 max-w-3xl overflow-hidden rounded-[2rem] border border-zinc-200/80 bg-white shadow-flotante md:grid md:grid-cols-[1fr_1.1fr]">
               <div className="relative overflow-hidden bg-gradient-to-br from-marca-700 via-marca-800 to-noche p-8 text-white">
-                <div className="fondo-puntos absolute inset-0" aria-hidden />
+                <div className="fondo-grano absolute inset-0" aria-hidden />
                 <div className="relative">
                   <p className="text-sm font-semibold uppercase tracking-[0.14em] text-acento-300">Para empezar</p>
                   <p className="mt-3 font-display text-6xl font-bold tracking-tight">7 días</p>
@@ -399,8 +399,8 @@ export default function Inicio() {
 
         {/* --- Llamado final --- */}
         <section className="px-4 py-16 sm:px-6 sm:py-24">
-          <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-noche bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_50%_70%_at_100%_100%,rgb(226_98_43/0.35),transparent)] px-6 py-16 text-center text-white sm:px-12 sm:py-24">
-            <div className="fondo-puntos pointer-events-none absolute inset-0" aria-hidden />
+          <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-noche bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_50%_70%_at_100%_100%,rgb(130_180_154/0.14),transparent)] px-6 py-16 text-center text-white sm:px-12 sm:py-24">
+            <div className="fondo-grano pointer-events-none absolute inset-0" aria-hidden />
             <div className="relative">
               <h2 className="mx-auto max-w-2xl font-display text-4xl font-bold leading-[1.05] sm:text-6xl">
                 Dejá de anotar turnos en un cuaderno.

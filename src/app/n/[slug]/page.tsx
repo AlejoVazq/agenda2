@@ -33,8 +33,8 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
 
   return (
     <div className="min-h-dvh bg-fondo">
-      <header className="relative overflow-hidden bg-noche bg-[radial-gradient(ellipse_70%_90%_at_100%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_60%_80%_at_0%_100%,rgb(226_98_43/0.28),transparent)] text-white">
-        <div className="fondo-puntos pointer-events-none absolute inset-0 opacity-60" aria-hidden />
+      <header className="relative overflow-hidden bg-noche bg-[radial-gradient(ellipse_70%_90%_at_100%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_60%_80%_at_0%_100%,rgb(130_180_154/0.14),transparent)] text-white">
+        <div className="fondo-grano pointer-events-none absolute inset-0 opacity-60" aria-hidden />
         <div className="relative mx-auto max-w-xl px-4 pb-20 pt-8 sm:pt-12">
           <div className="flex animate-aparecer items-center gap-4">
             {logo ? (

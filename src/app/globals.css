@@ -131,10 +131,14 @@
   }
 }
 
-/* Textura de puntos sutil para fondos de marca. */
-@utility fondo-puntos {
-  background-image: radial-gradient(rgb(255 255 255 / 0.12) 1px, transparent 1px);
-  background-size: 18px 18px;
+/*
+ * Grano tipo papel impreso: ruido fractal (SVG feTurbulence) en escala de grises,
+ * mezclado con `overlay` para que tome el color del fondo. Suma textura sin patrón visible.
+ */
+@utility fondo-grano {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.55'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  mix-blend-mode: overlay;
 }
 
 /* Retraso para escalonar animaciones de entrada: `retraso-1` … `retraso-6`. */

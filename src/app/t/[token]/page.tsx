@@ -135,7 +135,7 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
 
         <div className="animate-aparecer overflow-hidden rounded-[2rem] bg-white shadow-flotante ring-1 ring-zinc-200/60 retraso-1">
           <div className="relative overflow-hidden bg-noche bg-[radial-gradient(ellipse_80%_100%_at_100%_0%,rgb(79_146_114/0.6),transparent)] px-5 pb-6 pt-5 text-white">
-            <div className="fondo-puntos pointer-events-none absolute inset-0 opacity-60" aria-hidden />
+            <div className="fondo-grano pointer-events-none absolute inset-0 opacity-60" aria-hidden />
             <div className="relative flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-acento-300">{turno.negocio.nombre}</p>
