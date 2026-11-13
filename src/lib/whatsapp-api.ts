@@ -93,7 +93,7 @@ export function confirmarPorWhatsAppDespues(turnoId: string) {
                json_build_object('nombre', n.nombre, 'zona_horaria', n.zona_horaria, 'whatsapp_avisos', n.whatsapp_avisos) as negocio
         from public.turnos t
         join public.servicios s on s.id = t.servicio_id
-        join public.clientes c on c.id = t.cliente_id
+        left join public.clientes c on c.id = t.cliente_id
         join public.negocios n on n.id = t.negocio_id
         where t.id = ${turnoId}`),
     );

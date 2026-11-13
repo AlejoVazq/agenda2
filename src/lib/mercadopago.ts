@@ -82,7 +82,7 @@ export async function crearPagoSena(turnoId: string): Promise<string | null> {
              json_build_object('nombre', n.nombre) as negocio
       from public.turnos t
       join public.servicios s on s.id = t.servicio_id
-      join public.clientes c on c.id = t.cliente_id
+      left join public.clientes c on c.id = t.cliente_id
       join public.negocios n on n.id = t.negocio_id
       where t.id = ${turnoId}`),
   );

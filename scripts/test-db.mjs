@@ -732,6 +732,41 @@ await prueba("ficha: el límite de inasistencias cruza celular y mail, y se quit
   await q("delete from public.clientes where id = any($1)", [[fichaA, fichaB]]);
 });
 
+await prueba("borrar cliente: se va la ficha, los turnos quedan con el nombre y el precio", async () => {
+  const cli = (await uno(
+    "insert into public.clientes (negocio_id, nombre, telefono, email, notas) values ($1, 'Borra Me', '1144448888', 'borra@mail.com', 'nota privada') returning id",
+    [negA],
+  )).id;
+  const turno = (sql, intervalo, estado) =>
+    uno(
+      `insert into public.turnos (negocio_id, profesional_id, servicio_id, cliente_id, inicio, fin, estado, precio, telefono_reserva, email_reserva)
+       values ($1, $2, $3, $4, now() + $5::interval, now() + $5::interval + interval '1 hour', $6, 5000, '1144448888', 'borra@mail.com') returning id`,
+      [negA, profAna, servA, cli, intervalo, estado],
+    );
+  const pasado = (await turno(null, "-40 days", "completado")).id;
+  const futuro = (await turno(null, "45 days", "confirmado")).id;
+
+  await como("ana", () => falla(q("select public.borrar_cliente($1)", [cli]), /TIENE_TURNOS_FUTUROS/, "con turno por venir"));
+  await como("eva", () => falla(q("select public.borrar_cliente($1)", [cli]), /NO_ENCONTRADO/, "empleada"));
+  await como("beto", () => falla(q("select public.borrar_cliente($1)", [cli]), /NO_ENCONTRADO/, "otro negocio"));
+
+  await q("update public.turnos set estado = 'cancelado' where id = $1", [futuro]);
+  const n = await como("ana", async () => (await uno("select public.borrar_cliente($1) as n", [cli])).n);
+  assert.equal(n, 2);
+  assert.equal(await uno("select id from public.clientes where id = $1", [cli]), undefined);
+  const t = await uno("select * from public.turnos where id = $1", [pasado]);
+  assert.equal(t.cliente_id, null);
+  assert.equal(t.nombre_reserva, "Borra Me");
+  assert.equal(Number(t.precio), 5000);
+  assert.equal(t.telefono_reserva, null);
+  assert.equal(t.email_reserva, null);
+  // Sigue sumando en las estadísticas y su página de turno se ve.
+  const { e } = await como("ana", () => uno("select public.estadisticas_negocio(now() - interval '60 days', now()) as e"));
+  assert.ok(Number(e.ingresos) >= 5000);
+  assert.equal((await como("anon", () => uno("select public.ver_turno($1) as v", [t.token_cancelacion]))).v.cliente, "Borra Me");
+  await q("delete from public.turnos where id = any($1)", [[pasado, futuro]]);
+});
+
 await prueba("reserva hasta 90 días y estadísticas sin precio", async () => {
   await q("update public.negocios set anticipacion_max_dias = 90 where id = $1", [negA]);
   const { n } = await como("anon", () =>

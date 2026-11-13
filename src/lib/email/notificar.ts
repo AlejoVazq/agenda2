@@ -51,7 +51,7 @@ function leerTurno(turnoId: string) {
                'zona_horaria', n.zona_horaria, 'cancelacion_min_horas', n.cancelacion_min_horas
              ) as negocio
       from public.turnos t
-      join public.clientes c on c.id = t.cliente_id
+      left join public.clientes c on c.id = t.cliente_id
       join public.servicios s on s.id = t.servicio_id
       join public.profesionales p on p.id = t.profesional_id
       join public.negocios n on n.id = t.negocio_id

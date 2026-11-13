@@ -9,7 +9,7 @@ import { formatFechaCorta, formatHora, formatPrecio } from "@/lib/fechas";
 import { comoUsuario, sql } from "@/lib/db";
 import { ESTADOS_TURNO, type Cliente, type EstadoTurno } from "@/lib/tipos";
 import { linkWhatsApp } from "@/lib/whatsapp";
-import { quitarLimiteCliente } from "../acciones";
+import { borrarCliente, quitarLimiteCliente } from "../acciones";
 import { FormularioCliente } from "./formulario";
 
 export const metadata: Metadata = { title: "Cliente" };
@@ -132,6 +132,25 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
             ))}
           </ul>
         )}
+      </Tarjeta>
+
+      <Tarjeta className="space-y-2">
+        <h2 className="font-bold">Borrar cliente</h2>
+        <p className="text-sm text-zinc-600">
+          Se borran sus datos de contacto y las notas. Sus turnos quedan en la agenda y en las estadísticas con su nombre y
+          lo que pagó.
+          {turnos.some((t) => (t.estado === "pendiente" || t.estado === "confirmado") && t.inicio > ahora)
+            ? " Tiene turnos por venir: cancelalos primero."
+            : ""}
+        </p>
+        <BotonAccion
+          accion={borrarCliente.bind(null, c.id)}
+          variante="peligro"
+          confirmar="Sí, borrar la ficha"
+          pendiente="Borrando…"
+        >
+          Borrar cliente
+        </BotonAccion>
       </Tarjeta>
     </div>
   );

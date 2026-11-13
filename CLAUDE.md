@@ -27,7 +27,7 @@ App de agenda y reservas online de turnos para negocios de servicios en Argentin
 | `npm run build` / `npm start` | Build y servidor de producción |
 | `npm run typecheck` | `next typegen` + `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm run test:db` | 67 pruebas de migraciones, roles, RLS, suscripciones y admin con PGlite |
+| `npm run test:db` | 68 pruebas de migraciones, roles, RLS, suscripciones y admin con PGlite |
 | `npm run db:migrar` | Aplica migraciones pendientes (usa `DATABASE_URL_MIGRAR`) |
 | `npm run db:seed` / `db:reset` | Datos demo / borrar todo y volver a migrar + seed (solo contra una base local) |
 | `npm run admin -- agregar <mail>` | Hace admin de la plataforma a una cuenta (también `listar`, `quitar`, `quitar-2fa`). Usa `DATABASE_URL_MIGRAR` |
@@ -52,6 +52,7 @@ Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en 
 - Ninguna función nueva queda ejecutable por `public` (`alter default privileges` en la migración 0001): cada permiso se da explícito. `test:db` verifica que el anónimo ejecute solo las 5 públicas.
 - Anti-superposición: `EXCLUDE USING gist` por profesional en `turnos`. Candado por local para reservas simultáneas.
 - Reglas de reserva online: email obligatorio, 1 turno por fecha por mail, máx. 3 futuros por local (mail o celular), con 3 inasistencias solo 1 a la vez (el dueño lo quita con "Quitar límite"). Cancelados no cuentan; el panel no tiene límites. Los límites comparan el mail con `public.clave_email` (sin `+etiqueta`; en Gmail, sin puntos). Cancelar online: hasta el plazo del negocio o, si es más tarde, dentro de los 15 minutos de haber reservado (`public.cancelable_hasta`). Límite por IP (hash) en `src/lib/limites.ts`.
+- **Borrar un cliente** (migración 0009, `public.borrar_cliente`, solo el dueño): se borra la ficha (contacto y notas) pero sus turnos quedan en la agenda y las estadísticas con `nombre_reserva` y el precio, sin celular ni mail; `turnos.cliente_id` queda en null (por eso las consultas que leen turnos usan `left join` a clientes). No se puede si tiene turnos por venir.
 - Celulares normalizados (`normalizarTelefono` en TS y `normalizar_telefono` en SQL).
 - Turno del cliente: `/t/[token]` (64 hex, `noindex`), con cancelación, `.ics` y pago.
 - Secretos de terceros (tokens de Google y MP) cifrados AES-256-GCM con `INTEGRACIONES_CLAVE` en `integraciones_secretos` (solo el rol del servidor).
@@ -90,7 +91,7 @@ Ir en este orden salvo que el usuario diga otra cosa.
 4. **Detalles anotados el 2026-11-06**: resueltos el 2026-11-13 (migración 0008 y app): alias de mail (`public.clave_email`), aviso y "Quitar límite" de la ficha con la misma regla que la reserva, "+ Turno" desde la ficha con los datos del cliente, botón atrás en la reserva (`?paso=`), 90 días de anticipación (tope 92), estadísticas sin "$ 0" para servicios sin precio. Ya no pasaban: el link de confirmación (con Better Auth se puede abrir varias veces en 24 h) y el celular ya registrado (el turno usa `nombre_reserva`). **Quedan, a decidir con el usuario** (son funciones nuevas o reglas):
    - ~~el negocio no recibe aviso cuando un cliente cancela~~: hecho el 2026-11-13 (`notificarCancelacionCliente`, mail al dueño y al profesional de esa agenda);
    - ~~con menos de 2 h de anticipación no se puede cancelar online~~: hecho el 2026-11-13, 15 minutos para arrepentirse;
-   - no hay botón para borrar un cliente.
+   - ~~no hay botón para borrar un cliente~~: hecho el 2026-11-13 (migración 0009).
 5. **Ideas conversadas, sin hacer**: color propio y foto de portada por negocio (el logo ya está), tiempos de espera en servicios de peluquería (tintura), login con Google (comentado en `better-auth.ts`).
 6. **Integraciones sin probar con cuentas reales**: Google Calendar (conectar y pasar la verificación, `docs/verificacion-google.md`), WhatsApp Cloud API (opcional), Mercado Pago (apagado a propósito con `SENA_ACTIVA`).
 7. **Mantenimiento**: copiar los backups fuera del VPS cada tanto; borrar restos locales de Supabase (variables viejas en `.env.local`, carpeta `supabase/`, `agenda2-migracion-supabase.md` suelto en la raíz).

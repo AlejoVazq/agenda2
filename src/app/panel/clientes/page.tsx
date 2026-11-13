@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { EncabezadoPagina, Input, Vacio, clasesBoton } from "@/components/ui";
+import { Aviso, EncabezadoPagina, Input, Vacio, clasesBoton } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
 import { comoUsuario, sql } from "@/lib/db";
 import { formatFechaCorta } from "@/lib/fechas";
@@ -10,7 +10,7 @@ import type { Cliente } from "@/lib/tipos";
 export const metadata: Metadata = { title: "Clientes" };
 
 export default async function PaginaClientes({ searchParams }: PageProps<"/panel/clientes">) {
-  const { q } = await searchParams;
+  const { q, borrado } = await searchParams;
   const { negocio, userId } = await requerirDueno();
   const busqueda = typeof q === "string" ? q.trim().slice(0, 60) : "";
 
@@ -48,6 +48,11 @@ export default async function PaginaClientes({ searchParams }: PageProps<"/panel
           </a>
         }
       />
+      {borrado ? (
+        <Aviso tipo="exito" className="mb-4">
+          Ficha borrada. Sus turnos siguen en la agenda y en las estadísticas.
+        </Aviso>
+      ) : null}
       <form className="mb-5 flex gap-2">
         <Input name="q" defaultValue={busqueda} placeholder="Buscar por nombre o celular" aria-label="Buscar" />
         <button className={clasesBoton("secundario")}>Buscar</button>

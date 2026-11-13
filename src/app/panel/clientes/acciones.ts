@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { sesionParaAccion } from "@/lib/auth";
 import { comoUsuario, esErrorPg, sql } from "@/lib/db";
@@ -54,4 +55,27 @@ export async function quitarLimiteCliente(id: string): Promise<EstadoAccion> {
 
   revalidatePath(`/panel/clientes/${id}`);
   return { ok: true, mensaje: "Límite quitado." };
+}
+
+/**
+ * Borra la ficha (nombre, celular, mail y notas). Sus turnos quedan en el historial con
+ * el nombre con que se pidieron y su precio. Si tiene turnos por venir, no se borra.
+ */
+export async function borrarCliente(id: string): Promise<EstadoAccion> {
+  const sesion = await sesionParaAccion({ soloDueno: true });
+  if (!sesion) return { error: "Solo el dueño puede borrar clientes." };
+  if (!z.uuid().safeParse(id).success) return { error: "Cliente inválido." };
+
+  try {
+    await comoUsuario(sesion.userId, (tx) => tx.uno(sql`select public.borrar_cliente(${id})`));
+  } catch (e) {
+    if (esErrorPg(e) && e.message.includes("TIENE_TURNOS_FUTUROS")) {
+      return { error: "Tiene turnos por venir. Cancelalos desde la agenda y después borrá la ficha." };
+    }
+    if (esErrorPg(e) && e.message.includes("NO_ENCONTRADO")) return { error: "No se encontró el cliente." };
+    return { error: mensajeDeError(e) };
+  }
+
+  revalidatePath("/panel/clientes");
+  redirect("/panel/clientes?borrado=1");
 }

@@ -96,7 +96,8 @@ export interface Turno {
   negocio_id: string;
   profesional_id: string;
   servicio_id: string;
-  cliente_id: string;
+  /** Null si se borró la ficha del cliente (el turno queda en el historial). */
+  cliente_id: string | null;
   inicio: string;
   fin: string;
   estado: EstadoTurno;
