@@ -71,10 +71,31 @@ Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en 
 - Fases 1 a 6 y extras hechas. Supabase reemplazado por Postgres propio + Better Auth (rama `sin-supabase`), probado en local de punta a punta.
 - Objetivo: que un amigo peluquero masculino la pruebe en su local. Google Calendar puede quedar sin conectar.
 - **Publicada en https://agenda2.tech** (VPS Hostinger `187.53.106.37`, SSH como `root`) desde el 2026-11-11. El repo está en GitHub (`AlejoVazq/agenda2`). `RESEND_API_KEY` cargada (clave de solo envío). Falta la prueba completa del paso 7.
-- Mail de contacto de `/privacidad`: `vaztechcontact@gmail.com`. Pendiente: revisión de textos legales.
-- Pedidos del usuario para después de publicar: pulir la estética de la reserva y marca por negocio (logo, color, portada). No agregar otras funciones sin que lo pida.
-- Suscripciones y panel `/admin` publicados (migraciones 0001 a 0005 aplicadas, 2026-11-12). Falta registrar una cuenta solo para administrar y correr `npm run admin -- agregar <mail>` en el servidor.
-- El resto de lo pendiente está en `docs/registro-2026-11-11.md`.
+- Mail de contacto de `/privacidad`: `vaztechcontact@gmail.com`.
+- Publicado al 2026-11-12: migraciones 0001 a 0006 (suscripciones, `/admin` con admin ya cargado, identidad visual verde pino, logo por negocio) y el 404 real en `/n/[slug]` (082be58). El `revoke connect` en la base de EnSushi ya se hizo.
+- En producción hay un solo negocio real: la barbería del amigo (`/n/pollobarber`). No tocar EnSushi. No agregar otras funciones sin que el usuario lo pida.
+
+## Pendiente (rumbo, al 2026-11-12)
+
+Ir en este orden salvo que el usuario diga otra cosa.
+
+1. **Suscripción de `pollobarber`**: arrancó con 7 días de prueba al publicarse las suscripciones (2026-11-12), así que vence ~2026-11-19 (+5 de gracia y queda en solo lectura). Registrarle un pago o extender la prueba desde `/admin`.
+2. **Prueba completa del paso 7** (abajo) con mails reales; el recordatorio por mail nunca se probó de punta a punta.
+3. **Revisión de textos legales** (`/privacidad`, `/terminos`) antes de sumar más locales.
+4. **Detalles anotados el 2026-11-06** (`docs/registro-2026-11-06.md`, "Sin arreglar"; verificar si siguen antes de tocarlos):
+   - el negocio no recibe aviso cuando un cliente cancela;
+   - algunos proveedores de mail abren solos el link de confirmación y lo vencen;
+   - en el panel, un celular ya registrado deja el turno a nombre del cliente anterior;
+   - los alias de mail (`juan+1@…`) cuentan como otro mail (esquiva límites);
+   - con menos de 2 h de anticipación no se puede cancelar online;
+   - no hay botón para borrar un cliente;
+   - el aviso de límite de la ficha cuenta solo esa ficha aunque la regla cruce mail y celular;
+   - menores: "+ Turno" abre vacío, el botón atrás sale de la reserva, servicios sin precio suman $0 en estadísticas, la opción de 90 días rinde 61.
+5. **Ideas conversadas, sin hacer**: color propio y foto de portada por negocio (el logo ya está), tiempos de espera en servicios de peluquería (tintura), login con Google (comentado en `better-auth.ts`).
+6. **Integraciones sin probar con cuentas reales**: Google Calendar (conectar y pasar la verificación, `docs/verificacion-google.md`), WhatsApp Cloud API (opcional), Mercado Pago (apagado a propósito con `SENA_ACTIVA`).
+7. **Mantenimiento**: copiar los backups fuera del VPS cada tanto; borrar restos locales de Supabase (variables viejas en `.env.local`, carpeta `supabase/`, `agenda2-migracion-supabase.md` suelto en la raíz).
+
+Historial de cada sesión en `docs/registro-*.md`.
 
 ## Publicar en el VPS
 
