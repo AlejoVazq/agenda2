@@ -7,17 +7,36 @@ import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formular
 import { Aviso, Campo, Input, cx } from "@/components/ui";
 import { formatDuracion, formatFechaISO, formatFechaLarga, formatHora, formatPrecio, sumarDias } from "@/lib/fechas";
 import type { NegocioPublico, ServicioPublico } from "@/lib/publico";
+import { Estrellas } from "@/components/estrellas";
 import type { EstadoAccion } from "@/lib/tipos";
 import { consultarDias, consultarHorarios, reservar, type Horario } from "./acciones";
 
-type Paso = "servicio" | "profesional" | "horario" | "datos";
-const PASOS: Paso[] = ["servicio", "profesional", "horario", "datos"];
+type Paso = "profesional" | "servicio" | "horario" | "datos";
+const PASOS: Paso[] = ["profesional", "servicio", "horario", "datos"];
 const CUALQUIERA = "cualquiera";
 
-export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string }) {
+export function Reserva({
+  negocio,
+  hoy,
+  valoraciones = {},
+}: {
+  negocio: NegocioPublico;
+  hoy: string;
+  /** Promedio de reseñas por profesional (vacío si el negocio no las muestra). */
+  valoraciones?: Record<string, { promedio: number; cantidad: number }>;
+}) {
   const tz = negocio.zona_horaria;
+  // Profesionales que hacen al menos un servicio reservable online.
+  const profesionales = useMemo(() => {
+    const conServicios = new Set(negocio.servicios.flatMap((s) => s.profesional_ids ?? []));
+    return negocio.profesionales.filter((p) => conServicios.has(p.id));
+  }, [negocio]);
+  // Con un solo profesional no se pregunta "¿con quién?".
+  const conPasoProfesional = profesionales.length > 1;
+  const pasos = conPasoProfesional ? PASOS : PASOS.slice(1);
   const [servicio, setServicio] = useState<ServicioPublico | null>(null);
-  const [profesionalId, setProfesionalId] = useState<string>(CUALQUIERA);
+  // null = todavía no eligió; CUALQUIERA = le da lo mismo.
+  const [profesionalId, setProfesionalId] = useState<string | null>(conPasoProfesional ? null : (profesionales[0]?.id ?? CUALQUIERA));
   const [dias, setDias] = useState<string[] | null>(null);
   const [fecha, setFecha] = useState<string | null>(null);
   const [horarios, setHorarios] = useState<Horario[] | null>(null);
@@ -25,10 +44,18 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
   // El paso va en la dirección (?paso=…) para que el botón atrás del celular vuelva al
   // paso anterior en lugar de salir de la página. Si falta lo elegido antes, se retrocede.
   const pedido = useSearchParams().get("paso") as Paso | null;
-  const pasoUrl: Paso = pedido && PASOS.includes(pedido) ? pedido : "servicio";
-  const paso: Paso = !servicio ? "servicio" : pasoUrl === "datos" && !horario ? "horario" : pasoUrl;
+  const primerPaso = pasos[0]!;
+  const pasoUrl: Paso = pedido && pasos.includes(pedido) ? pedido : primerPaso;
+  const paso: Paso =
+    profesionalId === null
+      ? "profesional"
+      : !servicio
+        ? pasoUrl === "profesional" ? "profesional" : "servicio"
+        : pasoUrl === "datos" && !horario
+          ? "horario"
+          : pasoUrl;
   function setPaso(nuevo: Paso, reemplazar = false) {
-    const url = nuevo === "servicio" ? window.location.pathname : `?paso=${nuevo}`;
+    const url = nuevo === primerPaso ? window.location.pathname : `?paso=${nuevo}`;
     if (reemplazar) window.history.replaceState(null, "", url);
     else window.history.pushState(null, "", url);
   }
@@ -51,6 +78,17 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
 
   const nombresProf = useMemo(() => new Map(negocio.profesionales.map((p) => [p.id, p.nombre])), [negocio]);
   const profesionalesDelServicio = (servicio?.profesional_ids ?? []).filter((id) => nombresProf.has(id));
+  // Con "cualquiera", si el servicio lo hace una sola persona, es esa.
+  const profesionalEfectivo =
+    profesionalId === CUALQUIERA || profesionalId === null
+      ? profesionalesDelServicio.length === 1
+        ? profesionalesDelServicio[0]!
+        : CUALQUIERA
+      : profesionalId;
+  const serviciosVisibles =
+    profesionalId && profesionalId !== CUALQUIERA
+      ? negocio.servicios.filter((s) => s.profesional_ids?.includes(profesionalId))
+      : negocio.servicios;
   const horizonte = Math.min(negocio.anticipacion_max_dias + 1, 92);
 
   // Cargar días con disponibilidad al elegir servicio/profesional.
@@ -61,7 +99,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
       const disponibles = await consultarDias({
         negocio_id: negocio.id,
         servicio_id: servicio.id,
-        profesional_id: profesionalId === CUALQUIERA ? null : profesionalId,
+        profesional_id: profesionalEfectivo === CUALQUIERA ? null : profesionalEfectivo,
         desde: hoy,
         dias: horizonte,
       });
@@ -72,7 +110,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
     return () => {
       vigente = false;
     };
-  }, [paso, servicio, profesionalId, negocio.id, hoy, horizonte]);
+  }, [paso, servicio, profesionalEfectivo, negocio.id, hoy, horizonte]);
 
   // Cargar horarios del día elegido.
   useEffect(() => {
@@ -82,7 +120,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
       const lista = await consultarHorarios({
         negocio_id: negocio.id,
         servicio_id: servicio.id,
-        profesional_id: profesionalId === CUALQUIERA ? null : profesionalId,
+        profesional_id: profesionalEfectivo === CUALQUIERA ? null : profesionalEfectivo,
         fecha,
       });
       if (vigente) setHorarios(lista);
@@ -90,30 +128,32 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
     return () => {
       vigente = false;
     };
-  }, [paso, servicio, profesionalId, fecha, negocio.id]);
+  }, [paso, servicio, profesionalEfectivo, fecha, negocio.id]);
+
+  function elegirProfesional(id: string) {
+    setProfesionalId(id);
+    // Si el servicio elegido antes no lo hace esta persona, se vuelve a elegir.
+    if (servicio && id !== CUALQUIERA && !servicio.profesional_ids?.includes(id)) setServicio(null);
+    setHorario(null);
+    setDias(null);
+    setHorarios(null);
+    setPaso("servicio");
+  }
 
   function elegirServicio(s: ServicioPublico) {
     setServicio(s);
     setHorario(null);
     setDias(null);
     setHorarios(null);
-    const profs = (s.profesional_ids ?? []).filter((id) => nombresProf.has(id));
-    if (profs.length <= 1) {
-      setProfesionalId(profs[0] ?? CUALQUIERA);
-      setPaso("horario");
-    } else {
-      setProfesionalId(CUALQUIERA);
-      setPaso("profesional");
-    }
+    setPaso("horario");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function elegirProfesional(id: string) {
-    setProfesionalId(id);
+  function volverAlInicio() {
+    setServicio(null);
     setHorario(null);
-    setDias(null);
-    setHorarios(null);
-    setPaso("horario");
+    if (conPasoProfesional) setProfesionalId(null);
+    setPaso(primerPaso);
   }
 
   function elegirHorario(h: Horario) {
@@ -127,33 +167,89 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
 
   return (
     <div>
-      <Pasos paso={paso} />
+      <Pasos paso={paso} pasos={pasos} />
 
-      {paso !== "servicio" && servicio ? (
+      {(paso === "horario" || paso === "datos") && servicio ? (
         <Resumen
           servicio={servicio}
-          profesional={profesionalId === CUALQUIERA ? "Cualquier profesional" : (nombresProf.get(profesionalId) ?? "")}
+          profesional={profesionalEfectivo === CUALQUIERA ? "Cualquier profesional" : (nombresProf.get(profesionalEfectivo) ?? "")}
           horario={horario}
           tz={tz}
-          onCambiar={() => {
-            setPaso("servicio");
-            setHorario(null);
-          }}
+          onCambiar={volverAlInicio}
         />
+      ) : null}
+
+      {paso === "profesional" ? (
+        <section aria-labelledby="t-prof">
+          <h2 id="t-prof" className="mb-4 font-display text-xl font-bold">
+            ¿Con quién te querés atender?
+          </h2>
+          <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+            {[CUALQUIERA, ...profesionales.map((p) => p.id)].map((id) => {
+              const nombre = id === CUALQUIERA ? "Cualquiera" : (nombresProf.get(id) ?? "");
+              const val = valoraciones[id];
+              const elegido = id === profesionalId;
+              return (
+                <li key={id}>
+                  <button
+                    onClick={() => elegirProfesional(id)}
+                    aria-pressed={elegido}
+                    className={cx(
+                      "flex h-full w-full flex-col items-center gap-2 rounded-2xl border bg-white p-4 transition hover:-translate-y-px hover:border-marca-300 hover:shadow-flotante active:scale-[0.98]",
+                      elegido ? "border-marca-600 ring-2 ring-marca-600/20" : "border-zinc-200/90",
+                    )}
+                  >
+                    <span
+                      className={cx(
+                        "grid size-14 place-items-center rounded-full font-display text-xl font-bold",
+                        id === CUALQUIERA
+                          ? "bg-acento-100 text-acento-600"
+                          : "bg-gradient-to-br from-marca-500 to-marca-800 text-white shadow-[0_8px_18px_-8px_rgb(31_77_58/0.7)]",
+                      )}
+                      aria-hidden
+                    >
+                      {id === CUALQUIERA ? "★" : iniciales(nombre)}
+                    </span>
+                    <span className="text-center text-sm font-semibold leading-tight">{nombre}</span>
+                    {id === CUALQUIERA ? (
+                      <span className="-mt-1.5 text-xs text-zinc-500">Más horarios</span>
+                    ) : val ? (
+                      <span className="-mt-1 inline-flex items-center gap-1 text-xs text-zinc-600">
+                        <Estrellas valor={val.promedio} className="size-3" />
+                        <span className="font-semibold tabular-nums text-tinta">{val.promedio.toFixed(1).replace(".", ",")}</span>
+                        <span className="tabular-nums">({val.cantidad})</span>
+                      </span>
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       ) : null}
 
       {paso === "servicio" ? (
         <section aria-labelledby="t-servicio">
+          {conPasoProfesional ? (
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-marca-50/70 px-4 py-2.5 text-sm ring-1 ring-marca-100">
+              <p className="min-w-0 truncate text-marca-900">
+                {profesionalId === CUALQUIERA ? "Con cualquier profesional" : <>Con <strong>{nombresProf.get(profesionalId ?? "")}</strong></>}
+              </p>
+              <button onClick={volverAlInicio} className="shrink-0 rounded-lg px-2 py-1 font-semibold text-marca-700 hover:bg-white">
+                Cambiar
+              </button>
+            </div>
+          ) : null}
           <h2 id="t-servicio" className="mb-4 font-display text-xl font-bold">
             ¿Qué te querés hacer?
           </h2>
-          {negocio.servicios.length === 0 ? (
+          {serviciosVisibles.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-600">
               Este negocio todavía no publicó servicios para reservar online.
             </p>
           ) : (
             <ul className="space-y-2.5">
-              {negocio.servicios.map((s) => (
+              {serviciosVisibles.map((s) => (
                 <li key={s.id}>
                   <button
                     onClick={() => elegirServicio(s)}
@@ -188,40 +284,6 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
               ))}
             </ul>
           )}
-        </section>
-      ) : null}
-
-      {paso === "profesional" ? (
-        <section aria-labelledby="t-prof">
-          <h2 id="t-prof" className="mb-4 font-display text-xl font-bold">
-            ¿Con quién?
-          </h2>
-          <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-            {[CUALQUIERA, ...profesionalesDelServicio].map((id) => {
-              const nombre = id === CUALQUIERA ? "Cualquiera" : (nombresProf.get(id) ?? "");
-              return (
-                <li key={id}>
-                  <button
-                    onClick={() => elegirProfesional(id)}
-                    className="flex w-full flex-col items-center gap-2 rounded-2xl border border-zinc-200/90 bg-white p-4 transition hover:-translate-y-px hover:border-marca-300 hover:shadow-flotante active:scale-[0.98]"
-                  >
-                    <span
-                      className={cx(
-                        "grid size-14 place-items-center rounded-full font-display text-xl font-bold",
-                        id === CUALQUIERA
-                          ? "bg-acento-100 text-acento-600"
-                          : "bg-gradient-to-br from-marca-500 to-marca-800 text-white shadow-[0_8px_18px_-8px_rgb(31_77_58/0.7)]",
-                      )}
-                    >
-                      {id === CUALQUIERA ? "★" : nombre.slice(0, 1).toUpperCase()}
-                    </span>
-                    <span className="text-sm font-semibold">{nombre}</span>
-                    {id === CUALQUIERA ? <span className="-mt-1.5 text-xs text-zinc-500">Más horarios</span> : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
         </section>
       ) : null}
 
@@ -277,7 +339,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
             ) : dias.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-600">
                 No hay horarios disponibles en los próximos días.
-                {profesionalId !== CUALQUIERA && profesionalesDelServicio.length > 1 ? " Probá con otro profesional." : " Comunicate con el negocio."}
+                {profesionalEfectivo !== CUALQUIERA && conPasoProfesional ? " Probá con otro profesional." : " Comunicate con el negocio."}
               </p>
             ) : fecha ? (
               <>
@@ -306,7 +368,7 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
           <form key={intento} action={accion} className="space-y-4" noValidate>
             <input type="hidden" name="negocio_id" value={negocio.id} />
             <input type="hidden" name="servicio_id" value={servicio.id} />
-            <input type="hidden" name="profesional_id" value={profesionalId} />
+            <input type="hidden" name="profesional_id" value={profesionalEfectivo} />
             <input type="hidden" name="inicio" value={horario.inicio} />
             {estado.error?.includes("horario") || inicioIntentado !== horario.inicio ? null : <MensajeAccion estado={estado} />}
             <Campo etiqueta="Nombre y apellido" htmlFor="nombre" errores={estado.errores?.nombre}>
@@ -362,14 +424,24 @@ export function Reserva({ negocio, hoy }: { negocio: NegocioPublico; hoy: string
 }
 
 const NOMBRES_PASO: Record<Paso, string> = {
-  servicio: "Servicio",
   profesional: "Profesional",
+  servicio: "Servicio",
   horario: "Día y horario",
   datos: "Tus datos",
 };
 
-function Pasos({ paso }: { paso: Paso }) {
-  const orden: Paso[] = ["servicio", "profesional", "horario", "datos"];
+function iniciales(nombre: string) {
+  return (
+    nombre
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]!.toUpperCase())
+      .join("") || "·"
+  );
+}
+
+function Pasos({ paso, pasos: orden }: { paso: Paso; pasos: Paso[] }) {
   const actual = orden.indexOf(paso);
   return (
     <div className="mb-5" aria-hidden>

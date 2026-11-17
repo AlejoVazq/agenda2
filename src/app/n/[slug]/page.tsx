@@ -7,6 +7,7 @@ import { fechaLocalISO } from "@/lib/fechas";
 import { urlLogo, versionLogo } from "@/lib/logo";
 import { aparienciaNegocio, urlPortada } from "@/lib/portada";
 import { getNegocioPublico, linkWhatsApp } from "@/lib/publico";
+import { resumenResenas } from "@/lib/resenas";
 import { RUBROS, type Rubro } from "@/lib/tipos";
 import { Reserva } from "./reserva";
 
@@ -25,7 +26,11 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
   const negocio = await getNegocioPublico(slug);
   if (!negocio) notFound();
 
-  const [versionDelLogo, apariencia] = await Promise.all([versionLogo(negocio.id), aparienciaNegocio(negocio.id)]);
+  const [versionDelLogo, apariencia, resenas] = await Promise.all([
+    versionLogo(negocio.id),
+    aparienciaNegocio(negocio.id),
+    resumenResenas(negocio.id),
+  ]);
   const logo = urlLogo(negocio.slug, versionDelLogo);
   const portada = urlPortada(negocio.slug, apariencia.portada);
   const tema = estiloTema(apariencia.color);
@@ -112,7 +117,7 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
       <main className="relative mx-auto -mt-10 max-w-xl px-4 pb-16">
         <div className="animate-aparecer rounded-[2rem] bg-white p-4 shadow-flotante ring-1 ring-zinc-200/60 retraso-2 sm:p-6">
           {negocio.reservas_habilitadas ? (
-            <Reserva negocio={negocio} hoy={fechaLocalISO(new Date(), negocio.zona_horaria)} />
+            <Reserva negocio={negocio} hoy={fechaLocalISO(new Date(), negocio.zona_horaria)} valoraciones={resenas.porProfesional} />
           ) : (
             <div className="space-y-3 px-2 py-8 text-center">
               <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-zinc-100 text-zinc-500" aria-hidden>
