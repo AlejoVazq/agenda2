@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { integracionesDisponibles } from "@/lib/env";
 import { enviarEmail } from "@/lib/email/enviar";
-import { emailRecordatorio, emailSuscripcion, type AvisoSuscripcion } from "@/lib/email/plantillas";
+import { emailPedidoResena, emailRecordatorio, emailSuscripcion, type AvisoSuscripcion } from "@/lib/email/plantillas";
 import { importarOcupadosTodos, sincronizarPendientes } from "@/lib/google";
 import { comoServidor, sql } from "@/lib/db";
 import { enviarPlantillaWhatsApp } from "@/lib/whatsapp-api";
@@ -15,7 +15,8 @@ import { enviarPlantillaWhatsApp } from "@/lib/whatsapp-api";
 //  2. Recordatorios por mail y por WhatsApp.
 //  3. Google Calendar: reintenta sincronizaciones y trae horarios ocupados.
 //  4. Avisa a los dueños que su suscripción está por vencer, venció o se bloqueó.
-//  5. Limpia contadores viejos de límites de uso.
+//  5. Pide la opinión de los turnos que terminaron hace unas horas.
+//  6. Limpia contadores viejos de límites de uso.
 export const maxDuration = 300;
 
 type PendienteMail = {
@@ -111,6 +112,27 @@ async function recordatoriosWhatsApp() {
   return { enviados: pendientes.length - fallidos.length, fallidos: fallidos.length };
 }
 
+async function pedidosResena() {
+  // Sin mail configurado no se reclaman: quedarían marcados como enviados.
+  if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) return { omitido: true };
+  const pendientes = await comoServidor((tx) =>
+    tx.varios<{ turno_id: string; token: string; cliente: string; email: string; servicio: string; profesional: string; negocio: string }>(
+      sql`select * from public.reclamar_pedidos_resena(100)`,
+    ),
+  );
+  const fallidos: string[] = [];
+  for (const p of pendientes) {
+    const r = await enviarEmail(emailPedidoResena(p.email, p));
+    if (!r.ok) fallidos.push(p.turno_id);
+  }
+  if (fallidos.length) {
+    await comoServidor((tx) =>
+      tx.ejecutar(sql`update public.turnos set resena_pedida_at = null where id = any(${fallidos}::uuid[])`),
+    );
+  }
+  return { enviados: pendientes.length - fallidos.length, fallidos: fallidos.length };
+}
+
 async function avisosSuscripcion() {
   // Sin mail configurado no se reclaman: quedarían marcados como enviados.
   if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) return { omitido: true };
@@ -164,6 +186,7 @@ export async function GET(request: NextRequest) {
     mail: await tarea("recordatorios mail", recordatoriosMail),
     whatsapp: await tarea("recordatorios whatsapp", recordatoriosWhatsApp),
     suscripciones: await tarea("avisos de suscripción", avisosSuscripcion),
+    opiniones: await tarea("pedidos de opinión", pedidosResena),
     googleOcupados: google ? await tarea("google ocupados", importarOcupadosTodos) : { omitido: true },
     googleTurnos: google ? await tarea("google turnos", () => sincronizarPendientes(100)) : { omitido: true },
     limpieza: await tarea("limpieza", async () => {

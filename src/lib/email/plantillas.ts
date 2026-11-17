@@ -190,6 +190,35 @@ export function emailRecordatorio(para: string, d: DatosTurnoEmail): Email {
   };
 }
 
+/** Unas horas después del turno: pide la opinión, con el link a la página del turno. */
+export function emailPedidoResena(
+  para: string,
+  d: { token: string; cliente: string; servicio: string; profesional: string; negocio: string },
+): Email {
+  const link = `${env.siteUrl}/t/${d.token}#opinar`;
+  const nombre = d.cliente.split(" ")[0] || "";
+  const titulo = `¿Cómo te fue en ${d.negocio}?`;
+  const intro = `Hola${nombre ? ` ${nombre}` : ""}, gracias por venir. ¿Nos contás cómo te fue con ${d.profesional} (${d.servicio})? Te lleva menos de un minuto y ayuda a otros clientes.`;
+  const estrellas = [1, 2, 3, 4, 5]
+    .map((n) => `<a href="${link}" style="text-decoration:none;font-size:30px;color:#f5b301;padding:0 2px" aria-label="${n}">★</a>`)
+    .join("");
+  const html = `<!doctype html><html lang="es"><body style="margin:0;background:#f3eee4;font-family:Arial,Helvetica,sans-serif;color:#14231c">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 12px"><tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:20px;padding:28px"><tr><td>
+      <p style="margin:0;font-size:13px;font-weight:bold;color:#1f4d3a">${escapar(d.negocio)}</p>
+      <h1 style="margin:6px 0 8px;font-size:22px">${escapar(titulo)}</h1>
+      <p style="margin:0 0 16px;font-size:15px;color:#5a544b">${escapar(intro)}</p>
+      <p style="margin:0 0 16px">${estrellas}</p>
+      <p style="margin:0 0 8px"><a href="${link}" style="display:inline-block;background:#1f4d3a;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:12px">Dejar mi opinión</a></p>
+      <p style="margin:16px 0 0;font-size:12px;color:#776f63">Se publica con tu nombre y la inicial del apellido. Podés opinar hasta 60 días después del turno.</p>
+    </td></tr></table>
+    <p style="font-size:11px;color:#a59d94;margin-top:16px">Turnos online con ${escapar(MARCA.nombre)}</p>
+  </td></tr></table>
+</body></html>`;
+  const texto = [`${d.negocio} — ${titulo}`, intro, "", `Dejar mi opinión: ${link}`].join("\n");
+  return { para, asunto: titulo, html, texto };
+}
+
 /** Mail simple con un botón: verificación de cuenta y recuperación de contraseña. */
 function plantillaCuenta({ titulo, intro, boton, link, pie }: { titulo: string; intro: string; boton: string; link: string; pie: string }) {
   const html = `<!doctype html><html lang="es"><body style="margin:0;background:#f3eee4;font-family:Arial,Helvetica,sans-serif;color:#14231c">
