@@ -161,6 +161,7 @@ await prueba("crear_reserva y las tareas del cron: solo el servidor", async () =
   const soloServidor = [
     "crear_reserva", "consumir_limite", "vencer_pagos_pendientes", "registrar_pago", "reclamar_recordatorios",
     "reclamar_recordatorios_whatsapp", "turnos_para_sincronizar", "marcar_sincronizado_google", "reemplazar_bloqueos_google",
+    "dejar_resena", "reclamar_pedidos_resena",
   ];
   const filas = await q(
     `select p.proname,
@@ -589,7 +590,7 @@ await prueba("aislamiento: ninguna tabla con negocio_id deja ver filas de otro n
   assert.ok(tablas.length >= 9, tablas.join(", "));
   for (const t of tablas) {
     const { n: deA } = await uno(`select count(*)::int as n from public.${t} where negocio_id = $1`, [negA]);
-    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones", "negocio_logos", "negocio_portadas"].includes(t), `${t} sin datos de prueba`);
+    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones", "negocio_logos", "negocio_portadas", "resenas"].includes(t), `${t} sin datos de prueba`);
     for (const [u, ajeno] of [["beto", negA], ["nadie", negA], ["ana", negB], ["eva", negB]]) {
       const filas = await como(u, () => q(`select * from public.${t} where negocio_id = $1`, [ajeno]).catch(() => []));
       assert.equal(filas.length, 0, `${u} ve ${t} de otro negocio`);
@@ -1551,6 +1552,113 @@ await prueba("apariencia: color de la página y portada (solo el servidor toca l
     falla(q("delete from public.negocio_portadas where negocio_id = $1", [negA]), /permission denied/, "dueña borra directo"),
   );
   await servicio("delete from public.negocio_portadas where negocio_id = $1", [negA]);
+});
+
+// --- Reseñas: solo quien tuvo el turno, el dueño responde ------------------------------
+// Un profesional propio para que sus turnos no choquen con los de otras pruebas.
+const profRes = (await uno("insert into public.profesionales (negocio_id, nombre) values ($1, 'Rese') returning id", [negA])).id;
+
+await prueba("reseñas: solo de turnos terminados, una por turno, el dueño responde y oculta el texto", async () => {
+  const turno = async (inicio, estado, nombre = "Martina Gómez") =>
+    uno(
+      `insert into public.turnos (negocio_id, profesional_id, servicio_id, cliente_id, inicio, fin, estado, nombre_reserva, email_reserva)
+       values ($1, $2, $3, null, now() + $4::interval, now() + $4::interval + interval '30 minutes', $5, $6, 'martina@mail.com')
+       returning id, token_cancelacion as token`,
+      [negA, profRes, servA, inicio, estado, nombre],
+    );
+  const opinar = (token, estrellas, comentario) =>
+    como("servidor", () => uno("select public.dejar_resena($1, $2, $3) as r", [token, estrellas, comentario]));
+
+  const hecho = await turno("-5 hours", "confirmado");
+  await como("anon", () => falla(q("select public.dejar_resena($1, 5, null)", [hecho.token]), /permission denied/, "anon"));
+  await como("ana", () => falla(q("select public.dejar_resena($1, 5, null)", [hecho.token]), /permission denied/, "dueña"));
+
+  const r1 = (await opinar(hecho.token, 4, "  Muy buena atención  ")).r;
+  assert.equal(r1.nueva, true);
+  const r2 = (await opinar(hecho.token, 5, "Excelente")).r;
+  assert.equal(r2.nueva, false);
+  assert.equal(r2.id, r1.id);
+  const fila = await uno("select * from public.resenas where turno_id = $1", [hecho.id]);
+  assert.equal(fila.estrellas, 5);
+  assert.equal(fila.comentario, "Excelente");
+  assert.equal(fila.autor, "Martina G.");
+  assert.equal(fila.profesional_id, profRes);
+  await opinar(hecho.token, 5, "   ");
+  assert.equal((await uno("select comentario from public.resenas where id = $1", [r1.id])).comentario, null, "vacío = sin comentario");
+
+  for (const [inicio, estado, que] of [
+    ["2 hours", "confirmado", "turno por venir"],
+    ["-20 minutes", "confirmado", "turno que no terminó"],
+    ["-7 hours", "cancelado", "cancelado"],
+    ["-9 hours", "ausente", "ausente"],
+    ["-61 days", "completado", "hace más de 60 días"],
+  ]) {
+    const t = await turno(inicio, estado);
+    await falla(opinar(t.token, 5, null), /RESENA_NO_DISPONIBLE/, que);
+  }
+  await falla(opinar(hecho.token, 6, null), /check|RESENA/, "6 estrellas");
+  await falla(opinar("f".repeat(64), 5, null), /RESENA_NO_DISPONIBLE/, "token inexistente");
+
+  // El dueño la ve, responde y oculta el comentario; no toca las estrellas.
+  await como("ana", () =>
+    q("update public.resenas set respuesta = 'Gracias!', respondida_at = now(), comentario_oculto = true where id = $1", [r1.id]),
+  );
+  const respondida = await uno("select * from public.resenas where id = $1", [r1.id]);
+  assert.equal(respondida.respuesta, "Gracias!");
+  assert.equal(respondida.comentario_oculto, true);
+  await como("ana", () => falla(q("update public.resenas set estrellas = 1 where id = $1", [r1.id]), /permission denied/, "estrellas"));
+  await como("ana", () => falla(q("delete from public.resenas where id = $1", [r1.id]), /permission denied/, "borrar"));
+  await como("ana", () => falla(q("insert into public.resenas (negocio_id, turno_id, profesional_id, servicio_id, autor, estrellas) values ($1, $2, $3, $4, 'X', 5)", [negA, hecho.id, profRes, servA]), /permission denied/, "insertar"));
+  assert.equal((await como("eva", () => q("select id from public.resenas"))).length, 0, "la empleada no ve reseñas");
+  assert.equal((await como("beto", () => q("select id from public.resenas"))).length, 0, "otro negocio");
+  await como("anon", () => falla(q("select id from public.resenas"), /permission denied/, "anon lee"));
+  // Volver a opinar no borra la respuesta.
+  await opinar(hecho.token, 4, "Bien");
+  assert.equal((await uno("select respuesta from public.resenas where id = $1", [r1.id])).respuesta, "Gracias!");
+
+  // Con las reseñas apagadas no se aceptan nuevas.
+  await como("ana", () => q("update public.negocios set resenas_activas = false where id = $1", [negA]));
+  const otro = await turno("-3 hours", "completado", "Pedro");
+  await falla(opinar(otro.token, 5, null), /RESENA_DESACTIVADA/, "apagadas");
+  await como("ana", () => q("update public.negocios set resenas_activas = true where id = $1", [negA]));
+  assert.equal((await opinar(otro.token, 3, null)).r.nueva, true);
+  assert.equal((await uno("select autor from public.resenas where turno_id = $1", [otro.id])).autor, "Pedro");
+  await q("delete from public.turnos where id in ($1, $2)", [hecho.id, otro.id]);
+  assert.equal((await uno("select count(*)::int as n from public.resenas where negocio_id = $1", [negA])).n, 0, "se borran con el turno");
+});
+
+await prueba("reseñas: el cron pide la opinión una sola vez, 2 a 48 h después del turno", async () => {
+  await como("anon", () => falla(q("select * from public.reclamar_pedidos_resena(100)"), /permission denied/, "anon"));
+  await como("ana", () => falla(q("select * from public.reclamar_pedidos_resena(100)"), /permission denied/, "dueña"));
+  const turno = (fin, estado = "confirmado", email = "pide@mail.com") =>
+    uno(
+      `insert into public.turnos (negocio_id, profesional_id, servicio_id, cliente_id, inicio, fin, estado, nombre_reserva, email_reserva)
+       values ($1, $2, $3, null, now() + $4::interval - interval '30 minutes', now() + $4::interval, $5, 'Pide', $6) returning id, token_cancelacion as token`,
+      [negA, profRes, servA, fin, estado, email],
+    );
+  const listo = await turno("-3 hours");
+  const reciente = await turno("-1 hour");
+  const viejo = await turno("-3 days");
+  const cancelado = await turno("-3 hours", "cancelado");
+  const sinMail = await turno("-5 hours", "confirmado", null);
+  const opinado = await turno("-4 hours");
+  await como("servidor", () => q("select public.dejar_resena($1, 5, null)", [opinado.token]));
+
+  const ids = (filas) => filas.map((f) => f.turno_id);
+  const primera = await servicio("select * from public.reclamar_pedidos_resena(100)");
+  assert.ok(ids(primera).includes(listo.id));
+  for (const t of [reciente, viejo, cancelado, sinMail, opinado]) assert.ok(!ids(primera).includes(t.id));
+  const f = primera.find((r) => r.turno_id === listo.id);
+  assert.equal(f.email, "pide@mail.com");
+  assert.equal(f.token, listo.token);
+  assert.equal(f.negocio, "Salón Ana");
+  assert.ok(!ids(await servicio("select * from public.reclamar_pedidos_resena(100)")).includes(listo.id), "una sola vez");
+
+  await como("ana", () => q("update public.negocios set resenas_activas = false where id = $1", [negA]));
+  const apagado = await turno("-6 hours");
+  assert.ok(!ids(await servicio("select * from public.reclamar_pedidos_resena(100)")).includes(apagado.id));
+  await como("ana", () => q("update public.negocios set resenas_activas = true where id = $1", [negA]));
+  await q("delete from public.turnos where id = any($1)", [[listo, reciente, viejo, cancelado, sinMail, opinado, apagado].map((t) => t.id)]);
 });
 
 await db.close();
