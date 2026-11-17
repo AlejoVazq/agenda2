@@ -10,7 +10,7 @@ App de agenda y reservas online de turnos para negocios de servicios en Argentin
 
 ## Stack
 
-- **Next.js 16.4** (App Router, Turbopack, React 19.3). Cambia respecto de versiones anteriores: leer `node_modules/next/dist/docs/` antes de tocar APIs. Ejemplo: el middleware ahora es `src/proxy.ts` (función `proxy`, corre en Node.js).
+- **Next.js 16.4.6** (App Router, Turbopack, React 19.3). Cambia respecto de versiones anteriores: leer `node_modules/next/dist/docs/` antes de tocar APIs. Ejemplo: el middleware ahora es `src/proxy.ts` (función `proxy`, corre en Node.js).
 - TypeScript, Tailwind CSS 4 (loader en `next.config.ts`), zod 4 para validar todo input en el servidor.
 - **PostgreSQL 18 propio** (en el VPS), con **node-postgres (`pg`) sin ORM**. El esquema vive solo en `db/migraciones/` (SQL puro).
 - **Better Auth 1.7** para cuentas y sesiones (sus tablas en el esquema `auth` de la misma base).
