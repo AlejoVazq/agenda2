@@ -7,7 +7,9 @@ import { fechaLocalISO } from "@/lib/fechas";
 import { urlLogo, versionLogo } from "@/lib/logo";
 import { aparienciaNegocio, urlPortada } from "@/lib/portada";
 import { getNegocioPublico, linkWhatsApp } from "@/lib/publico";
-import { resumenResenas } from "@/lib/resenas";
+import { resenasPublicas, resumenResenas } from "@/lib/resenas";
+import { Estrellas } from "@/components/estrellas";
+import { formatPromedio, ListaOpiniones, ResumenOpiniones, textoCantidad } from "./opiniones-lista";
 import { RUBROS, type Rubro } from "@/lib/tipos";
 import { Reserva } from "./reserva";
 
@@ -31,6 +33,7 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
     aparienciaNegocio(negocio.id),
     resumenResenas(negocio.id),
   ]);
+  const ultimas = resenas.cantidad ? await resenasPublicas(negocio.id, { limite: 5, soloConComentario: true }) : [];
   const logo = urlLogo(negocio.slug, versionDelLogo);
   const portada = urlPortada(negocio.slug, apariencia.portada);
   const tema = estiloTema(apariencia.color);
@@ -81,6 +84,16 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
                 {RUBROS[negocio.rubro as Rubro] ?? "Turnos online"}
               </p>
               <h1 className="mt-1 font-display text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{negocio.nombre}</h1>
+              {resenas.promedio !== null ? (
+                <a
+                  href="#opiniones"
+                  className="mt-1.5 inline-flex items-center gap-1.5 text-sm text-white/85 transition hover:text-white"
+                >
+                  <Estrellas valor={resenas.promedio} className="size-4" />
+                  <span className="font-bold tabular-nums text-white">{formatPromedio(resenas.promedio)}</span>
+                  <span className="underline decoration-white/40 underline-offset-2">({textoCantidad(resenas.cantidad)})</span>
+                </a>
+              ) : null}
             </div>
           </div>
           {negocio.descripcion ? (
@@ -143,6 +156,30 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
             </div>
           )}
         </div>
+        {resenas.promedio !== null ? (
+          <section
+            id="opiniones"
+            aria-labelledby="t-opiniones"
+            className="mt-6 scroll-mt-6 rounded-[2rem] bg-white p-5 shadow-suave ring-1 ring-zinc-200/60 sm:p-6"
+          >
+            <h2 id="t-opiniones" className="mb-4 font-display text-xl font-bold">
+              Opiniones
+            </h2>
+            <ResumenOpiniones resumen={resenas} />
+            {ultimas.length ? (
+              <div className="mt-6 border-t border-zinc-100 pt-5">
+                <ListaOpiniones resenas={ultimas} negocio={negocio.nombre} tz={negocio.zona_horaria} />
+              </div>
+            ) : null}
+            <Link
+              href={`/n/${negocio.slug}/opiniones`}
+              className="mt-5 flex h-11 items-center justify-center rounded-2xl border border-zinc-200 text-sm font-semibold text-marca-800 transition hover:border-marca-300 hover:bg-marca-50/50"
+            >
+              Ver todas las opiniones
+            </Link>
+            <p className="mt-3 text-center text-xs text-zinc-500">Solo opinan clientes que tuvieron un turno acá.</p>
+          </section>
+        ) : null}
         <footer className="mt-10 flex justify-center">
           <Link href="/" className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs text-zinc-500 transition hover:bg-white hover:text-tinta">
             Turnos online con <Logo className="origin-left scale-[0.8]" />
