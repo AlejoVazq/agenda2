@@ -6,7 +6,7 @@ import { estiloTema } from "@/lib/apariencia";
 import { aparienciaNegocio } from "@/lib/portada";
 import { getNegocioPublico } from "@/lib/publico";
 import { resenasPublicas, resumenResenas } from "@/lib/resenas";
-import { formatPromedio, ListaOpiniones, ResumenOpiniones, textoCantidad } from "../opiniones-lista";
+import { formatPromedio, ListaOpiniones, ResumenOpiniones, textoCantidad } from "@/components/opiniones";
 
 const POR_PAGINA = 20;
 

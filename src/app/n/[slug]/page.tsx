@@ -9,7 +9,7 @@ import { aparienciaNegocio, urlPortada } from "@/lib/portada";
 import { getNegocioPublico, linkWhatsApp } from "@/lib/publico";
 import { resenasPublicas, resumenResenas } from "@/lib/resenas";
 import { Estrellas } from "@/components/estrellas";
-import { formatPromedio, ListaOpiniones, ResumenOpiniones, textoCantidad } from "./opiniones-lista";
+import { formatPromedio, ListaOpiniones, ResumenOpiniones, textoCantidad } from "@/components/opiniones";
 import { RUBROS, type Rubro } from "@/lib/tipos";
 import { Reserva } from "./reserva";
 
