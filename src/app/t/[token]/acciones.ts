@@ -7,7 +7,8 @@ import { notificarCancelacionCliente } from "@/lib/email/notificar";
 import { sincronizarGoogleDespues } from "@/lib/google";
 import { crearPagoSena } from "@/lib/mercadopago";
 import { mensajeDeError } from "@/lib/errores";
-import { token as esquemaToken } from "@/lib/validaciones";
+import { dentroDelLimite } from "@/lib/limites";
+import { datosDeForm, erroresDeCampo, esquemaResena, token as esquemaToken } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
 
 /** Id del turno de un token (consulta fija: quien tiene el token ya ve el turno). */
@@ -49,4 +50,34 @@ export async function pagarSena(token: string, _prev: EstadoAccion): Promise<Est
     return { error: "No pudimos iniciar el pago. Puede que haya vencido el plazo: recargá la página o comunicate con el negocio." };
   }
   redirect(url);
+}
+
+/** Deja o cambia la opinión del turno (la base valida que el turno ya haya pasado). */
+export async function opinar(token: string, _prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
+  const datos = esquemaResena.safeParse({ ...datosDeForm(formData), token });
+  if (!datos.success) return { errores: erroresDeCampo(datos.error) };
+  const d = datos.data;
+  if (!(await dentroDelLimite("resena", 10, 3600))) {
+    return { error: "Hiciste muchos intentos seguidos. Probá de nuevo en un rato." };
+  }
+
+  let slug: string | null = null;
+  try {
+    const fila = await comoServidor(async (tx) => {
+      await tx.ejecutar(sql`select public.dejar_resena(${d.token}, ${d.estrellas}, ${d.comentario})`);
+      return tx.uno<{ slug: string }>(sql`
+        select n.slug from public.turnos t join public.negocios n on n.id = t.negocio_id
+        where t.token_cancelacion = ${d.token}`);
+    });
+    slug = fila?.slug ?? null;
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+
+  revalidatePath(`/t/${token}`);
+  if (slug) {
+    revalidatePath(`/n/${slug}`);
+    revalidatePath(`/n/${slug}/opiniones`);
+  }
+  return { ok: true, mensaje: "¡Gracias por tu opinión!" };
 }

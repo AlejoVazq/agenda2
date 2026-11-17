@@ -11,6 +11,8 @@ import { comoServidor, sql } from "@/lib/db";
 import { ESTADOS_TURNO } from "@/lib/tipos";
 import { CancelarTurno } from "./cancelar";
 import { PagarSena } from "./pagar";
+import { Opinar } from "./opinar";
+import { resenaDeTurno } from "@/lib/resenas";
 
 // El token del link es secreto: no indexar ni filtrarlo como referrer.
 export const metadata: Metadata = {
@@ -49,6 +51,7 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
 
   const turno = await getTurnoPublico(token);
   if (!turno) notFound();
+  const opinion = await resenaDeTurno(token);
 
   const tz = turno.negocio.zona_horaria;
   const esperandoSena = turno.pago_estado === "pendiente" && turno.estado !== "cancelado";
@@ -216,6 +219,10 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
           ) : null}
           </div>
         </div>
+
+        {opinion.puede || opinion.resena ? (
+          <Opinar token={token} negocio={turno.negocio.nombre} profesional={turno.profesional} datos={opinion} />
+        ) : null}
 
         {senaVencida ? (
           <Aviso tipo="alerta" className="mt-6">
