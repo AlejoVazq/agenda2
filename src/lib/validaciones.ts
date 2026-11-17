@@ -256,3 +256,14 @@ export const esquemaCliente = z.object({
 });
 
 export const token = z.string().regex(/^[0-9a-f]{64}$/);
+
+export const esquemaResena = z.object({
+  token,
+  estrellas: entero(1, 5, "La puntuación"),
+  comentario: textoOpcional(600),
+});
+
+export const esquemaRespuestaResena = z.object({
+  id: z.uuid(),
+  respuesta: textoOpcional(600),
+});
