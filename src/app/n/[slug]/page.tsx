@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Logo } from "@/components/ui";
+import { cx, Logo } from "@/components/ui";
+import { estiloTema } from "@/lib/apariencia";
 import { fechaLocalISO } from "@/lib/fechas";
 import { urlLogo, versionLogo } from "@/lib/logo";
+import { aparienciaNegocio, urlPortada } from "@/lib/portada";
 import { getNegocioPublico, linkWhatsApp } from "@/lib/publico";
 import { RUBROS, type Rubro } from "@/lib/tipos";
 import { Reserva } from "./reserva";
@@ -23,7 +25,10 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
   const negocio = await getNegocioPublico(slug);
   if (!negocio) notFound();
 
-  const logo = urlLogo(negocio.slug, await versionLogo(negocio.id));
+  const [versionDelLogo, apariencia] = await Promise.all([versionLogo(negocio.id), aparienciaNegocio(negocio.id)]);
+  const logo = urlLogo(negocio.slug, versionDelLogo);
+  const portada = urlPortada(negocio.slug, apariencia.portada);
+  const tema = estiloTema(apariencia.color);
   const iniciales = negocio.nombre
     .split(/\s+/)
     .filter((p) => /^[\p{L}\p{N}]/u.test(p))
@@ -32,10 +37,24 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
     .join("");
 
   return (
-    <div className="min-h-dvh bg-fondo">
-      <header className="relative overflow-hidden bg-noche bg-[radial-gradient(ellipse_70%_90%_at_100%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_60%_80%_at_0%_100%,rgb(130_180_154/0.14),transparent)] text-white">
+    <div className={cx("min-h-dvh bg-fondo", tema && "tema-negocio")} style={tema}>
+      <header
+        className={cx(
+          "relative overflow-hidden text-white",
+          tema
+            ? "cabecera-tema"
+            : "bg-noche bg-[radial-gradient(ellipse_70%_90%_at_100%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_60%_80%_at_0%_100%,rgb(130_180_154/0.14),transparent)]",
+        )}
+      >
+        {portada ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- imagen propia, ya achicada al subirla */}
+            <img src={portada} alt="" className="absolute inset-0 size-full object-cover" fetchPriority="high" />
+            <div className="velo-portada absolute inset-0" aria-hidden />
+          </>
+        ) : null}
         <div className="fondo-grano pointer-events-none absolute inset-0 opacity-60" aria-hidden />
-        <div className="relative mx-auto max-w-xl px-4 pb-20 pt-8 sm:pt-12">
+        <div className={cx("relative mx-auto max-w-xl px-4 pb-20", portada ? "pt-24 sm:pt-32" : "pt-8 sm:pt-12")}>
           <div className="flex animate-aparecer items-center gap-4">
             {logo ? (
               // eslint-disable-next-line @next/next/no-img-element -- imagen propia, ya chica (≤512 px)
@@ -53,7 +72,7 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
               </span>
             )}
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-acento-300">
+              <p className={cx("text-xs font-semibold uppercase tracking-[0.16em]", tema || portada ? "text-white/80" : "text-acento-300")}>
                 {RUBROS[negocio.rubro as Rubro] ?? "Turnos online"}
               </p>
               <h1 className="mt-1 font-display text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{negocio.nombre}</h1>

@@ -589,7 +589,7 @@ await prueba("aislamiento: ninguna tabla con negocio_id deja ver filas de otro n
   assert.ok(tablas.length >= 9, tablas.join(", "));
   for (const t of tablas) {
     const { n: deA } = await uno(`select count(*)::int as n from public.${t} where negocio_id = $1`, [negA]);
-    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones", "negocio_logos"].includes(t), `${t} sin datos de prueba`);
+    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones", "negocio_logos", "negocio_portadas"].includes(t), `${t} sin datos de prueba`);
     for (const [u, ajeno] of [["beto", negA], ["nadie", negA], ["ana", negB], ["eva", negB]]) {
       const filas = await como(u, () => q(`select * from public.${t} where negocio_id = $1`, [ajeno]).catch(() => []));
       assert.equal(filas.length, 0, `${u} ve ${t} de otro negocio`);
@@ -1525,6 +1525,32 @@ await prueba("socios: segundo dueño, estadísticas por profesional y avisos a l
   await q("update public.negocios set prueba_hasta = now() + interval '1 day 12 hours', pagado_hasta = null, suspendido_at = null where id = $1", [negA]);
   const avisos = (await servicio("select * from plataforma.reclamar_avisos_suscripcion()")).filter((a) => a.negocio_id === negA);
   assert.deepEqual(avisos.map((a) => [a.tipo, a.dueno_email]), [["por_vencer", "ana@test.com"], ["por_vencer", "sol@test.com"]]);
+});
+
+await prueba("apariencia: color de la página y portada (solo el servidor toca la imagen)", async () => {
+  await como("ana", () => q("update public.negocios set color = '#1e3a8a' where id = $1", [negA]));
+  assert.equal((await uno("select color from public.negocios where id = $1", [negA])).color, "#1e3a8a");
+  await como("ana", () => falla(q("update public.negocios set color = 'rojo' where id = $1", [negA]), /check constraint/, "color inválido"));
+  await como("ana", () => falla(q("update public.negocios set color = '#1E3A8A' where id = $1", [negA]), /check constraint/, "mayúsculas"));
+  await como("eva", async () => {
+    const r = await db.query("update public.negocios set color = '#000000' where id = $1", [negA]).catch((e) => e);
+    assert.ok(r instanceof Error || r.affectedRows === 0, "la empleada no cambia el color");
+  });
+  await como("beto", async () => {
+    const r = await db.query("update public.negocios set color = '#000000' where id = $1", [negA]);
+    assert.equal(r.affectedRows, 0, "otro negocio");
+  });
+  await como("ana", () => q("update public.negocios set color = null where id = $1", [negA]));
+
+  const png = Buffer.from("89504e470d0a1a0a0000", "hex");
+  await servicio("insert into public.negocio_portadas (negocio_id, tipo, datos) values ($1, 'image/png', $2)", [negA, png]);
+  for (const u of ["ana", "anon"]) {
+    await como(u, () => falla(q("select * from public.negocio_portadas"), /permission denied/, `${u} lee portadas`));
+  }
+  await como("ana", () =>
+    falla(q("delete from public.negocio_portadas where negocio_id = $1", [negA]), /permission denied/, "dueña borra directo"),
+  );
+  await servicio("delete from public.negocio_portadas where negocio_id = $1", [negA]);
 });
 
 await db.close();

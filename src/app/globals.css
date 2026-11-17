@@ -132,6 +132,42 @@
 }
 
 /*
+ * Página de reservas con el color propio del negocio (negocios.color, `--tema`, ver
+ * src/lib/apariencia.ts). Arma la escala marca-* con ese color: todo lo que adentro use
+ * marca-* (botones, días, horarios elegidos) toma el color del negocio. El 700 es el color tal cual.
+ */
+.tema-negocio {
+  --color-marca-50: color-mix(in oklab, var(--tema) 7%, white);
+  --color-marca-100: color-mix(in oklab, var(--tema) 15%, white);
+  --color-marca-200: color-mix(in oklab, var(--tema) 30%, white);
+  --color-marca-300: color-mix(in oklab, var(--tema) 50%, white);
+  --color-marca-400: color-mix(in oklab, var(--tema) 70%, white);
+  --color-marca-500: color-mix(in oklab, var(--tema) 85%, white);
+  --color-marca-600: color-mix(in oklab, var(--tema) 93%, white);
+  --color-marca-700: var(--tema);
+  --color-marca-800: color-mix(in oklab, var(--tema) 85%, black);
+  --color-marca-900: color-mix(in oklab, var(--tema) 70%, black);
+  --color-marca-950: color-mix(in oklab, var(--tema) 40%, black);
+}
+
+/* Cabecera del portal con el color del negocio (sin color usa el verde noche de la marca). */
+.cabecera-tema {
+  background:
+    radial-gradient(ellipse 70% 90% at 100% 0%, color-mix(in oklab, var(--tema) 80%, white), transparent),
+    linear-gradient(160deg, var(--tema), color-mix(in oklab, var(--tema) 65%, black));
+}
+
+/* Sobre la foto de portada: oscurece arriba (para el texto) y termina en el color de la página. */
+.velo-portada {
+  background: linear-gradient(
+    180deg,
+    rgb(0 0 0 / 0.5) 0%,
+    rgb(0 0 0 / 0.38) 50%,
+    color-mix(in oklab, var(--tema, var(--color-noche)) 94%, transparent) 100%
+  );
+}
+
+/*
  * Grano tipo papel impreso: ruido fractal (SVG feTurbulence) en escala de grises,
  * mezclado con `overlay` para que tome el color del fondo. Suma textura sin patrón visible.
  */

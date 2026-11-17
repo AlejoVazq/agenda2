@@ -34,6 +34,8 @@ export interface Negocio {
   sena_valor: number;
   pago_plazo_min: number;
   whatsapp_avisos: boolean;
+  /** Color de la página de reservas (#rrggbb); null = el verde de la marca. */
+  color: string | null;
   activo: boolean;
 }
 
