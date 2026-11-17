@@ -1487,6 +1487,46 @@ await prueba("admin: eliminar negocio y/o cuentas, con confirmación y registro"
   assert.ok(await uno('select "id" from auth."user" where "id" = $1', [USUARIOS.admin]));
 });
 
+// --- Socios: dos dueños, cada uno con su agenda y su facturación ------------------------
+
+await prueba("socios: segundo dueño, estadísticas por profesional y avisos a los dos", async () => {
+  const sol = "00000000-0000-4000-8000-0000000000c0";
+  await q(`insert into auth."user" ("id", "name", "email", "emailVerified") values ($1, 'sol', 'sol@test.com', true)`, [sol]);
+  USUARIOS.sol = sol;
+  const profSol = await como("ana", async () =>
+    (await uno("insert into public.profesionales (negocio_id, nombre) values ($1, 'Sol') returning id", [negA])).id,
+  );
+  // Como invitarEmpleado con rol de socio: lo inserta el servidor.
+  await servicio("insert into public.perfiles (id, negocio_id, rol, nombre, profesional_id) values ($1, $2, 'dueno', 'Sol', $3)", [
+    sol, negA, profSol,
+  ]);
+
+  const rango = "now() - interval '30 days', now() + interval '60 days'";
+  const est = (usuario, prof) =>
+    como(usuario, async () => (await uno(`select public.estadisticas_negocio(${rango}, $1::uuid) as e`, [prof])).e);
+
+  const todos = await est("sol", null);
+  assert.deepEqual(todos, await est("ana", null), "los dos socios ven lo mismo");
+  const partes = await Promise.all([profAna, profEva, profSol].map((p) => est("sol", p)));
+  assert.equal(partes.reduce((s, e) => s + e.total, 0), todos.total);
+  assert.equal(partes.reduce((s, e) => s + Number(e.ingresos), 0), Number(todos.ingresos));
+  const deEva = partes[1];
+  assert.ok(deEva.total > 0);
+  assert.ok(deEva.por_profesional.every((p) => p.nombre === "Eva"));
+  assert.equal(partes[2].total, 0, "Sol todavía no tiene turnos");
+  assert.ok(deEva.clientes_nuevos <= todos.clientes_nuevos);
+  // Sin el tercer parámetro, como antes.
+  const sinFiltro = await como("ana", async () => (await uno(`select public.estadisticas_negocio(${rango}) as e`)).e);
+  assert.deepEqual(sinFiltro, todos);
+  await como("eva", () => falla(q("select public.estadisticas_negocio(now(), now(), $1::uuid)", [profEva]), /SIN_PERMISO/, "empleada"));
+  // Beto, de otro negocio, no saca nada aunque pase un profesional de Ana.
+  assert.equal((await est("beto", profAna)).total, 0);
+
+  await q("update public.negocios set prueba_hasta = now() + interval '1 day 12 hours', pagado_hasta = null, suspendido_at = null where id = $1", [negA]);
+  const avisos = (await servicio("select * from plataforma.reclamar_avisos_suscripcion()")).filter((a) => a.negocio_id === negA);
+  assert.deepEqual(avisos.map((a) => [a.tipo, a.dueno_email]), [["por_vencer", "ana@test.com"], ["por_vencer", "sol@test.com"]]);
+});
+
 await db.close();
 
 // --- Migraciones ----------------------------------------------------------------------

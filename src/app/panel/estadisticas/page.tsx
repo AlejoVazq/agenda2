@@ -5,6 +5,7 @@ import { requerirDueno } from "@/lib/auth";
 import { fechaLocalISO, formatPrecio, localADate, sumarDias } from "@/lib/fechas";
 import { comoUsuario, sql } from "@/lib/db";
 import { DIAS_SEMANA } from "@/lib/tipos";
+import { z } from "zod";
 
 export const metadata: Metadata = { title: "Estadísticas" };
 
@@ -54,19 +55,43 @@ function rango(periodo: Periodo, tz: string): [Date, Date] {
 }
 
 export default async function PaginaEstadisticas({ searchParams }: PageProps<"/panel/estadisticas">) {
-  const { negocio, userId } = await requerirDueno();
-  const { periodo: p } = await searchParams;
+  const { negocio, perfil, userId } = await requerirDueno();
+  const { periodo: p, profesional: pr } = await searchParams;
   const periodo: Periodo = typeof p === "string" && Object.hasOwn(PERIODOS, p) ? (p as Periodo) : "mes";
   const [desde, hasta] = rango(periodo, negocio.zona_horaria);
 
+  const { profesionales, socios } = await comoUsuario(userId, async (tx) => ({
+    profesionales: await tx.varios<{ id: string; nombre: string; color: string }>(sql`
+      select id, nombre, color from public.profesionales
+      where negocio_id = ${negocio.id} order by activo desc, nombre`),
+    socios: (await tx.uno<{ n: number }>(sql`
+      select count(*)::int as n from public.perfiles where negocio_id = ${negocio.id} and rol = 'dueno'`))?.n ?? 1,
+  }));
+  // Sin elegir: con socios, cada uno arranca viendo su agenda; si no, todo el negocio.
+  const elegido =
+    typeof pr === "string"
+      ? pr
+      : socios > 1 && perfil.profesional_id
+        ? perfil.profesional_id
+        : "todos";
+  const profesional =
+    z.uuid().safeParse(elegido).success ? (profesionales.find((x) => x.id === elegido) ?? null) : null;
+
   const fila = await comoUsuario(userId, (tx) =>
     tx.uno<{ e: Estadisticas }>(sql`
-      select public.estadisticas_negocio(${desde.toISOString()}::timestamptz, ${hasta.toISOString()}::timestamptz) as e`),
+      select public.estadisticas_negocio(
+        ${desde.toISOString()}::timestamptz, ${hasta.toISOString()}::timestamptz, ${profesional?.id ?? null}::uuid
+      ) as e`),
   ).catch((err) => {
     console.error("[estadisticas]", err);
     return null;
   });
   const e = fila?.e ?? null;
+  const enlace = (cambios: { periodo?: Periodo; profesional?: string }) =>
+    `/panel/estadisticas?${new URLSearchParams({
+      periodo: cambios.periodo ?? periodo,
+      profesional: cambios.profesional ?? profesional?.id ?? "todos",
+    })}`;
 
   const tasaCancelacion = e && e.total ? Math.round((e.cancelados / e.total) * 100) : 0;
   const porcentajeOnline = e && e.activos ? Math.round((e.online / e.activos) * 100) : 0;
@@ -74,13 +99,20 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
 
   return (
     <div className="max-w-5xl space-y-6">
-      <EncabezadoPagina titulo="Estadísticas" descripcion="Cómo viene tu negocio. Incluye los turnos ya agendados del período." />
+      <EncabezadoPagina
+        titulo="Estadísticas"
+        descripcion={
+          profesional
+            ? `Cómo viene la agenda de ${profesional.nombre}. Incluye los turnos ya agendados del período.`
+            : "Cómo viene tu negocio. Incluye los turnos ya agendados del período."
+        }
+      />
 
       <nav className="flex flex-wrap gap-2" aria-label="Período">
         {(Object.keys(PERIODOS) as Periodo[]).map((clave) => (
           <Link
             key={clave}
-            href={`/panel/estadisticas?periodo=${clave}`}
+            href={enlace({ periodo: clave })}
             aria-current={clave === periodo ? "page" : undefined}
             className={cx(
               "rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-colors",
@@ -93,6 +125,30 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
           </Link>
         ))}
       </nav>
+
+      {profesionales.length > 1 ? (
+        <nav className="flex flex-wrap gap-2" aria-label="Profesional">
+          {[{ id: "todos", nombre: "Todos", color: null as string | null }, ...profesionales].map((x) => {
+            const actual = x.id === (profesional?.id ?? "todos");
+            return (
+              <Link
+                key={x.id}
+                href={enlace({ profesional: x.id })}
+                aria-current={actual ? "page" : undefined}
+                className={cx(
+                  "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-colors",
+                  actual
+                    ? "border-tinta bg-tinta text-white"
+                    : "border-zinc-200 bg-white text-zinc-700 hover:border-marca-300",
+                )}
+              >
+                {x.color ? <span className="size-2.5 rounded-full" style={{ backgroundColor: x.color }} aria-hidden /> : null}
+                {x.nombre}
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
 
       {!e || e.total === 0 ? (
         <Vacio titulo="Sin turnos en este período" descripcion="Cuando haya reservas, vas a ver acá el resumen." />
@@ -120,21 +176,23 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
           ) : null}
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <Tarjeta>
+            <Tarjeta className={profesional ? "lg:col-span-2" : undefined}>
               <h2 className="mb-4 font-bold">Servicios más pedidos</h2>
               <Barras filas={e.por_servicio.slice(0, 8).map((s) => ({ etiqueta: s.nombre, valor: s.cantidad, detalle: formatPrecio(s.ingresos) }))} />
             </Tarjeta>
-            <Tarjeta>
-              <h2 className="mb-4 font-bold">Turnos por profesional</h2>
-              <Barras
-                filas={e.por_profesional.map((p) => ({
-                  etiqueta: p.nombre,
-                  valor: p.cantidad,
-                  detalle: formatPrecio(p.ingresos),
-                  color: p.color,
-                }))}
-              />
-            </Tarjeta>
+            {profesional ? null : (
+              <Tarjeta>
+                <h2 className="mb-4 font-bold">Turnos por profesional</h2>
+                <Barras
+                  filas={e.por_profesional.map((p) => ({
+                    etiqueta: p.nombre,
+                    valor: p.cantidad,
+                    detalle: formatPrecio(p.ingresos),
+                    color: p.color,
+                  }))}
+                />
+              </Tarjeta>
+            )}
             <Tarjeta className="lg:col-span-2">
               <h2 className="mb-4 font-bold">Días con más turnos</h2>
               <Barras

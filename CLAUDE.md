@@ -27,7 +27,7 @@ App de agenda y reservas online de turnos para negocios de servicios en Argentin
 | `npm run build` / `npm start` | Build y servidor de producción |
 | `npm run typecheck` | `next typegen` + `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm run test:db` | 68 pruebas de migraciones, roles, RLS, suscripciones y admin con PGlite |
+| `npm run test:db` | 69 pruebas de migraciones, roles, RLS, suscripciones y admin con PGlite |
 | `npm run db:migrar` | Aplica migraciones pendientes (usa `DATABASE_URL_MIGRAR`) |
 | `npm run db:seed` / `db:reset` | Datos demo / borrar todo y volver a migrar + seed (solo contra una base local) |
 | `npm run admin -- agregar <mail>` | Hace admin de la plataforma a una cuenta (también `listar`, `quitar`, `quitar-2fa`). Usa `DATABASE_URL_MIGRAR` |
@@ -53,6 +53,7 @@ Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en 
 - Anti-superposición: `EXCLUDE USING gist` por profesional en `turnos`. Candado por local para reservas simultáneas.
 - Reglas de reserva online: email obligatorio, 1 turno por fecha por mail, máx. 3 futuros por local (mail o celular), con 3 inasistencias solo 1 a la vez (el dueño lo quita con "Quitar límite"). Cancelados no cuentan; el panel no tiene límites. Los límites comparan el mail con `public.clave_email` (sin `+etiqueta`; en Gmail, sin puntos). Cancelar online: hasta el plazo del negocio o, si es más tarde, dentro de los 15 minutos de haber reservado (`public.cancelable_hasta`). Límite por IP (hash) en `src/lib/limites.ts`.
 - **Borrar un cliente** (migración 0009, `public.borrar_cliente`, solo el dueño): se borra la ficha (contacto y notas) pero sus turnos quedan en la agenda y las estadísticas con `nombre_reserva` y el precio, sin celular ni mail; `turnos.cliente_id` queda en null (por eso las consultas que leen turnos usan `left join` a clientes). No se puede si tiene turnos por venir.
+- **Socios** (migración 0010, 2026-11-17): un negocio puede tener varios `dueno` (p. ej. dos peluqueros que comparten local pero facturan cada uno lo suyo). Se invitan desde `/panel/equipo` eligiendo "Socio/a" (mismo link de acceso que un empleado), cada uno con su agenda. El titular es el dueño más antiguo: solo él quita socios; a un socio que ya entró no se le genera link (usa "Olvidé mi contraseña"). `/panel/estadisticas?profesional=<id|todos>` filtra todos los números por agenda (con socios, cada uno arranca viendo la suya). Los mails de la membresía van a todos los dueños; los de reservas, a cada socio solo los de su agenda y los de agendas que no son de otro socio. La lista de clientes sigue siendo una sola.
 - Celulares normalizados (`normalizarTelefono` en TS y `normalizar_telefono` en SQL).
 - Turno del cliente: `/t/[token]` (64 hex, `noindex`), con cancelación, `.ics` y pago.
 - Secretos de terceros (tokens de Google y MP) cifrados AES-256-GCM con `INTEGRACIONES_CLAVE` en `integraciones_secretos` (solo el rol del servidor).

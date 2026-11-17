@@ -14,9 +14,9 @@ export type EstadoInvitacion = EstadoAccion & { link?: string };
 const SIN_PERMISO = { error: "Solo el dueño puede gestionar los accesos." };
 
 /**
- * Invita a un empleado: crea su usuario, lo vincula al profesional elegido y
- * devuelve un link para que elija su contraseña. El link se comparte a mano
- * (WhatsApp, etc.).
+ * Invita a un empleado o a un socio (otro dueño): crea su usuario, lo vincula al
+ * profesional elegido y devuelve un link para que elija su contraseña. El link se
+ * comparte a mano (WhatsApp, etc.).
  */
 export async function invitarEmpleado(_prev: EstadoInvitacion, formData: FormData): Promise<EstadoInvitacion> {
   const sesion = await sesionParaAccion({ soloDueno: true });
@@ -53,7 +53,7 @@ export async function invitarEmpleado(_prev: EstadoInvitacion, formData: FormDat
     await comoServidor((tx) =>
       tx.ejecutar(sql`
         insert into public.perfiles (id, negocio_id, rol, nombre, profesional_id)
-        values (${usuarioId}, ${sesion.negocio.id}, 'empleado', ${d.nombre}, ${d.profesional_id})`),
+        values (${usuarioId}, ${sesion.negocio.id}, ${d.rol}, ${d.nombre}, ${d.profesional_id})`),
     );
     const link = await crearLinkAcceso(usuarioId, "invitacion");
     revalidatePath("/panel/equipo");
@@ -65,18 +65,26 @@ export async function invitarEmpleado(_prev: EstadoInvitacion, formData: FormDat
   }
 }
 
-/** Nuevo link de acceso para un empleado que perdió el suyo u olvidó la contraseña. */
+/**
+ * Nuevo link de acceso para un empleado que perdió el suyo u olvidó la contraseña. A un
+ * socio, solo si todavía no entró (si no, cualquier socio podría tomar la cuenta del otro):
+ * después usa "Olvidé mi contraseña", que llega a su mail.
+ */
 export async function regenerarLink(perfilId: string): Promise<EstadoInvitacion> {
   const sesion = await sesionParaAccion({ soloDueno: true });
   if (!sesion) return SIN_PERMISO;
   if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
   if (!z.uuid().safeParse(perfilId).success) return { error: "Usuario inválido." };
 
-  const empleado = await perfilEmpleadoDelNegocio(sesion.userId, perfilId, sesion.negocio.id);
-  if (!empleado) return { error: "Usuario inválido." };
+  const perfil = await perfilDelEquipo(sesion.userId, perfilId, sesion.negocio.id);
+  if (!perfil || perfil.id === sesion.userId) return { error: "Usuario inválido." };
 
   try {
-    const tipo = (await tieneContrasena(perfilId)) ? "recuperacion" : "invitacion";
+    const yaEntro = await tieneContrasena(perfilId);
+    if (perfil.rol === "dueno" && yaEntro) {
+      return { error: "Ya eligió su contraseña. Si la olvidó, que use “Olvidé mi contraseña” al iniciar sesión." };
+    }
+    const tipo = yaEntro ? "recuperacion" : "invitacion";
     const link = await crearLinkAcceso(perfilId, tipo);
     return { ok: true, mensaje: "Nuevo link generado:", link };
   } catch (e) {
@@ -85,15 +93,21 @@ export async function regenerarLink(perfilId: string): Promise<EstadoInvitacion>
   }
 }
 
-/** Quita el acceso de un empleado (borra su usuario; sus turnos quedan). */
+/**
+ * Quita el acceso de un empleado (borra su usuario; sus turnos quedan). A un socio solo
+ * lo puede sacar quien creó el negocio; al que lo creó, nadie desde el panel.
+ */
 export async function quitarAcceso(perfilId: string): Promise<EstadoAccion> {
   const sesion = await sesionParaAccion({ soloDueno: true });
   if (!sesion) return SIN_PERMISO;
   if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
   if (!z.uuid().safeParse(perfilId).success) return { error: "Usuario inválido." };
 
-  const empleado = await perfilEmpleadoDelNegocio(sesion.userId, perfilId, sesion.negocio.id);
-  if (!empleado) return { error: "Usuario inválido." };
+  const perfil = await perfilDelEquipo(sesion.userId, perfilId, sesion.negocio.id);
+  if (!perfil || perfil.id === sesion.userId) return { error: "Usuario inválido." };
+  if (perfil.rol === "dueno" && (perfil.es_titular || !perfil.soy_titular)) {
+    return { error: "A un socio solo lo puede quitar quien creó el negocio." };
+  }
 
   try {
     await borrarUsuario(perfilId);
@@ -106,11 +120,19 @@ export async function quitarAcceso(perfilId: string): Promise<EstadoAccion> {
   return { ok: true };
 }
 
-/** Lee el perfil con la sesión del dueño (RLS): solo devuelve empleados de su negocio. */
-async function perfilEmpleadoDelNegocio(usuarioId: string, perfilId: string, negocioId: string) {
+/**
+ * Lee el perfil con la sesión del dueño (RLS): solo de su negocio. El titular es el dueño
+ * más antiguo (quien creó el negocio).
+ */
+async function perfilDelEquipo(usuarioId: string, perfilId: string, negocioId: string) {
   return comoUsuario(usuarioId, (tx) =>
-    tx.uno<{ id: string }>(sql`
-      select id from public.perfiles
-      where id = ${perfilId} and negocio_id = ${negocioId} and rol = 'empleado'`),
+    tx.uno<{ id: string; rol: "dueno" | "empleado"; es_titular: boolean; soy_titular: boolean }>(sql`
+      select p.id, p.rol, p.id = t.id as es_titular, t.id = ${usuarioId} as soy_titular
+      from public.perfiles p
+      cross join lateral (
+        select x.id from public.perfiles x
+        where x.negocio_id = p.negocio_id and x.rol = 'dueno' order by x.created_at, x.id limit 1
+      ) t
+      where p.id = ${perfilId} and p.negocio_id = ${negocioId}`),
   );
 }

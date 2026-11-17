@@ -49,10 +49,21 @@ export function FormularioInvitacion({ profesionales }: { profesionales: Pick<Pr
             </Campo>
           </div>
           <Campo
+            etiqueta="Tipo de acceso"
+            htmlFor="inv-rol"
+            errores={e.rol}
+            ayuda="Un socio maneja todo el negocio y puede ver sus estadísticas por separado. Un empleado ve solo su agenda."
+          >
+            <Select id="inv-rol" name="rol" defaultValue={valor("rol", "empleado")}>
+              <option value="empleado">Empleado/a</option>
+              <option value="dueno">Socio/a</option>
+            </Select>
+          </Campo>
+          <Campo
             etiqueta="Agenda que va a manejar"
             htmlFor="inv-prof"
             errores={e.profesional_id}
-            ayuda="Va a ver y gestionar solo los turnos de este profesional."
+            ayuda="Su propia agenda. Si es empleado, va a ver y gestionar solo estos turnos."
           >
             <Select id="inv-prof" name="profesional_id" required>
               {profesionales.map((p) => (
@@ -69,7 +80,7 @@ export function FormularioInvitacion({ profesionales }: { profesionales: Pick<Pr
   );
 }
 
-export function AccionesEmpleado({ perfilId }: { perfilId: string }) {
+export function AccionesEmpleado({ perfilId, puedeQuitar = true }: { perfilId: string; puedeQuitar?: boolean }) {
   const [estado, setEstado] = useState<EstadoInvitacion>();
   const [confirmar, setConfirmar] = useState(false);
   const [pendiente, iniciar] = useTransition();
@@ -84,7 +95,7 @@ export function AccionesEmpleado({ perfilId }: { perfilId: string }) {
         >
           Nuevo link de acceso
         </Boton>
-        {confirmar ? (
+        {!puedeQuitar ? null : confirmar ? (
           <>
             <Boton
               variante="peligro"

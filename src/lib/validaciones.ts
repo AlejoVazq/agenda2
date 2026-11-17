@@ -202,6 +202,8 @@ export const esquemaInvitacion = z.object({
   nombre: texto(2, 80, "El nombre"),
   email: z.preprocess((v) => (typeof v === "string" ? v.trim().toLowerCase() : v), z.email("Ingresá un email válido")),
   profesional_id: z.uuid("Elegí un profesional"),
+  /** "dueno" = socio: maneja todo el negocio, con su propia agenda. */
+  rol: z.enum(["empleado", "dueno"]).default("empleado"),
 });
 
 // --- Reservas -------------------------------------------------------------------------

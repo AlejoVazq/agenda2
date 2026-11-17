@@ -59,7 +59,10 @@ function leerTurno(turnoId: string) {
   );
 }
 
-/** Dueño y, si tiene usuario, el profesional de esa agenda. */
+/**
+ * El usuario de esa agenda (si tiene) y los dueños. Con socios, cada uno recibe los avisos
+ * de su agenda y de las que no son de otro socio (las de los empleados o sin usuario).
+ */
 function equipoAvisado(t: TurnoEmail) {
   return comoServidor((tx) =>
     tx.varios<{ email: string }>(sql`
@@ -67,7 +70,13 @@ function equipoAvisado(t: TurnoEmail) {
       from public.perfiles p
       join auth."user" u on u."id" = p.id
       where p.negocio_id = ${t.negocio_id}
-        and (p.rol = 'dueno' or p.profesional_id = ${t.profesional_id})`),
+        and (
+          p.profesional_id = ${t.profesional_id}
+          or (p.rol = 'dueno' and not exists (
+            select 1 from public.perfiles otro
+            where otro.profesional_id = ${t.profesional_id} and otro.rol = 'dueno' and otro.id <> p.id
+          ))
+        )`),
   );
 }
 

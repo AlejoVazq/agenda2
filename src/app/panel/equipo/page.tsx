@@ -13,7 +13,7 @@ export default async function PaginaEquipo() {
     Promise.all([
       tx.varios<Perfil>(sql`
         select id, negocio_id, rol, nombre, profesional_id from public.perfiles
-        where negocio_id = ${negocio.id} order by rol, nombre`),
+        where negocio_id = ${negocio.id} order by rol, created_at, id`),
       tx.varios<Pick<Profesional, "id" | "nombre">>(sql`
         select id, nombre from public.profesionales
         where negocio_id = ${negocio.id} and activo order by nombre`),
@@ -22,12 +22,14 @@ export default async function PaginaEquipo() {
   const nombreProf = new Map(profesionales.map((p) => [p.id, p.nombre]));
   const vinculados = new Set(usuarios.map((u) => u.profesional_id).filter(Boolean));
   const libres = profesionales.filter((p) => !vinculados.has(p.id));
+  // Quien creó el negocio (el primer dueño): es el único que puede quitar a un socio.
+  const titular = usuarios.find((u) => u.rol === "dueno")?.id;
 
   return (
     <div className="max-w-3xl space-y-6">
       <EncabezadoPagina
         titulo="Accesos del equipo"
-        descripcion="Dale acceso al panel a quienes trabajan con vos. Cada empleado ve solo su propia agenda."
+        descripcion="Dale acceso al panel a quienes trabajan con vos. Cada empleado ve solo su propia agenda; un socio maneja todo el negocio."
       />
 
       <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
@@ -42,9 +44,13 @@ export default async function PaginaEquipo() {
                   {u.profesional_id ? `Agenda: ${nombreProf.get(u.profesional_id) ?? "—"}` : "Sin agenda propia"}
                 </p>
               </div>
-              <Insignia color={u.rol === "dueno" ? "violeta" : "gris"}>{u.rol === "dueno" ? "Dueño/a" : "Empleado/a"}</Insignia>
+              <Insignia color={u.rol === "dueno" ? "violeta" : "gris"}>
+                {u.rol === "empleado" ? "Empleado/a" : u.id === titular ? "Dueño/a" : "Socio/a"}
+              </Insignia>
             </div>
-            {u.rol === "empleado" ? <AccionesEmpleado perfilId={u.id} /> : null}
+            {u.id === yo.id || u.id === titular ? null : (
+              <AccionesEmpleado perfilId={u.id} puedeQuitar={u.rol === "empleado" || yo.id === titular} />
+            )}
           </li>
         ))}
       </ul>
