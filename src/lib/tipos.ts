@@ -66,6 +66,10 @@ export interface Servicio {
   precio: number | null;
   activo: boolean;
   orden: number;
+  /** No se reserva en el calendario: el portal muestra el precio y un link de WhatsApp. */
+  emergencia: boolean;
+  /** Número normalizado; null = teléfono del negocio. */
+  contacto_whatsapp: string | null;
 }
 
 export interface Horario {

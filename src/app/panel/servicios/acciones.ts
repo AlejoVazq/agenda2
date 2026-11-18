@@ -23,6 +23,11 @@ export async function guardarServicio(
   const datos = esquemaServicio.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
   const d = datos.data;
+  if (d.emergencia && !d.contacto_whatsapp && !sesion.negocio.telefono) {
+    return { errores: { contacto_whatsapp: ["Poné un WhatsApp: tu negocio no tiene teléfono cargado."] } };
+  }
+  // El número solo tiene sentido en un servicio de emergencia.
+  const contacto = d.emergencia ? d.contacto_whatsapp : null;
 
   try {
     await comoUsuario(sesion.userId, async (tx) => {
@@ -30,16 +35,19 @@ export async function guardarServicio(
         await tx.ejecutar(sql`
           update public.servicios
           set nombre = ${d.nombre}, descripcion = ${d.descripcion ?? null}, duracion_min = ${d.duracion_min},
-              precio = ${d.precio}, activo = ${d.activo}
+              precio = ${d.precio}, activo = ${d.activo}, emergencia = ${d.emergencia}, contacto_whatsapp = ${contacto}
           where id = ${id} and negocio_id = ${sesion.negocio.id}`);
         return;
       }
       const nuevo = await tx.uno<{ id: string }>(sql`
-        insert into public.servicios (negocio_id, nombre, descripcion, duracion_min, precio, activo)
-        values (${sesion.negocio.id}, ${d.nombre}, ${d.descripcion ?? null}, ${d.duracion_min}, ${d.precio}, ${d.activo})
+        insert into public.servicios (negocio_id, nombre, descripcion, duracion_min, precio, activo, emergencia, contacto_whatsapp)
+        values (${sesion.negocio.id}, ${d.nombre}, ${d.descripcion ?? null}, ${d.duracion_min}, ${d.precio}, ${d.activo},
+                ${d.emergencia}, ${contacto})
         returning id`);
 
       // Con un solo profesional no hay nada que elegir: si no, el servicio no se podría reservar.
+      // Los de emergencia no se reservan online: no hace falta asignarlos.
+      if (d.emergencia) return;
       const profesionales = await tx.varios<{ id: string }>(sql`
         select id from public.profesionales where negocio_id = ${sesion.negocio.id} and activo limit 2`);
       if (nuevo && profesionales.length === 1) {

@@ -8,8 +8,9 @@ import { eliminarServicio, guardarServicio } from "./acciones";
 
 const DURACIONES = [15, 20, 30, 45, 60, 75, 90, 120, 150, 180];
 
-export function FormularioServicio({ servicio }: { servicio?: Servicio }) {
+export function FormularioServicio({ servicio, telefonoNegocio }: { servicio?: Servicio; telefonoNegocio: string | null }) {
   const { estado, accion, valor, marcado, intento } = useFormulario(guardarServicio.bind(null, servicio?.id ?? null));
+  const [emergencia, setEmergencia] = useState(marcado("emergencia", servicio?.emergencia ?? false));
 
   return (
     <form key={intento} action={accion} className="space-y-5" noValidate>
@@ -17,8 +18,41 @@ export function FormularioServicio({ servicio }: { servicio?: Servicio }) {
       <Campo etiqueta="Nombre" htmlFor="nombre" errores={estado.errores?.nombre}>
         <Input id="nombre" name="nombre" defaultValue={valor("nombre", servicio?.nombre)} placeholder="Ej: Corte y barba" required />
       </Campo>
+      <Casilla
+        name="emergencia"
+        checked={emergencia}
+        onChange={(e) => setEmergencia(e.target.checked)}
+        etiqueta="Servicio de emergencia (se coordina por WhatsApp)"
+        descripcion="No se reserva en el calendario: tu página muestra el precio y un botón para escribirte."
+      />
+      {emergencia ? (
+        <Campo
+          etiqueta="WhatsApp de contacto"
+          htmlFor="contacto_whatsapp"
+          errores={estado.errores?.contacto_whatsapp}
+          ayuda={
+            telefonoNegocio
+              ? `Si lo dejás vacío, usamos el teléfono del negocio: ${telefonoNegocio}.`
+              : "Obligatorio: tu negocio no tiene teléfono cargado."
+          }
+        >
+          <Input
+            id="contacto_whatsapp"
+            name="contacto_whatsapp"
+            type="tel"
+            inputMode="tel"
+            defaultValue={valor("contacto_whatsapp", servicio?.contacto_whatsapp)}
+            placeholder="341 555 1234"
+          />
+        </Campo>
+      ) : null}
       <div className="grid gap-5 sm:grid-cols-2">
-        <Campo etiqueta="Duración (minutos)" htmlFor="duracion_min" errores={estado.errores?.duracion_min}>
+        <Campo
+          etiqueta="Duración (minutos)"
+          htmlFor="duracion_min"
+          errores={estado.errores?.duracion_min}
+          ayuda={emergencia ? "Se usa si cargás el turno a mano desde la agenda." : undefined}
+        >
           <Input
             id="duracion_min"
             name="duracion_min"
@@ -56,7 +90,7 @@ export function FormularioServicio({ servicio }: { servicio?: Servicio }) {
       <Casilla
         name="activo"
         defaultChecked={marcado("activo", servicio?.activo ?? true)}
-        etiqueta="Disponible para reservar online"
+        etiqueta="Mostrar en tu página"
         descripcion="Si lo desactivás, deja de aparecer en tu página pero se conservan los turnos."
       />
       <BotonEnviar tamano="lg" className="w-full sm:w-auto">

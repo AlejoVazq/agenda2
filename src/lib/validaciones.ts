@@ -161,6 +161,11 @@ export const esquemaServicio = z.object({
     z.number({ error: "Precio inválido" }).min(0, "El precio no puede ser negativo").max(99_999_999).nullable(),
   ),
   activo: checkbox,
+  emergencia: checkbox,
+  contacto_whatsapp: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() !== "" ? normalizarTelefono(v) : null),
+    z.string().regex(/^[0-9]{8,15}$/, "Ingresá un WhatsApp válido, con código de área (ej: 341 555 1234)").nullable(),
+  ),
 });
 
 export const esquemaProfesional = z.object({
