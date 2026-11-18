@@ -17,7 +17,7 @@ declare
   d        int;
 begin
   insert into public.negocios (id, nombre, slug, rubro, telefono, direccion, descripcion)
-  values (v_neg, 'Estudio Luna', 'estudio-luna', 'unas', '3415551234', 'Bv. Oroño 1234',
+  values (v_neg, 'Estudio Luna', 'estudio-luna', 'unas', '2478451234', 'Bv. Oroño 1234',
           'Uñas, cejas y pestañas. Reservá tu turno online.');
 
   insert into public.profesionales (id, negocio_id, nombre, color, orden) values
@@ -62,7 +62,7 @@ declare
   d         int;
 begin
   insert into public.negocios (id, nombre, slug, rubro, telefono, direccion, descripcion, intervalo_min)
-  values (v_neg, 'Peluquería Caballeros', 'peluqueria-caballeros', 'peluqueria_masculina', '3415559876', 'San Lorenzo 850',
+  values (v_neg, 'Peluquería Caballeros', 'peluqueria-caballeros', 'peluqueria_masculina', '2478459876', 'San Lorenzo 850',
           'Peluquería masculina. Corte, barba y corte infantil. Reservá tu turno online.', 10);
 
   insert into public.profesionales (id, negocio_id, nombre, color, orden) values
@@ -79,8 +79,8 @@ begin
     (v_nino, v_neg, 'Corte infantil', 30, 8000, 4);
 
   -- Emergencia: no se reserva en el calendario, el portal muestra el precio y el WhatsApp.
-  insert into public.servicios (negocio_id, nombre, descripcion, duracion_min, precio, orden, emergencia) values
-    (v_neg, 'Corte de emergencia', 'Fuera del horario habitual (por ejemplo, un lunes).', 30, 18000, 5, true);
+  insert into public.servicios (negocio_id, nombre, descripcion, duracion_min, precio, orden, emergencia, contacto_whatsapp) values
+    (v_neg, 'Corte de emergencia', 'Fuera del horario habitual (por ejemplo, un lunes).', 30, 18000, 5, true, '2478459876');
 
   insert into public.profesional_servicio (negocio_id, profesional_id, servicio_id) values
     (v_neg, v_mateo, v_corte), (v_neg, v_mateo, v_combo), (v_neg, v_mateo, v_barba), (v_neg, v_mateo, v_nino),

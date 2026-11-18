@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
+import { InputTelefonoLocal } from "@/components/telefono-local";
 import { Campo, Casilla, Input, Select } from "@/components/ui";
 import { RUBROS } from "@/lib/tipos";
 import { crearNegocio } from "./acciones";
@@ -86,8 +87,8 @@ export function FormularioOnboarding({ nombreUsuario, siteUrl }: { nombreUsuario
       </Campo>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Campo etiqueta="Teléfono / WhatsApp" htmlFor="telefono" errores={estado.errores?.telefono} ayuda="Opcional">
-          <Input id="telefono" name="telefono" type="tel" inputMode="tel" placeholder="341 555 1234" defaultValue={valor("telefono")} />
+        <Campo etiqueta="Teléfono / WhatsApp" htmlFor="telefono" errores={estado.errores?.telefono}>
+          <InputTelefonoLocal id="telefono" name="telefono" defaultValue={String(valor("telefono"))} required />
         </Campo>
         <Campo etiqueta="Dirección" htmlFor="direccion" errores={estado.errores?.direccion} ayuda="Opcional">
           <Input id="direccion" name="direccion" placeholder="Calle 123" defaultValue={valor("direccion")} />

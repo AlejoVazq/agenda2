@@ -331,11 +331,17 @@ await prueba("público: negocio_publico devuelve solo datos públicos", async ()
 
 await prueba("servicio de emergencia: aparte en el portal y sin horarios", async () => {
   const publico = async () => (await como("anon", () => uno("select public.negocio_publico('salon-ana') as d"))).d;
-  const telefonoOriginal = (await uno("select telefono from public.negocios where id = $1", [negA])).telefono;
-  await como("ana", () => q("update public.negocios set telefono = '+54 9 341 555-9876' where id = $1", [negA]));
+  await como("ana", () =>
+    falla(
+      q("insert into public.servicios (negocio_id, nombre, duracion_min, emergencia) values ($1, 'Sin número', 60, true)", [negA]),
+      /servicios_emergencia_contacto/,
+      "el de emergencia exige WhatsApp",
+    ),
+  );
   const urg = await como("ana", async () => {
     const s = await uno(
-      "insert into public.servicios (negocio_id, nombre, duracion_min, precio, emergencia) values ($1, 'Urgencia', 60, 20000, true) returning id",
+      `insert into public.servicios (negocio_id, nombre, duracion_min, precio, emergencia, contacto_whatsapp)
+       values ($1, 'Urgencia', 60, 20000, true, '2478451234') returning id`,
       [negA],
     );
     await q("insert into public.profesional_servicio (negocio_id, profesional_id, servicio_id) values ($1, $2, $3)", [negA, profAna, s.id]);
@@ -347,7 +353,7 @@ await prueba("servicio de emergencia: aparte en el portal y sin horarios", async
   assert.equal(data.emergencias.length, 1);
   assert.equal(data.emergencias[0].nombre, "Urgencia");
   assert.equal(Number(data.emergencias[0].precio), 20000);
-  assert.equal(data.emergencias[0].whatsapp, "3415559876", "sin número usa el del negocio, normalizado");
+  assert.equal(data.emergencias[0].whatsapp, "2478451234", "el número de quien lo atiende");
   assert.ok(!("duracion_min" in data.emergencias[0]));
 
   const libres = await como("anon", () => q("select * from public.horarios_libres($1, $2, $3::date, $4)", [negA, urg, lunes, profAna]));
@@ -361,17 +367,10 @@ await prueba("servicio de emergencia: aparte en el portal y sin horarios", async
     "no se reserva online",
   );
 
-  await como("ana", () => q("update public.servicios set contacto_whatsapp = '3415551234' where id = $1", [urg]));
-  assert.equal((await publico()).emergencias[0].whatsapp, "3415551234", "número propio del servicio");
-
-  await como("ana", () => q("update public.servicios set contacto_whatsapp = null where id = $1", [urg]));
-  await como("ana", () => q("update public.negocios set telefono = null where id = $1", [negA]));
-  assert.equal((await publico()).emergencias.length, 0, "sin ningún número no se publica");
-  await como("ana", () => q("update public.negocios set telefono = $2 where id = $1", [negA, telefonoOriginal]));
-
+  await como("ana", () => falla(q("update public.servicios set contacto_whatsapp = null where id = $1", [urg]), /servicios_emergencia_contacto/, "no se borra el número"));
   await como("ana", () => falla(q("update public.servicios set contacto_whatsapp = '12' where id = $1", [urg]), /check/, "número inválido"));
 
-  await como("ana", () => q("update public.servicios set emergencia = false where id = $1", [urg]));
+  await como("ana", () => q("update public.servicios set emergencia = false, contacto_whatsapp = null where id = $1", [urg]));
   data = await publico();
   assert.equal(data.servicios.length, 2, "desmarcado vuelve al flujo normal");
   assert.equal(data.emergencias.length, 0);

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { RUBROS } from "@/lib/tipos";
+import { MENSAJE_TELEFONO, telefonoLocal } from "@/lib/telefono-local";
 import { normalizarTelefono } from "@/lib/whatsapp";
 
 // --- Helpers para FormData ---------------------------------------------------------
@@ -45,6 +46,13 @@ export const telefono = z.preprocess(
   (v) => (typeof v === "string" ? normalizarTelefono(v) : ""),
   z.string().regex(/^[0-9]{8,15}$/, "Ingresá un teléfono válido, con código de área (ej: 341 555 1234)"),
 );
+
+/** Teléfono de la ciudad (característica fija, ver telefono-local.ts). Vacío => null. */
+const telefonoDeLaCiudad = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() !== "" ? (telefonoLocal(v) ?? "invalido") : null),
+  z.string().regex(/^[0-9]{10}$/, MENSAJE_TELEFONO).nullable(),
+);
+const telefonoDeLaCiudadObligatorio = telefonoDeLaCiudad.refine((v) => v !== null, "El teléfono es obligatorio");
 
 const hora = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^24:00$/, "Hora inválida");
 
@@ -110,7 +118,7 @@ export const esquemaOnboarding = z.object({
   slug,
   rubro,
   nombre_dueno: texto(2, 80, "Tu nombre"),
-  telefono: textoOpcional(30),
+  telefono: telefonoDeLaCiudadObligatorio,
   direccion: textoOpcional(160),
   dueno_atiende: checkbox,
 });
@@ -119,7 +127,7 @@ export const esquemaNegocio = z.object({
   nombre: texto(2, 80, "El nombre"),
   slug,
   rubro,
-  telefono: textoOpcional(30),
+  telefono: telefonoDeLaCiudadObligatorio,
   direccion: textoOpcional(160),
   descripcion: textoOpcional(500),
   cancelacion_min_horas: entero(0, 168, "Las horas"),
@@ -152,21 +160,23 @@ export const esquemaSena = z
 
 // --- Servicios y profesionales ---------------------------------------------------------
 
-export const esquemaServicio = z.object({
-  nombre: texto(2, 80, "El nombre"),
-  descripcion: textoOpcional(300),
-  duracion_min: entero(5, 600, "La duración"),
-  precio: z.preprocess(
-    (v) => (typeof v === "string" && v.trim() !== "" ? parsearPrecio(v.trim()) : null),
-    z.number({ error: "Precio inválido" }).min(0, "El precio no puede ser negativo").max(99_999_999).nullable(),
-  ),
-  activo: checkbox,
-  emergencia: checkbox,
-  contacto_whatsapp: z.preprocess(
-    (v) => (typeof v === "string" && v.trim() !== "" ? normalizarTelefono(v) : null),
-    z.string().regex(/^[0-9]{8,15}$/, "Ingresá un WhatsApp válido, con código de área (ej: 341 555 1234)").nullable(),
-  ),
-});
+export const esquemaServicio = z
+  .object({
+    nombre: texto(2, 80, "El nombre"),
+    descripcion: textoOpcional(300),
+    duracion_min: entero(5, 600, "La duración"),
+    precio: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() !== "" ? parsearPrecio(v.trim()) : null),
+      z.number({ error: "Precio inválido" }).min(0, "El precio no puede ser negativo").max(99_999_999).nullable(),
+    ),
+    activo: checkbox,
+    emergencia: checkbox,
+    contacto_whatsapp: telefonoDeLaCiudad,
+  })
+  .refine((d) => !d.emergencia || d.contacto_whatsapp !== null, {
+    path: ["contacto_whatsapp"],
+    message: "Poné el WhatsApp de quien hace el servicio",
+  });
 
 export const esquemaProfesional = z.object({
   nombre: texto(2, 80, "El nombre"),

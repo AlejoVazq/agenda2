@@ -1,6 +1,7 @@
 "use client";
 
 import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
+import { InputTelefonoLocal } from "@/components/telefono-local";
 import { Campo, Casilla, Input, Select, Tarjeta, Textarea } from "@/components/ui";
 import { RUBROS, type Negocio } from "@/lib/tipos";
 import { guardarNegocio } from "./acciones";
@@ -37,7 +38,7 @@ export function FormularioNegocio({ negocio, siteUrl }: { negocio: Negocio; site
         </Campo>
         <div className="grid gap-5 sm:grid-cols-2">
           <Campo etiqueta="Teléfono / WhatsApp" htmlFor="telefono" errores={e.telefono}>
-            <Input id="telefono" name="telefono" type="tel" defaultValue={valor("telefono", negocio.telefono)} />
+            <InputTelefonoLocal id="telefono" name="telefono" defaultValue={String(valor("telefono", negocio.telefono))} required />
           </Campo>
           <Campo etiqueta="Dirección" htmlFor="direccion" errores={e.direccion}>
             <Input id="direccion" name="direccion" defaultValue={valor("direccion", negocio.direccion)} />

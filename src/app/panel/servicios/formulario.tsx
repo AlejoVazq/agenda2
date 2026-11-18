@@ -2,13 +2,14 @@
 
 import { useTransition, useState } from "react";
 import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
+import { InputTelefonoLocal } from "@/components/telefono-local";
 import { Boton, Campo, Casilla, Input, Textarea, Aviso } from "@/components/ui";
 import type { EstadoAccion, Servicio } from "@/lib/tipos";
 import { eliminarServicio, guardarServicio } from "./acciones";
 
 const DURACIONES = [15, 20, 30, 45, 60, 75, 90, 120, 150, 180];
 
-export function FormularioServicio({ servicio, telefonoNegocio }: { servicio?: Servicio; telefonoNegocio: string | null }) {
+export function FormularioServicio({ servicio }: { servicio?: Servicio }) {
   const { estado, accion, valor, marcado, intento } = useFormulario(guardarServicio.bind(null, servicio?.id ?? null));
   const [emergencia, setEmergencia] = useState(marcado("emergencia", servicio?.emergencia ?? false));
 
@@ -27,22 +28,16 @@ export function FormularioServicio({ servicio, telefonoNegocio }: { servicio?: S
       />
       {emergencia ? (
         <Campo
-          etiqueta="WhatsApp de contacto"
+          etiqueta="WhatsApp de quien hace el servicio"
           htmlFor="contacto_whatsapp"
           errores={estado.errores?.contacto_whatsapp}
-          ayuda={
-            telefonoNegocio
-              ? `Si lo dejás vacío, usamos el teléfono del negocio: ${telefonoNegocio}.`
-              : "Obligatorio: tu negocio no tiene teléfono cargado."
-          }
+          ayuda="Obligatorio. A este número le escriben los clientes."
         >
-          <Input
+          <InputTelefonoLocal
             id="contacto_whatsapp"
             name="contacto_whatsapp"
-            type="tel"
-            inputMode="tel"
-            defaultValue={valor("contacto_whatsapp", servicio?.contacto_whatsapp)}
-            placeholder="341 555 1234"
+            defaultValue={String(valor("contacto_whatsapp", servicio?.contacto_whatsapp))}
+            required
           />
         </Campo>
       ) : null}

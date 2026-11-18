@@ -23,9 +23,6 @@ export async function guardarServicio(
   const datos = esquemaServicio.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
   const d = datos.data;
-  if (d.emergencia && !d.contacto_whatsapp && !sesion.negocio.telefono) {
-    return { errores: { contacto_whatsapp: ["Poné un WhatsApp: tu negocio no tiene teléfono cargado."] } };
-  }
   // El número solo tiene sentido en un servicio de emergencia.
   const contacto = d.emergencia ? d.contacto_whatsapp : null;
 

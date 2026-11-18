@@ -23,7 +23,7 @@ export default async function EditarServicio({ params }: PageProps<"/panel/servi
     <div className="max-w-2xl">
       <EncabezadoPagina titulo={servicio.nombre} volver={{ href: "/panel/servicios", texto: "Servicios" }} />
       <Tarjeta>
-        <FormularioServicio servicio={servicio} telefonoNegocio={negocio.telefono} />
+        <FormularioServicio servicio={servicio} />
       </Tarjeta>
       <div className="mt-6">
         <EliminarServicio id={servicio.id} />
