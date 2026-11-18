@@ -13,6 +13,16 @@ export type ServicioPublico = {
   profesional_ids: string[] | null;
 };
 
+/** Servicio de emergencia: no se reserva, se coordina por WhatsApp. */
+export type ServicioEmergencia = {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  precio: number | null;
+  /** Número normalizado: el del servicio o, si no tiene, el del negocio. */
+  whatsapp: string;
+};
+
 export type NegocioPublico = {
   id: string;
   nombre: string;
@@ -28,6 +38,7 @@ export type NegocioPublico = {
   /** False si la cuenta del negocio está apagada (pasó la gracia) o dada de baja. */
   reservas_habilitadas: boolean;
   servicios: ServicioPublico[];
+  emergencias: ServicioEmergencia[];
   profesionales: { id: string; nombre: string }[];
 };
 
