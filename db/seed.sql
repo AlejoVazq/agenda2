@@ -78,6 +78,10 @@ begin
     (v_barba, v_neg, 'Arreglo de barba', 20, 6000, 3),
     (v_nino, v_neg, 'Corte infantil', 30, 8000, 4);
 
+  -- Emergencia: no se reserva en el calendario, el portal muestra el precio y el WhatsApp.
+  insert into public.servicios (negocio_id, nombre, descripcion, duracion_min, precio, orden, emergencia) values
+    (v_neg, 'Corte de emergencia', 'Fuera del horario habitual (por ejemplo, un lunes).', 30, 18000, 5, true);
+
   insert into public.profesional_servicio (negocio_id, profesional_id, servicio_id) values
     (v_neg, v_mateo, v_corte), (v_neg, v_mateo, v_combo), (v_neg, v_mateo, v_barba), (v_neg, v_mateo, v_nino),
     (v_neg, v_lucho, v_corte), (v_neg, v_lucho, v_combo), (v_neg, v_lucho, v_barba);
