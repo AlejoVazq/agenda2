@@ -10,6 +10,7 @@ import type { NegocioPublico, ServicioPublico } from "@/lib/publico";
 import { Estrellas } from "@/components/estrellas";
 import type { EstadoAccion } from "@/lib/tipos";
 import { consultarDias, consultarHorarios, reservar, type Horario } from "./acciones";
+import { Emergencias } from "./emergencias";
 
 type Paso = "profesional" | "servicio" | "horario" | "datos";
 const PASOS: Paso[] = ["profesional", "servicio", "horario", "datos"];
@@ -284,6 +285,7 @@ export function Reserva({
               ))}
             </ul>
           )}
+          <Emergencias servicios={negocio.emergencias} />
         </section>
       ) : null}
 

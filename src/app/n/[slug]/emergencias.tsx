@@ -7,13 +7,10 @@ import { linkWhatsApp } from "@/lib/whatsapp";
 export function Emergencias({ servicios }: { servicios: ServicioEmergencia[] }) {
   if (servicios.length === 0) return null;
   return (
-    <section
-      aria-labelledby="t-emergencias"
-      className="mt-6 rounded-[2rem] bg-white p-5 shadow-suave ring-1 ring-zinc-200/60 sm:p-6"
-    >
-      <h2 id="t-emergencias" className="font-display text-xl font-bold">
+    <div aria-labelledby="t-emergencias" role="group" className="mt-6 border-t border-zinc-100 pt-5">
+      <h3 id="t-emergencias" className="font-display text-lg font-bold">
         ¿Necesitás un turno urgente?
-      </h2>
+      </h3>
       <p className="mt-1 text-sm text-zinc-600">Se coordina por WhatsApp, fuera de los horarios de la agenda.</p>
       <ul className="mt-4 space-y-3">
         {servicios.map((s) => (
@@ -34,6 +31,6 @@ export function Emergencias({ servicios }: { servicios: ServicioEmergencia[] }) 
           </li>
         ))}
       </ul>
-    </section>
+    </div>
   );
 }

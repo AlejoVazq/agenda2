@@ -12,7 +12,6 @@ import { Estrellas } from "@/components/estrellas";
 import { formatPromedio, ListaOpiniones, ResumenOpiniones, textoCantidad } from "@/components/opiniones";
 import { RUBROS, type Rubro } from "@/lib/tipos";
 import { IconoWhatsApp } from "@/components/icono-whatsapp";
-import { Emergencias } from "./emergencias";
 import { Reserva } from "./reserva";
 
 export async function generateMetadata({ params }: PageProps<"/n/[slug]">): Promise<Metadata> {
@@ -158,7 +157,6 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
             </div>
           )}
         </div>
-        {negocio.reservas_habilitadas ? <Emergencias servicios={negocio.emergencias} /> : null}
         {resenas.promedio !== null ? (
           <section
             id="opiniones"
