@@ -78,29 +78,29 @@ Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en 
 - En Google, los eventos creados por la app tienen id fijo `tn` + id del turno sin guiones (`idEvento`): así se reconocen para no importarlos como "ocupados" (desde 2026-11-12 ya no se lee `extendedProperties`). **No cambiar ese formato de id.** También llevan `extendedProperties.private.turniaTurnoId`, solo como referencia.
 - **Google Calendar y su verificación:** permiso `calendar.events.owned` (solo el calendario principal), se leen únicamente id/estado/inicio/fin/ocupado. Lo que se presenta a Google y por qué está en `docs/verificacion-google.md`; si cambia lo que se hace con datos de Google, actualizar a la vez `src/lib/google.ts`, `/privacidad#google`, el aviso de Integraciones y ese documento.
 
-## Estado (2026-11-12)
+## Estado (2026-11-18)
 
 - Fases 1 a 6 y extras hechas. Supabase reemplazado por Postgres propio + Better Auth (rama `sin-supabase`), probado en local de punta a punta.
 - Objetivo: que un amigo peluquero masculino la pruebe en su local. Google Calendar puede quedar sin conectar.
 - **Publicada en https://agenda2.tech** (VPS Hostinger `187.53.106.37`, SSH como `root`) desde el 2026-11-11. El repo está en GitHub (`AlejoVazq/agenda2`). `RESEND_API_KEY` cargada (clave de solo envío). Falta la prueba completa del paso 7.
 - Mail de contacto de `/privacidad`: `vaztechcontact@gmail.com`.
 - Publicado al 2026-11-12: migraciones 0001 a 0006 (suscripciones, `/admin` con admin ya cargado, identidad visual verde pino, logo por negocio) y el 404 real en `/n/[slug]` (082be58). El `revoke connect` en la base de EnSushi ya se hizo.
-- En producción no hay todavía negocios reales: `pollobarber` es una prueba del usuario (no es el local del amigo). No tocar EnSushi. No agregar otras funciones sin que el usuario lo pida.
+- En producción hay **un solo negocio real: el del amigo peluquero** (desde 2026-11-18; cuidar sus datos: backup antes de cada deploy, nada destructivo). Los demás son pruebas del usuario; `pollobarber` **no se borra**, es el que usa para probar. No tocar EnSushi. No agregar otras funciones sin que el usuario lo pida.
+- Publicado al 2026-11-18: todo hasta la migración 0014 (incluye reseñas, profesional primero, servicio de emergencia y teléfonos 2478).
 
-## Pendiente (rumbo, al 2026-11-12)
+## Pendiente (rumbo, al 2026-11-18)
 
 Ir en este orden salvo que el usuario diga otra cosa.
 
-1. Borrar el negocio de prueba `pollobarber` desde `/admin` si el usuario quiere (la 0007 está publicada).
-2. **Prueba completa del paso 7** (abajo) con mails reales; el recordatorio por mail nunca se probó de punta a punta.
-3. **Revisión de textos legales** (`/privacidad`, `/terminos`) antes de sumar más locales.
-4. **Detalles anotados el 2026-11-06**: resueltos el 2026-11-13 (migración 0008 y app): alias de mail (`public.clave_email`), aviso y "Quitar límite" de la ficha con la misma regla que la reserva, "+ Turno" desde la ficha con los datos del cliente, botón atrás en la reserva (`?paso=`), 90 días de anticipación (tope 92), estadísticas sin "$ 0" para servicios sin precio. Ya no pasaban: el link de confirmación (con Better Auth se puede abrir varias veces en 24 h) y el celular ya registrado (el turno usa `nombre_reserva`). **Quedan, a decidir con el usuario** (son funciones nuevas o reglas):
+1. **Prueba completa del paso 7** (abajo) con mails reales; el recordatorio por mail nunca se probó de punta a punta.
+2. **Revisión de textos legales** (`/privacidad`, `/terminos`) antes de sumar más locales.
+3. **Detalles anotados el 2026-11-06**: resueltos el 2026-11-13 (migración 0008 y app): alias de mail (`public.clave_email`), aviso y "Quitar límite" de la ficha con la misma regla que la reserva, "+ Turno" desde la ficha con los datos del cliente, botón atrás en la reserva (`?paso=`), 90 días de anticipación (tope 92), estadísticas sin "$ 0" para servicios sin precio. Ya no pasaban: el link de confirmación (con Better Auth se puede abrir varias veces en 24 h) y el celular ya registrado (el turno usa `nombre_reserva`). **Quedan, a decidir con el usuario** (son funciones nuevas o reglas):
    - ~~el negocio no recibe aviso cuando un cliente cancela~~: hecho el 2026-11-13 (`notificarCancelacionCliente`, mail al dueño y al profesional de esa agenda);
    - ~~con menos de 2 h de anticipación no se puede cancelar online~~: hecho el 2026-11-13, 15 minutos para arrepentirse;
    - ~~no hay botón para borrar un cliente~~: hecho el 2026-11-13 (migración 0009).
-5. **Ideas conversadas, sin hacer**: tiempos de espera en servicios de peluquería (tintura), login con Google (comentado en `better-auth.ts`).
-6. **Integraciones sin probar con cuentas reales**: Google Calendar (conectar y pasar la verificación, `docs/verificacion-google.md`), WhatsApp Cloud API (opcional), Mercado Pago (apagado a propósito con `SENA_ACTIVA`).
-7. **Mantenimiento**: copiar los backups fuera del VPS cada tanto; borrar restos locales de Supabase (variables viejas en `.env.local`, carpeta `supabase/`, `agenda2-migracion-supabase.md` suelto en la raíz).
+4. **Ideas conversadas, sin hacer**: tiempos de espera en servicios de peluquería (tintura), login con Google (comentado en `better-auth.ts`).
+5. **Integraciones sin probar con cuentas reales**: Google Calendar (conectar y pasar la verificación, `docs/verificacion-google.md`), WhatsApp Cloud API (opcional), Mercado Pago (apagado a propósito con `SENA_ACTIVA`).
+6. **Mantenimiento**: copiar los backups fuera del VPS cada tanto; borrar restos locales de Supabase (variables viejas en `.env.local`, carpeta `supabase/`, `agenda2-migracion-supabase.md` suelto en la raíz).
 
 Historial de cada sesión en `docs/registro-*.md`.
 
