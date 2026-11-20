@@ -604,6 +604,75 @@ await prueba("panel: crear_turno_panel respeta permisos y superposición", async
   );
 });
 
+await prueba("turnos fijos: semanal y cada 2 semanas, salteos, cron, terminar y permisos", async () => {
+  const profFijo = (await uno("insert into public.profesionales (negocio_id, nombre) values ($1, 'Fijo') returning id", [negA])).id;
+  const TZ = "America/Argentina/Buenos_Aires";
+  const enHora = async (fecha, h) => (await uno("select (($1::date + $2::time) at time zone $3) as t", [fecha, h, TZ])).t;
+  const mas = async (dias) => (await uno("select ($1::date + $2::int)::text as d", [lunes, dias])).d;
+  const inicio = await enHora(lunes, "21:00");
+  const crear = (usuario, prof, cada, nombre, tel) =>
+    como(usuario, () =>
+      uno("select id, turnos, fechas::text[] as salteadas from public.crear_turno_fijo($1, $2, $3, $4, $5, $6) as x(id, turnos, fechas)", [
+        prof, servA, inicio, cada, nombre, tel,
+      ]),
+    );
+
+  await como("eva", () => falla(q("select * from public.crear_turno_fijo($1, $2, $3, 1, 'X Y', '1155550001')", [profAna, servA, inicio]), /SIN_PERMISO/, "empleada en agenda ajena"));
+  await como("beto", () => falla(q("select * from public.crear_turno_fijo($1, $2, $3, 1, 'X Y', '1155550001')", [profFijo, servA, inicio]), /SIN_PERMISO/, "otro negocio"));
+  await como("ana", () => falla(q("select * from public.crear_turno_fijo($1, $2, $3, 3, 'X Y', '1155550001')", [profFijo, servA, inicio]), /DATOS_INVALIDOS/, "cada 3 semanas"));
+
+  // Semanal, en la agenda de la empleada: una por semana hasta hoy + 56 días.
+  const { semanas } = await uno("select (((now() at time zone $2)::date + 56 - $1::date) / 7 + 1) as semanas", [lunes, TZ]);
+  const e = await crear("eva", profEva, 1, "Fijo Eva", "1155550001");
+  assert.equal(e.turnos.length, semanas);
+  assert.deepEqual(e.salteadas, []);
+  const deEva = await q("select estado, extract(isodow from inicio at time zone $2)::int as dia, to_char(inicio at time zone $2, 'HH24:MI') as hora from public.turnos where turno_fijo_id = $1", [e.id, TZ]);
+  assert.equal(deEva.length, semanas);
+  assert.ok(deEva.every((t) => t.estado === "confirmado" && t.dia === 1 && t.hora === "21:00"));
+  assert.equal((await como("eva", () => q("select id from public.turnos_fijos"))).length, 1);
+  assert.equal((await como("beto", () => q("select id from public.turnos_fijos"))).length, 0);
+
+  // Cada 2 semanas, con una ausencia y un turno ocupado: esas fechas se saltean.
+  const lunes14 = await mas(14);
+  const lunes28 = await mas(28);
+  const ini14 = await enHora(lunes14, "21:00");
+  const ini28 = await enHora(lunes28, "21:00");
+  await como("ana", () => q("insert into public.bloqueos (negocio_id, profesional_id, inicio, fin) values ($1, $2, $3, $3::timestamptz + interval '1 hour')", [negA, profFijo, ini14]));
+  const { id: otro } = await como("ana", () => uno("select public.crear_turno_panel($1, $2, $3, 'Otro Cliente', '1155550009') as id", [profFijo, servA, ini28]));
+  const { quincenas } = await uno("select (((now() at time zone $2)::date + 56 - $1::date) / 14 + 1) as quincenas", [lunes, TZ]);
+  const f = await crear("ana", profFijo, 2, "Fijo Ana", "1155550002");
+  assert.deepEqual(f.salteadas, [lunes14, lunes28]);
+  assert.equal(f.turnos.length, quincenas - 2);
+  const regla = await uno("select fechas_salteadas::text[] as s, cliente_id from public.turnos_fijos where id = $1", [f.id]);
+  assert.deepEqual(regla.s, [lunes14, lunes28]);
+  assert.ok(regla.cliente_id, "crea la ficha del cliente");
+
+  // Cron: solo el servidor; recrea lo que falta y no duplica ni revive cancelados.
+  await como("anon", () => falla(q("select public.completar_turnos_fijos()"), /permission denied/, "anon"));
+  await como("ana", () => falla(q("select public.completar_turnos_fijos()"), /permission denied/, "dueña"));
+  const [segundo] = await q("select id from public.turnos where turno_fijo_id = $1 order by inicio offset 1 limit 1", [e.id]);
+  await como("ana", () => q("update public.turnos set estado = 'cancelado', cancelado_at = now(), cancelado_por = 'negocio' where id = $1", [segundo.id]));
+  await q("delete from public.turnos where turno_fijo_id = $1 and inicio = (select max(inicio) from public.turnos where turno_fijo_id = $1)", [e.id]);
+  await q("update public.turnos_fijos set generado_hasta = $2::date where id = $1", [e.id, await mas((semanas - 2) * 7)]);
+  assert.equal((await como("servidor", () => uno("select public.completar_turnos_fijos() as n"))).n, 1);
+  assert.equal((await como("servidor", () => uno("select public.completar_turnos_fijos() as n"))).n, 0);
+  const estados = await q("select estado from public.turnos where turno_fijo_id = $1", [e.id]);
+  assert.equal(estados.length, semanas);
+  assert.equal(estados.filter((t) => t.estado === "cancelado").length, 1);
+
+  // Terminar: la empleada no toca reglas de otra agenda; se cancelan los que vienen.
+  await como("eva", () => falla(q("select public.terminar_turno_fijo($1)", [f.id]), /SIN_PERMISO/, "regla ajena"));
+  const { ids } = await como("eva", () => uno("select public.terminar_turno_fijo($1) as ids", [e.id]));
+  assert.equal(ids.length, semanas - 1);
+  assert.equal((await uno("select count(*)::int as n from public.turnos where turno_fijo_id = $1 and estado <> 'cancelado'", [e.id])).n, 0);
+  assert.ok((await uno("select terminado_at from public.turnos_fijos where id = $1", [e.id])).terminado_at);
+  assert.equal((await como("servidor", () => uno("select public.completar_turnos_fijos() as n"))).n, 0);
+
+  await q("delete from public.turnos where turno_fijo_id = any($1) or id = $2", [[e.id, f.id], otro]);
+  await q("delete from public.turnos_fijos where id = any($1)", [[e.id, f.id]]);
+  await q("delete from public.bloqueos where profesional_id = $1", [profFijo]);
+});
+
 await prueba("bug corregido: una empleada no lee la ficha de un cliente aunque conozca su celular", async () => {
   // Lucía ya es clienta (reservó online). La dueña le agrega notas privadas.
   const lucia = await uno("select id from public.clientes where telefono = '1155551234'");
@@ -641,7 +710,7 @@ await prueba("aislamiento: ninguna tabla con negocio_id deja ver filas de otro n
   assert.ok(tablas.length >= 9, tablas.join(", "));
   for (const t of tablas) {
     const { n: deA } = await uno(`select count(*)::int as n from public.${t} where negocio_id = $1`, [negA]);
-    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones", "negocio_logos", "negocio_portadas", "resenas"].includes(t), `${t} sin datos de prueba`);
+    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones", "negocio_logos", "negocio_portadas", "resenas", "turnos_fijos"].includes(t), `${t} sin datos de prueba`);
     for (const [u, ajeno] of [["beto", negA], ["nadie", negA], ["ana", negB], ["eva", negB]]) {
       const filas = await como(u, () => q(`select * from public.${t} where negocio_id = $1`, [ajeno]).catch(() => []));
       assert.equal(filas.length, 0, `${u} ve ${t} de otro negocio`);

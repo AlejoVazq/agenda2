@@ -26,11 +26,11 @@ export function FormularioTurno({
   servicios: Pick<Servicio, "id" | "nombre" | "duracion_min">[];
   asignaciones: { profesional_id: string; servicio_id: string }[];
   inicial: ValoresIniciales;
-  onListo: () => void;
+  onListo: (mensaje?: string) => void;
 }) {
   const { estado, accion, valor, intento } = useFormulario(async (prev: EstadoAccion, formData: FormData) => {
     const r = await crearTurnoPanel(prev, formData);
-    if (r.ok) onListo();
+    if (r.ok) onListo(r.mensaje);
     return r;
   });
   const [profesionalId, setProfesionalId] = useState(inicial.profesional_id ?? profesionales[0]?.id ?? "");
@@ -73,6 +73,18 @@ export function FormularioTurno({
           <Input id="t-hora" name="hora" type="time" step={300} defaultValue={valor("hora", inicial.hora)} required />
         </Campo>
       </div>
+      <Campo
+        etiqueta="Repetir"
+        htmlFor="t-repetir"
+        errores={e.repetir}
+        ayuda="Para clientes que vienen siempre el mismo día y horario. Se agendan las próximas 8 semanas y se van sumando solos."
+      >
+        <Select id="t-repetir" name="repetir" defaultValue={valor("repetir", "0")}>
+          <option value="0">No, solo este día</option>
+          <option value="1">Todas las semanas (turno fijo)</option>
+          <option value="2">Cada 2 semanas (turno fijo)</option>
+        </Select>
+      </Campo>
       <Campo etiqueta="Cliente" htmlFor="t-cli" errores={e.cliente_nombre}>
         <Input id="t-cli" name="cliente_nombre" autoComplete="off" placeholder="Nombre y apellido" defaultValue={valor("cliente_nombre", inicial.cliente?.nombre)} required />
       </Campo>

@@ -6,6 +6,7 @@ import { sesionParaAccion } from "@/lib/auth";
 import { comoServidor, comoUsuario, sql } from "@/lib/db";
 import { mensajeDeError } from "@/lib/errores";
 import { localADate } from "@/lib/fechas";
+import { listarFechas } from "@/lib/turnos-fijos";
 import { notificarCambioTurno } from "@/lib/email/notificar";
 import { sincronizarGoogleDespues } from "@/lib/google";
 import {
@@ -126,13 +127,40 @@ export async function crearTurnoPanel(_prev: EstadoAccion, formData: FormData): 
   }
 
   await liberarSenasVencidas(sesion.negocio.id);
+  const inicio = localADate(d.fecha, d.hora, sesion.negocio.zona_horaria).toISOString();
+
+  if (d.repetir) {
+    let fijo: { turnos: string[]; salteadas: string[] } | null;
+    try {
+      fijo = await comoUsuario(sesion.userId, (tx) =>
+        tx.uno<{ turnos: string[]; salteadas: string[] }>(sql`
+          select turnos, salteadas::text[] as salteadas
+          from public.crear_turno_fijo(
+            ${d.profesional_id}, ${d.servicio_id}, ${inicio}::timestamptz, ${d.repetir},
+            ${d.cliente_nombre}, ${d.cliente_telefono}, ${d.cliente_email ?? null}, ${d.notas ?? null}
+          )`),
+      );
+    } catch (e) {
+      return { error: mensajeDeError(e) };
+    }
+    for (const id of fijo?.turnos ?? []) sincronizarGoogleDespues(id);
+    revalidatePath("/panel", "layout");
+    const n = fijo?.turnos.length ?? 0;
+    const salteadas = fijo?.salteadas ?? [];
+    return {
+      ok: true,
+      mensaje:
+        `Turno fijo creado: ${n} ${n === 1 ? "turno agendado" : "turnos agendados"} para las próximas semanas.` +
+        (salteadas.length ? ` No se pudo el ${listarFechas(salteadas)} (horario ocupado o ausencia).` : ""),
+    };
+  }
+
   let nuevoId: string | undefined;
   try {
     const fila = await comoUsuario(sesion.userId, (tx) =>
       tx.uno<{ id: string }>(sql`
         select public.crear_turno_panel(
-          ${d.profesional_id}, ${d.servicio_id},
-          ${localADate(d.fecha, d.hora, sesion.negocio.zona_horaria).toISOString()}::timestamptz,
+          ${d.profesional_id}, ${d.servicio_id}, ${inicio}::timestamptz,
           ${d.cliente_nombre}, ${d.cliente_telefono}, ${d.cliente_email ?? null}, ${d.notas ?? null}
         ) as id`),
     );
@@ -144,4 +172,29 @@ export async function crearTurnoPanel(_prev: EstadoAccion, formData: FormData): 
   if (nuevoId) sincronizarGoogleDespues(nuevoId);
   revalidatePath("/panel", "layout");
   return { ok: true, mensaje: "Turno agendado." };
+}
+
+/** Termina un turno fijo: cancela sus turnos por venir (sin avisar al cliente por mail). */
+export async function terminarTurnoFijo(id: string): Promise<EstadoAccion> {
+  const sesion = await sesionParaAccion();
+  if (!sesion) return { error: "No tenés permiso." };
+  if (!z.uuid().safeParse(id).success) return { error: "Datos inválidos." };
+
+  let cancelados: string[];
+  try {
+    const fila = await comoUsuario(sesion.userId, (tx) =>
+      tx.uno<{ ids: string[] }>(sql`select public.terminar_turno_fijo(${id}) as ids`),
+    );
+    cancelados = fila?.ids ?? [];
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+
+  for (const t of cancelados) sincronizarGoogleDespues(t);
+  revalidatePath("/panel", "layout");
+  const n = cancelados.length;
+  return {
+    ok: true,
+    mensaje: n ? `Turno fijo terminado. Se ${n === 1 ? "canceló 1 turno" : `cancelaron ${n} turnos`} por venir.` : "Turno fijo terminado.",
+  };
 }

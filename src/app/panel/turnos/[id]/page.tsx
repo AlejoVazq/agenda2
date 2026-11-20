@@ -10,6 +10,8 @@ import { env } from "@/lib/env";
 import { fechaLocalISO, formatFechaLarga, formatHora, formatPrecio } from "@/lib/fechas";
 import { linkWhatsApp } from "@/lib/whatsapp";
 import { ESTADOS_PAGO, ESTADOS_TURNO, type EstadoPago } from "@/lib/tipos";
+import { COLUMNAS_TURNO_FIJO, describirTurnoFijo, listarFechas, type TurnoFijo } from "@/lib/turnos-fijos";
+import { terminarTurnoFijo } from "../../agenda/acciones";
 import { marcarSenaDevuelta, marcarSenaPagada } from "../acciones";
 import { AccionesEstado, FormularioNotas, FormularioReprogramar } from "../formularios";
 
@@ -40,6 +42,13 @@ export default async function PaginaTurno({ params }: PageProps<"/panel/turnos/[
       join public.turnos t on t.id = x.id`),
   );
   if (!t) notFound();
+  const fijo = t.turno_fijo_id
+    ? await comoUsuario(userId, (tx) =>
+        tx.uno<TurnoFijo>(sql`
+          select ${COLUMNAS_TURNO_FIJO} from public.turnos_fijos f
+          where f.id = ${t.turno_fijo_id} and f.terminado_at is null`),
+      )
+    : null;
   const tz = negocio.zona_horaria;
   const activo = t.estado === "pendiente" || t.estado === "confirmado";
   const futuro = new Date(t.fin) > new Date();
@@ -103,6 +112,7 @@ export default async function PaginaTurno({ params }: PageProps<"/panel/turnos/[
               {t.sena_monto ? ` · ${formatPrecio(t.sena_monto)}` : ""}
             </Insignia>
           ) : null}
+          {t.turno_fijo_id ? <Insignia color="gris">Turno fijo</Insignia> : null}
           {t.google_event_id ? <Insignia color="gris">En Google Calendar</Insignia> : null}
         </div>
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -157,6 +167,29 @@ export default async function PaginaTurno({ params }: PageProps<"/panel/turnos/[
         ) : null}
         <AccionesEstado id={t.id} estado={t.estado} yaEmpezo={new Date(t.inicio) <= new Date()} />
       </Tarjeta>
+
+      {fijo ? (
+        <Tarjeta className="space-y-2">
+          <h2 className="font-bold">Turno fijo</h2>
+          <p className="text-sm text-zinc-600">
+            {describirTurnoFijo(fijo)}. Se agendan las próximas 8 semanas y se van sumando solos. Cancelar o mover este turno
+            no cambia los demás.
+          </p>
+          {fijo.fechas_salteadas.length ? (
+            <Aviso tipo="alerta">
+              No se pudo agendar el {listarFechas(fijo.fechas_salteadas)}: el horario estaba ocupado o había una ausencia.
+            </Aviso>
+          ) : null}
+          <BotonAccion
+            accion={terminarTurnoFijo.bind(null, fijo.id)}
+            variante="peligro"
+            confirmar="Sí, terminar y cancelar los que vienen"
+            pendiente="Terminando…"
+          >
+            Terminar turno fijo
+          </BotonAccion>
+        </Tarjeta>
+      ) : null}
 
       {mensajes.length && t.cliente ? (
         <Tarjeta>

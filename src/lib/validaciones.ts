@@ -249,6 +249,8 @@ export const esquemaTurnoPanel = z.object({
   cliente_telefono: telefono,
   cliente_email: emailOpcional,
   notas: textoOpcional(500),
+  /** 0 = una sola vez; 1 = todas las semanas; 2 = cada 2 semanas (turno fijo). */
+  repetir: z.enum(["0", "1", "2"]).default("0").transform(Number),
 });
 
 export const esquemaMoverTurno = z.object({

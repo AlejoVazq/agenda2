@@ -12,6 +12,8 @@ export type TurnoConDetalle = {
   notas: string | null;
   origen: "online" | "panel";
   pago_estado: EstadoPago | null;
+  /** Si salió de un turno fijo (semanal o cada 2 semanas). */
+  turno_fijo_id: string | null;
   nombre_reserva: string | null;
   email_reserva: string | null;
   profesional_id: string;
@@ -28,7 +30,7 @@ export type TurnoConDetalle = {
 
 /** Columnas y joins de un turno con su detalle. Corre con la sesión del usuario (RLS). */
 export const SELECT_TURNO: Fragmento = sql`
-  select t.id, t.inicio, t.fin, t.estado, t.precio, t.notas, t.origen, t.pago_estado,
+  select t.id, t.inicio, t.fin, t.estado, t.precio, t.notas, t.origen, t.pago_estado, t.turno_fijo_id,
          t.nombre_reserva, t.email_reserva, t.profesional_id, t.servicio_id,
          json_build_object('nombre', s.nombre, 'duracion_min', s.duracion_min) as servicio,
          json_build_object('nombre', p.nombre, 'color', p.color) as profesional,

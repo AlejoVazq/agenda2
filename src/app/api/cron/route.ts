@@ -16,7 +16,8 @@ import { enviarPlantillaWhatsApp } from "@/lib/whatsapp-api";
 //  3. Google Calendar: reintenta sincronizaciones y trae horarios ocupados.
 //  4. Avisa a los dueños que su suscripción está por vencer, venció o se bloqueó.
 //  5. Pide la opinión de los turnos que terminaron hace unas horas.
-//  6. Limpia contadores viejos de límites de uso.
+//  6. Completa los turnos fijos para que siempre haya 8 semanas agendadas.
+//  7. Limpia contadores viejos de límites de uso.
 export const maxDuration = 300;
 
 type PendienteMail = {
@@ -187,6 +188,10 @@ export async function GET(request: NextRequest) {
     whatsapp: await tarea("recordatorios whatsapp", recordatoriosWhatsApp),
     suscripciones: await tarea("avisos de suscripción", avisosSuscripcion),
     opiniones: await tarea("pedidos de opinión", pedidosResena),
+    // Antes que Google: los turnos nuevos se suben en esta misma corrida.
+    turnosFijos: await tarea("turnos fijos", async () =>
+      (await comoServidor((tx) => tx.uno<{ n: number }>(sql`select public.completar_turnos_fijos() as n`)))?.n ?? 0,
+    ),
     googleOcupados: google ? await tarea("google ocupados", importarOcupadosTodos) : { omitido: true },
     googleTurnos: google ? await tarea("google turnos", () => sincronizarPendientes(100)) : { omitido: true },
     limpieza: await tarea("limpieza", async () => {

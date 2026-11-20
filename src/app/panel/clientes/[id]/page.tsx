@@ -9,6 +9,8 @@ import { formatFechaCorta, formatHora, formatPrecio } from "@/lib/fechas";
 import { comoUsuario, sql } from "@/lib/db";
 import { ESTADOS_TURNO, type Cliente, type EstadoTurno } from "@/lib/tipos";
 import { linkWhatsApp } from "@/lib/whatsapp";
+import { COLUMNAS_TURNO_FIJO, describirTurnoFijo, listarFechas, type TurnoFijo } from "@/lib/turnos-fijos";
+import { terminarTurnoFijo } from "../../agenda/acciones";
 import { borrarCliente, quitarLimiteCliente } from "../acciones";
 import { FormularioCliente } from "./formulario";
 
@@ -31,7 +33,7 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
   const { negocio, userId } = await requerirDueno();
   if (!z.uuid().safeParse(id).success) notFound();
 
-  const [c, turnos, limite] = await comoUsuario(userId, (tx) =>
+  const [c, turnos, limite, fijos] = await comoUsuario(userId, (tx) =>
     Promise.all([
       tx.uno<Cliente & { created_at: string; ausencias_perdonadas_at: string | null }>(sql`
         select id, nombre, telefono, email, notas, created_at, ausencias_perdonadas_at
@@ -48,6 +50,13 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
         limit 100`),
       // Misma regla que crear_reserva: cruza celular y mail, sin las perdonadas.
       tx.uno<{ n: number }>(sql`select public.inasistencias_que_limitan(${id}) as n`),
+      tx.varios<TurnoFijo & { servicio: string; profesional: string }>(sql`
+        select ${COLUMNAS_TURNO_FIJO}, s.nombre as servicio, p.nombre as profesional
+        from public.turnos_fijos f
+        join public.servicios s on s.id = f.servicio_id
+        join public.profesionales p on p.id = f.profesional_id
+        where f.cliente_id = ${id} and f.terminado_at is null
+        order by f.created_at`),
     ]),
   );
   if (!c) notFound();
@@ -101,6 +110,38 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
         </Aviso>
       ) : null}
 
+      {fijos.length ? (
+        <Tarjeta>
+          <h2 className="mb-1 font-bold">Turnos fijos</h2>
+          <p className="mb-3 text-sm text-zinc-600">Se agendan las próximas 8 semanas y se van sumando solos.</p>
+          <ul className="divide-y divide-zinc-100">
+            {fijos.map((f) => (
+              <li key={f.id} className="space-y-2 py-3 first:pt-0 last:pb-0">
+                <div className="text-sm">
+                  <p className="font-medium">{describirTurnoFijo(f)}</p>
+                  <p className="text-zinc-500">
+                    {f.servicio} · {f.profesional}
+                  </p>
+                </div>
+                {f.fechas_salteadas.length ? (
+                  <Aviso tipo="alerta">
+                    No se pudo agendar el {listarFechas(f.fechas_salteadas)}: el horario estaba ocupado o había una ausencia.
+                  </Aviso>
+                ) : null}
+                <BotonAccion
+                  accion={terminarTurnoFijo.bind(null, f.id)}
+                  variante="peligro"
+                  confirmar="Sí, terminar y cancelar los que vienen"
+                  pendiente="Terminando…"
+                >
+                  Terminar turno fijo
+                </BotonAccion>
+              </li>
+            ))}
+          </ul>
+        </Tarjeta>
+      ) : null}
+
       <Tarjeta>
         <h2 className="mb-4 font-bold">Datos</h2>
         <FormularioCliente cliente={c} />
@@ -140,7 +181,7 @@ export default async function PaginaCliente({ params }: PageProps<"/panel/client
           Se borran sus datos de contacto y las notas. Sus turnos quedan en la agenda y en las estadísticas con su nombre y
           lo que pagó.
           {turnos.some((t) => (t.estado === "pendiente" || t.estado === "confirmado") && t.inicio > ahora)
-            ? " Tiene turnos por venir: cancelalos primero."
+            ? ` Tiene turnos por venir: cancelalos primero${fijos.length ? " (y terminá sus turnos fijos)" : ""}.`
             : ""}
         </p>
         <BotonAccion

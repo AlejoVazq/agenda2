@@ -251,9 +251,9 @@ export function Agenda(props: Props) {
             servicios={servicios}
             asignaciones={asignaciones}
             inicial={nuevo}
-            onListo={() => {
+            onListo={(mensaje) => {
               setNuevo(null);
-              setAviso({ tipo: "exito", texto: "Turno agendado." });
+              setAviso({ tipo: "exito", texto: mensaje ?? "Turno agendado." });
               refrescar();
             }}
           />
@@ -273,6 +273,7 @@ export function Agenda(props: Props) {
             <div className="flex flex-wrap items-center gap-2">
               <Insignia color={COLOR_ESTADO[turno.estado]}>{ESTADOS_TURNO[turno.estado]}</Insignia>
               {turno.origen === "online" ? <Insignia color="violeta">Reserva online</Insignia> : null}
+              {turno.turno_fijo_id ? <Insignia color="gris">Turno fijo</Insignia> : null}
             </div>
             <dl className="space-y-2 text-sm">
               <Fila titulo="Cuándo">
