@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
+import { ConPlataOculta, OjitoPlata, Plata } from "@/components/plata";
 import { cx, EncabezadoPagina, Tarjeta, Vacio } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
 import { fechaLocalISO, formatPrecio, localADate, sumarDias } from "@/lib/fechas";
@@ -60,10 +62,12 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
   const periodo: Periodo = typeof p === "string" && Object.hasOwn(PERIODOS, p) ? (p as Periodo) : "mes";
   const [desde, hasta] = rango(periodo, negocio.zona_horaria);
 
-  const { profesionales, socios } = await comoUsuario(userId, async (tx) => ({
+  // Solo las agendas que ve: la titular todas; un socio, la suya y las de empleados.
+  const { profesionales, socios, titular } = await comoUsuario(userId, async (tx) => ({
     profesionales: await tx.varios<{ id: string; nombre: string; color: string }>(sql`
       select id, nombre, color from public.profesionales
-      where negocio_id = ${negocio.id} order by activo desc, nombre`),
+      where negocio_id = ${negocio.id} and public.ve_agenda(negocio_id, id) order by activo desc, nombre`),
+    titular: (await tx.uno<{ t: boolean }>(sql`select public.es_titular(${negocio.id}) as t`))?.t ?? false,
     socios: (await tx.uno<{ n: number }>(sql`
       select count(*)::int as n from public.perfiles where negocio_id = ${negocio.id} and rol = 'dueno'`))?.n ?? 1,
   }));
@@ -98,13 +102,17 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
   const ausentes = e ? e.total - e.cancelados - e.activos : 0;
 
   return (
+    <ConPlataOculta>
     <div className="max-w-5xl space-y-6">
       <EncabezadoPagina
+        acciones={<OjitoPlata />}
         titulo="Estadísticas"
         descripcion={
           profesional
             ? `Cómo viene la agenda de ${profesional.nombre}. Incluye los turnos ya agendados del período.`
-            : "Cómo viene tu negocio. Incluye los turnos ya agendados del período."
+            : titular
+              ? "Cómo viene tu negocio. Incluye los turnos ya agendados del período."
+              : "Cómo vienen tu agenda y las de tus empleados. Incluye los turnos ya agendados del período."
         }
       />
 
@@ -128,7 +136,7 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
 
       {profesionales.length > 1 ? (
         <nav className="flex flex-wrap gap-2" aria-label="Profesional">
-          {[{ id: "todos", nombre: "Todos", color: null as string | null }, ...profesionales].map((x) => {
+          {[{ id: "todos", nombre: titular ? "Todo el negocio" : "Lo mío y empleados", color: null as string | null }, ...profesionales].map((x) => {
             const actual = x.id === (profesional?.id ?? "todos");
             return (
               <Link
@@ -156,7 +164,7 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Dato titulo="Turnos" valor={String(e.activos)} detalle={`${e.total} reservados en total${ausentes ? ` · ${ausentes} no asistieron` : ""}`} />
-            <Dato titulo="Facturación estimada" valor={formatPrecio(e.ingresos) ?? "$ 0"} detalle={
+            <Dato titulo="Facturación estimada" valor={<Plata texto={formatPrecio(e.ingresos) ?? "$ 0"} />} detalle={
                 e.sin_precio
                   ? `Confirmados y atendidos · ${e.sin_precio} ${e.sin_precio === 1 ? "turno" : "turnos"} sin precio cargado`
                   : "Confirmados y atendidos"
@@ -171,7 +179,7 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
           </div>
           {Number(e.senas) > 0 ? (
             <p className="text-sm text-zinc-600">
-              Señas cobradas por Mercado Pago en el período: <strong>{formatPrecio(e.senas)}</strong>
+              Señas cobradas por Mercado Pago en el período: <strong><Plata texto={formatPrecio(e.senas)} /></strong>
             </p>
           ) : null}
 
@@ -206,10 +214,11 @@ export default async function PaginaEstadisticas({ searchParams }: PageProps<"/p
         </>
       )}
     </div>
+    </ConPlataOculta>
   );
 }
 
-function Dato({ titulo, valor, detalle }: { titulo: string; valor: string; detalle: string }) {
+function Dato({ titulo, valor, detalle }: { titulo: string; valor: ReactNode; detalle: string }) {
   return (
     <Tarjeta className="p-4 sm:p-5">
       <p className="text-sm font-medium text-zinc-600">{titulo}</p>
@@ -225,7 +234,7 @@ function Barras({ filas }: { filas: { etiqueta: string; valor: number; detalle?:
   return (
     <ul className="space-y-3">
       {filas.map((f) => (
-        <li key={f.etiqueta} title={`${f.etiqueta}: ${f.valor} turnos${f.detalle ? ` · ${f.detalle}` : ""}`}>
+        <li key={f.etiqueta} title={`${f.etiqueta}: ${f.valor} turnos`}>
           <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
             <span className="flex min-w-0 items-center gap-2 truncate font-medium text-tinta">
               {f.color ? <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: f.color }} aria-hidden /> : null}
@@ -233,7 +242,12 @@ function Barras({ filas }: { filas: { etiqueta: string; valor: number; detalle?:
             </span>
             <span className="shrink-0 tabular-nums text-zinc-600">
               {f.valor}
-              {f.detalle ? <span className="text-zinc-400"> · {f.detalle}</span> : null}
+              {f.detalle ? (
+                <span className="text-zinc-400">
+                  {" · "}
+                  <Plata texto={f.detalle} />
+                </span>
+              ) : null}
             </span>
           </div>
           <div className="h-2 rounded-full bg-zinc-100">

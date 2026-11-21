@@ -15,7 +15,8 @@ export default async function PaginaBloqueos() {
   const [profesionales, lista] = await comoUsuario(userId, (tx) =>
     Promise.all([
       tx.varios<Pick<Profesional, "id" | "nombre">>(sql`
-        select id, nombre from public.profesionales where negocio_id = ${negocio.id} order by orden, nombre`),
+        select id, nombre from public.profesionales
+        where negocio_id = ${negocio.id} and public.ve_agenda(negocio_id, id) order by orden, nombre`),
       // RLS: el empleado solo recibe los suyos. Los ocupados que vienen de Google
       // se administran desde el propio calendario.
       tx.varios<Bloqueo>(sql`

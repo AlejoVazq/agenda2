@@ -33,7 +33,7 @@ export default async function PaginaIntegraciones({ searchParams }: PageProps<"/
     Promise.all([
       tx.varios<{ id: string; nombre: string; color: string }>(sql`
         select id, nombre, color from public.profesionales
-        where activo ${esDueno ? sql`` : sql`and id = ${perfil.profesional_id ?? null}::uuid`}
+        where activo and public.ve_agenda(negocio_id, id)
         order by orden, nombre`),
       // RLS: el dueño ve todas; un empleado, solo su Google Calendar.
       tx.varios<Integracion>(sql`

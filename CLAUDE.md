@@ -27,7 +27,7 @@ App de agenda y reservas online de turnos para negocios de servicios en Argentin
 | `npm run build` / `npm start` | Build y servidor de producción |
 | `npm run typecheck` | `next typegen` + `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm run test:db` | 75 pruebas de migraciones, roles, RLS, suscripciones y admin con PGlite |
+| `npm run test:db` | 76 pruebas de migraciones, roles, RLS, suscripciones y admin con PGlite |
 | `npm run db:migrar` | Aplica migraciones pendientes (usa `DATABASE_URL_MIGRAR`) |
 | `npm run db:seed` / `db:reset` | Datos demo / borrar todo y volver a migrar + seed (solo contra una base local) |
 | `npm run admin -- agregar <mail>` | Hace admin de la plataforma a una cuenta (también `listar`, `quitar`, `quitar-2fa`). Usa `DATABASE_URL_MIGRAR` |
@@ -54,6 +54,8 @@ Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en 
 - Reglas de reserva online: email obligatorio, 1 turno por fecha por mail, máx. 3 futuros por local (mail o celular), con 3 inasistencias solo 1 a la vez (el dueño lo quita con "Quitar límite"). Cancelados no cuentan; el panel no tiene límites. Los límites comparan el mail con `public.clave_email` (sin `+etiqueta`; en Gmail, sin puntos). Cancelar online: hasta el plazo del negocio o, si es más tarde, dentro de los 15 minutos de haber reservado (`public.cancelable_hasta`). Límite por IP (hash) en `src/lib/limites.ts`.
 - **Borrar un cliente** (migración 0009, `public.borrar_cliente`, solo el dueño): se borra la ficha (contacto y notas) pero sus turnos quedan en la agenda y las estadísticas con `nombre_reserva` y el precio, sin celular ni mail; `turnos.cliente_id` queda en null (por eso las consultas que leen turnos usan `left join` a clientes). No se puede si tiene turnos por venir.
 - **Socios** (migración 0010, 2026-11-17): un negocio puede tener varios `dueno` (p. ej. dos peluqueros que comparten local pero facturan cada uno lo suyo). Se invitan desde `/panel/equipo` eligiendo "Socio/a" (mismo link de acceso que un empleado), cada uno con su agenda. El titular es el dueño más antiguo: solo él quita socios; a un socio que ya entró no se le genera link (usa "Olvidé mi contraseña"). `/panel/estadisticas?profesional=<id|todos>` filtra todos los números por agenda (con socios, cada uno arranca viendo la suya). Los mails de la membresía van a todos los dueños; los de reservas, a cada socio solo los de su agenda y los de agendas que no son de otro socio. La lista de clientes sigue siendo una sola.
+- **Agendas por jerarquía** (migración 0017, 2026-11-21): el **titular** (dueño más antiguo, `public.es_titular`) ve todas las agendas; un **socio**, la suya y las que no son de ningún dueño (empleados y profesionales sin usuario); un empleado, la suya. Lo decide `public.ve_agenda(negocio, profesional)`, usada por RLS de `turnos`, `turnos_fijos`, `bloqueos`, escrituras de `horarios_profesional` e `integraciones`, y por `crear_turno_panel`, `crear_turno_fijo` y `terminar_turno_fijo`. Las estadísticas se filtran solas (security invoker); para un socio, "Todos" es "Lo mío y empleados". Los listados de profesionales del panel (agenda, turnos, ausencias, estadísticas, integraciones) filtran con `ve_agenda`. Sigue compartido: servicios, profesionales, clientes (la ficha muestra solo turnos visibles; el límite de inasistencias cuenta todo el local) y Mi negocio. En `/panel/estadisticas` los montos arrancan tapados con un ojito (`src/components/plata.tsx`, recordado en localStorage).
+- **Foto de profesional** (migración 0017, `src/lib/foto-profesional.ts`): tabla `profesional_fotos` (como los logos: solo el servidor, ≤512 KB). La suben los dueños en Profesionales → persona; se sirve en `/panel/profesionales/[id]/foto` solo a miembros del negocio y se ve **solo en el panel** (Profesionales y Accesos). El achicado en el navegador está en `src/lib/achicar-imagen.ts` (también lo usa el logo).
 - Celulares normalizados (`normalizarTelefono` en TS y `normalizar_telefono` en SQL).
 - Turno del cliente: `/t/[token]` (64 hex, `noindex`), con cancelación, `.ics` y pago.
 - Secretos de terceros (tokens de Google y MP) cifrados AES-256-GCM con `INTEGRACIONES_CLAVE` en `integraciones_secretos` (solo el rol del servidor).
@@ -88,7 +90,7 @@ Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en 
 - Mail de contacto de `/privacidad`: `vaztechcontact@gmail.com`.
 - Publicado al 2026-11-12: migraciones 0001 a 0006 (suscripciones, `/admin` con admin ya cargado, identidad visual verde pino, logo por negocio) y el 404 real en `/n/[slug]` (082be58). El `revoke connect` en la base de EnSushi ya se hizo.
 - En producción hay **un solo negocio real: el del amigo peluquero** (desde 2026-11-18; cuidar sus datos: backup antes de cada deploy, nada destructivo). Los demás son pruebas del usuario; `pollobarber` **no se borra**, es el que usa para probar. No tocar EnSushi. No agregar otras funciones sin que el usuario lo pida.
-- Publicado al 2026-11-21: todo hasta la migración 0016 (reseñas, profesional primero, servicio de emergencia, teléfonos 2478, turnos fijos y precio/duración por profesional).
+- Publicado al 2026-11-21: todo hasta la migración 0017 (reseñas, profesional primero, servicio de emergencia, teléfonos 2478, turnos fijos, precio/duración por profesional, agendas por jerarquía, ojito y foto de profesionales).
 
 ## Pendiente (rumbo, al 2026-11-18)
 
@@ -100,7 +102,7 @@ Ir en este orden salvo que el usuario diga otra cosa.
    - ~~el negocio no recibe aviso cuando un cliente cancela~~: hecho el 2026-11-13 (`notificarCancelacionCliente`, mail al dueño y al profesional de esa agenda);
    - ~~con menos de 2 h de anticipación no se puede cancelar online~~: hecho el 2026-11-13, 15 minutos para arrepentirse;
    - ~~no hay botón para borrar un cliente~~: hecho el 2026-11-13 (migración 0009).
-4. **Ideas conversadas, sin hacer**: tiempos de espera en servicios de peluquería (tintura), login con Google (comentado en `better-auth.ts`).
+4. **Ideas conversadas, sin hacer**: tiempos de espera en servicios de peluquería (tintura), login con Google (comentado en `better-auth.ts`), **productos** (apartado en la reserva, después del servicio, para sumar productos al turno; a definir si el cliente solo los ve o los agrega al turno).
 5. **Integraciones sin probar con cuentas reales**: Google Calendar (conectar y pasar la verificación, `docs/verificacion-google.md`), WhatsApp Cloud API (opcional), Mercado Pago (apagado a propósito con `SENA_ACTIVA`).
 6. **Mantenimiento**: copiar los backups fuera del VPS cada tanto; borrar restos locales de Supabase (variables viejas en `.env.local`, carpeta `supabase/`, `agenda2-migracion-supabase.md` suelto en la raíz).
 

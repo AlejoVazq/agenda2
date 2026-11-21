@@ -26,7 +26,7 @@ export default async function PaginaAgenda({ searchParams }: PageProps<"/panel/a
     Promise.all([
       tx.varios<Pick<Profesional, "id" | "nombre" | "color">>(sql`
         select id, nombre, color from public.profesionales
-        where negocio_id = ${negocio.id} and activo order by orden, nombre`),
+        where negocio_id = ${negocio.id} and activo and public.ve_agenda(negocio_id, id) order by orden, nombre`),
       tx.varios<Pick<Servicio, "id" | "nombre" | "duracion_min">>(sql`
         select id, nombre, duracion_min from public.servicios
         where negocio_id = ${negocio.id} and activo order by orden, nombre`),

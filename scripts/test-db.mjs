@@ -1699,16 +1699,21 @@ await prueba("socios: segundo dueño, estadísticas por profesional y avisos a l
   const est = (usuario, prof) =>
     como(usuario, async () => (await uno(`select public.estadisticas_negocio(${rango}, $1::uuid) as e`, [prof])).e);
 
-  const todos = await est("sol", null);
-  assert.deepEqual(todos, await est("ana", null), "los dos socios ven lo mismo");
-  const partes = await Promise.all([profAna, profEva, profSol].map((p) => est("sol", p)));
+  // La titular (Ana) ve todo; la socia (Sol), lo suyo y lo de la empleada, no lo de Ana.
+  const todos = await est("ana", null);
+  const partes = await Promise.all([profAna, profEva, profSol].map((p) => est("ana", p)));
   assert.equal(partes.reduce((s, e) => s + e.total, 0), todos.total);
   assert.equal(partes.reduce((s, e) => s + Number(e.ingresos), 0), Number(todos.ingresos));
   const deEva = partes[1];
-  assert.ok(deEva.total > 0);
+  assert.ok(partes[0].total > 0 && deEva.total > 0);
   assert.ok(deEva.por_profesional.every((p) => p.nombre === "Eva"));
   assert.equal(partes[2].total, 0, "Sol todavía no tiene turnos");
   assert.ok(deEva.clientes_nuevos <= todos.clientes_nuevos);
+  const deSol = await est("sol", null);
+  assert.equal(deSol.total, deEva.total + partes[2].total, "Sol: lo suyo y lo de Eva");
+  assert.ok(deSol.por_profesional.every((p) => p.nombre !== "Ana"));
+  assert.equal((await est("sol", profAna)).total, 0, "Sol no ve la agenda de Ana");
+  assert.deepEqual(await est("sol", profEva), deEva);
   // Sin el tercer parámetro, como antes.
   const sinFiltro = await como("ana", async () => (await uno(`select public.estadisticas_negocio(${rango}) as e`)).e);
   assert.deepEqual(sinFiltro, todos);
@@ -1719,6 +1724,65 @@ await prueba("socios: segundo dueño, estadísticas por profesional y avisos a l
   await q("update public.negocios set prueba_hasta = now() + interval '1 day 12 hours', pagado_hasta = null, suspendido_at = null where id = $1", [negA]);
   const avisos = (await servicio("select * from plataforma.reclamar_avisos_suscripcion()")).filter((a) => a.negocio_id === negA);
   assert.deepEqual(avisos.map((a) => [a.tipo, a.dueno_email]), [["por_vencer", "ana@test.com"], ["por_vencer", "sol@test.com"]]);
+  await q("update public.negocios set prueba_hasta = now() + interval '7 days' where id = $1", [negA]);
+});
+
+await prueba("socios: agendas por jerarquía (titular todo, socia lo suyo y lo de empleados)", async () => {
+  const profSol = (await uno("select profesional_id as id from public.perfiles where id = $1", [USUARIOS.sol])).id;
+  const TZ = "America/Argentina/Buenos_Aires";
+  const enHora = async (h) => (await uno("select (($1::date + 28 + $2::time) at time zone $3) as t", [lunes, h, TZ])).t;
+  const ve = (usuario, sql, params) => como(usuario, () => q(sql, params));
+  const visibles = async (usuario) =>
+    new Set((await ve(usuario, "select distinct profesional_id from public.turnos where negocio_id = $1", [negA])).map((t) => t.profesional_id));
+
+  // Un turno en la agenda de Sol, cargado por ella.
+  const deSol = await como("sol", async () =>
+    (await uno("select public.crear_turno_panel($1, $2, $3, 'De Sol', '1177770001') as id", [profSol, servA, await enHora("09:00")])).id,
+  );
+  // Y uno en la de Eva, cargado por Sol (puede: es de una empleada).
+  await como("sol", async () => uno("select public.crear_turno_panel($1, $2, $3, 'Para Eva', '1177770002') as id", [profEva, servA, await enHora("10:00")]));
+
+  const deAna = await visibles("ana");
+  assert.ok(deAna.has(profAna) && deAna.has(profEva) && deAna.has(profSol), "Ana ve todo");
+  const vistosPorSol = await visibles("sol");
+  assert.ok(!vistosPorSol.has(profAna) && vistosPorSol.has(profEva) && vistosPorSol.has(profSol), "Sol no ve a Ana");
+  assert.deepEqual(
+    (await ve("sol", "select public.ve_agenda($1, $2) as a, public.ve_agenda($1, $3) as b, public.es_titular($1) as t", [negA, profAna, profEva]))[0],
+    { a: false, b: true, t: false },
+  );
+  assert.equal((await ve("ana", "select public.es_titular($1) as t", [negA]))[0].t, true);
+
+  // Sol no carga, mueve ni bloquea en la agenda de Ana.
+  await como("sol", async () =>
+    falla(q("select public.crear_turno_panel($1, $2, $3, 'X Y', '1177770003')", [profAna, servA, await enHora("11:00")]), /SIN_PERMISO/, "turno en agenda de Ana"),
+  );
+  await como("sol", async () =>
+    falla(q("select * from public.crear_turno_fijo($1, $2, $3, 1, 'X Y', '1177770003')", [profAna, servA, await enHora("11:00")]), /SIN_PERMISO/, "fijo en agenda de Ana"),
+  );
+  await como("sol", () => falla(q("update public.turnos set profesional_id = $1 where id = $2", [profAna, deSol]), /row-level security/, "mover a la agenda de Ana"));
+  const { n } = await como("sol", () => uno("with x as (update public.turnos set notas = 'x' where profesional_id = $1 returning 1) select count(*)::int as n from x", [profAna]));
+  assert.equal(n, 0, "no toca turnos de Ana");
+  await como("sol", async () =>
+    falla(
+      q("insert into public.bloqueos (negocio_id, profesional_id, inicio, fin) values ($1, $2, $3, $3::timestamptz + interval '1 hour')", [negA, profAna, await enHora("12:00")]),
+      /row-level security/,
+      "ausencia en agenda de Ana",
+    ),
+  );
+  await como("sol", () =>
+    falla(q("select public.guardar_horarios($1, '[{\"dia_semana\": 3, \"desde\": \"09:00\", \"hasta\": \"12:00\"}]'::jsonb)", [profAna]), /row-level security/, "horario de Ana"),
+  );
+  assert.ok((await uno("select count(*)::int as n from public.horarios_profesional where profesional_id = $1", [profAna])).n > 0, "el horario de Ana sigue");
+
+  // Ana sí ve y puede tocar lo de Sol.
+  const { n: n2 } = await como("ana", () => uno("with x as (update public.turnos set notas = 'ok' where id = $1 returning 1) select count(*)::int as n from x", [deSol]));
+  assert.equal(n2, 1);
+
+  // El límite de inasistencias es de todo el local, también para Sol.
+  const cli = (await uno("select cliente_id from public.turnos where id = $1", [deSol])).cliente_id;
+  assert.equal(typeof (await como("sol", () => uno("select public.inasistencias_que_limitan($1) as n", [cli]))).n, "number");
+
+  await q("delete from public.turnos where negocio_id = $1 and nombre_reserva in ('De Sol', 'Para Eva')", [negA]);
 });
 
 await prueba("apariencia: color de la página y portada (solo el servidor toca la imagen)", async () => {

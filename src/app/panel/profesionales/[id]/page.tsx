@@ -7,7 +7,9 @@ import { requerirDueno } from "@/lib/auth";
 import { comoUsuario, sql } from "@/lib/db";
 import { formatDuracion, formatPrecio } from "@/lib/fechas";
 import type { Horario, Profesional } from "@/lib/tipos";
+import { versionesFotos, urlFoto } from "@/lib/foto-profesional";
 import { EditorHorarios, EliminarProfesional, FormularioProfesional } from "../formularios";
+import { FotoProfesional } from "./foto";
 
 export const metadata: Metadata = { title: "Profesional" };
 
@@ -19,7 +21,9 @@ export default async function PaginaProfesional({ params, searchParams }: PagePr
 
   const [profesional, servicios, horarios] = await comoUsuario(userId, (tx) =>
     Promise.all([
-      tx.uno<Profesional>(sql`select * from public.profesionales where id = ${id} and negocio_id = ${negocio.id}`),
+      tx.uno<Profesional & { ve: boolean }>(sql`
+        select *, public.ve_agenda(negocio_id, id) as ve from public.profesionales
+        where id = ${id} and negocio_id = ${negocio.id}`),
       // Lo que hace, con su precio y su duración (los propios o los del servicio).
       tx.varios<{ id: string; nombre: string; activo: boolean; precio: number | null; duracion_min: number; propio: boolean }>(sql`
         select s.id, s.nombre, s.activo, coalesce(ps.precio, s.precio) as precio,
@@ -33,6 +37,7 @@ export default async function PaginaProfesional({ params, searchParams }: PagePr
     ]),
   );
   if (!profesional) notFound();
+  const foto = urlFoto(profesional.id, (await versionesFotos(negocio.id)).get(profesional.id));
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -87,11 +92,18 @@ export default async function PaginaProfesional({ params, searchParams }: PagePr
           </Link>
           .
         </p>
-        <EditorHorarios profesionalId={profesional.id} horarios={horarios} />
+        {profesional.ve ? (
+          <EditorHorarios profesionalId={profesional.id} horarios={horarios} />
+        ) : (
+          <p className="text-sm text-zinc-600">Es la agenda de otro dueño: su horario lo cambia esa persona.</p>
+        )}
       </Tarjeta>
 
       <Tarjeta>
         <h2 className="mb-4 text-lg font-bold">Datos</h2>
+        <div className="mb-5">
+          <FotoProfesional profesionalId={profesional.id} nombre={profesional.nombre} color={profesional.color} url={foto} />
+        </div>
         <FormularioProfesional profesional={profesional} />
       </Tarjeta>
 

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { AvatarProfesional } from "@/components/avatar-profesional";
 import { EncabezadoPagina, Insignia, Tarjeta } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
 import { comoUsuario, sql } from "@/lib/db";
+import { urlFoto, versionesFotos } from "@/lib/foto-profesional";
 import type { Perfil, Profesional } from "@/lib/tipos";
 import { AccionesEmpleado, FormularioInvitacion } from "./formularios";
 
@@ -14,12 +16,14 @@ export default async function PaginaEquipo() {
       tx.varios<Perfil>(sql`
         select id, negocio_id, rol, nombre, profesional_id from public.perfiles
         where negocio_id = ${negocio.id} order by rol, created_at, id`),
-      tx.varios<Pick<Profesional, "id" | "nombre">>(sql`
-        select id, nombre from public.profesionales
+      tx.varios<Pick<Profesional, "id" | "nombre" | "color">>(sql`
+        select id, nombre, color from public.profesionales
         where negocio_id = ${negocio.id} and activo order by nombre`),
     ]),
   );
   const nombreProf = new Map(profesionales.map((p) => [p.id, p.nombre]));
+  const colorProf = new Map(profesionales.map((p) => [p.id, p.color]));
+  const fotos = await versionesFotos(negocio.id);
   const vinculados = new Set(usuarios.map((u) => u.profesional_id).filter(Boolean));
   const libres = profesionales.filter((p) => !vinculados.has(p.id));
   // Quien creó el negocio (el primer dueño): es el único que puede quitar a un socio.
@@ -36,6 +40,11 @@ export default async function PaginaEquipo() {
         {usuarios.map((u) => (
           <li key={u.id} className="space-y-3 px-4 py-3.5">
             <div className="flex items-center gap-3">
+              <AvatarProfesional
+                nombre={u.nombre}
+                color={(u.profesional_id && colorProf.get(u.profesional_id)) || "#7c8a83"}
+                foto={u.profesional_id ? urlFoto(u.profesional_id, fotos.get(u.profesional_id)) : null}
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-semibold">
                   {u.nombre} {u.id === yo.id ? <span className="font-normal text-zinc-500">(vos)</span> : null}

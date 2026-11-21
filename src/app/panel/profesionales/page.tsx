@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AvatarProfesional } from "@/components/avatar-profesional";
 import { BotonLink, EncabezadoPagina, Insignia, Vacio } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
 import { comoUsuario, sql } from "@/lib/db";
+import { urlFoto, versionesFotos } from "@/lib/foto-profesional";
 import { DIAS_SEMANA, type Profesional } from "@/lib/tipos";
 
 export const metadata: Metadata = { title: "Profesionales" };
 
 export default async function PaginaProfesionales() {
   const { negocio, userId } = await requerirDueno();
+  const fotos = await versionesFotos(negocio.id);
   const [lista, horarios, asignaciones] = await comoUsuario(userId, (tx) =>
     Promise.all([
       tx.varios<Profesional>(sql`select * from public.profesionales where negocio_id = ${negocio.id} order by orden, nombre`),
@@ -48,12 +51,7 @@ export default async function PaginaProfesionales() {
             return (
               <li key={p.id}>
                 <Link href={`/panel/profesionales/${p.id}`} className="flex items-center gap-3 px-4 py-3.5 hover:bg-zinc-50">
-                  <span
-                    className="grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold text-white"
-                    style={{ background: p.color }}
-                  >
-                    {p.nombre.slice(0, 1).toUpperCase()}
-                  </span>
+                  <AvatarProfesional nombre={p.nombre} color={p.color} foto={urlFoto(p.id, fotos.get(p.id))} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold">{p.nombre}</p>
                     <p className="truncate text-sm text-zinc-500">

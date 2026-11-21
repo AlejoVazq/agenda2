@@ -6,6 +6,9 @@ import { z } from "zod";
 import { sesionParaAccion } from "@/lib/auth";
 import { comoUsuario, esErrorPg, sql } from "@/lib/db";
 import { mensajeDeError } from "@/lib/errores";
+import { borrarFoto, FOTO_MAX_BYTES, guardarFoto } from "@/lib/foto-profesional";
+import { tipoDeImagen } from "@/lib/logo";
+import { MENSAJE_SOLO_LECTURA } from "@/lib/suscripcion";
 import { datosDeForm, erroresDeCampo, esquemaFranjas, esquemaProfesional } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
 
@@ -106,4 +109,50 @@ export async function eliminarProfesional(id: string): Promise<EstadoAccion> {
 
   revalidatePath("/panel/profesionales");
   redirect("/panel/profesionales");
+}
+
+// --- Foto (solo se ve en el panel) ------------------------------------------------------
+
+/** Sesión de un dueño que puede tocar a este profesional de su negocio (RLS). */
+async function duenoDelProfesional(id: string) {
+  const sesion = await sesionParaAccion({ soloDueno: true });
+  if (!sesion) return { error: SIN_PERMISO.error } as const;
+  if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA } as const;
+  if (!idValido(id)) return { error: "Profesional inválido." } as const;
+  const prof = await comoUsuario(sesion.userId, (tx) =>
+    tx.uno(sql`select id from public.profesionales where id = ${id} and negocio_id = ${sesion.negocio.id}`),
+  );
+  return prof ? { sesion } : ({ error: "Profesional inválido." } as const);
+}
+
+export async function subirFotoProfesional(id: string, formData: FormData): Promise<EstadoAccion> {
+  const r = await duenoDelProfesional(id);
+  if ("error" in r) return { error: r.error };
+
+  const archivo = formData.get("foto");
+  if (!(archivo instanceof File) || archivo.size === 0) return { error: "Elegí una imagen." };
+  if (archivo.size > FOTO_MAX_BYTES) return { error: "La imagen es muy pesada (máximo 512 KB)." };
+  const datos = Buffer.from(await archivo.arrayBuffer());
+  const tipo = tipoDeImagen(datos);
+  if (!tipo) return { error: "Formato no admitido: usá PNG, JPG o WebP." };
+
+  try {
+    await guardarFoto(id, tipo, datos);
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+  revalidatePath("/panel", "layout");
+  return { ok: true, mensaje: "Foto actualizada." };
+}
+
+export async function quitarFotoProfesional(id: string): Promise<EstadoAccion> {
+  const r = await duenoDelProfesional(id);
+  if ("error" in r) return { error: r.error };
+  try {
+    await borrarFoto(id);
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+  revalidatePath("/panel", "layout");
+  return { ok: true, mensaje: "Foto quitada." };
 }

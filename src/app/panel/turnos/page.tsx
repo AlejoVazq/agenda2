@@ -44,7 +44,8 @@ export default async function PaginaTurnos({ searchParams }: PageProps<"/panel/t
     esDueno
       ? comoUsuario(userId, (tx) =>
           tx.varios<{ id: string; nombre: string }>(sql`
-            select id, nombre from public.profesionales where negocio_id = ${negocio.id} order by nombre`),
+            select id, nombre from public.profesionales
+            where negocio_id = ${negocio.id} and public.ve_agenda(negocio_id, id) order by nombre`),
         )
       : Promise.resolve([] as { id: string; nombre: string }[]),
   ]);
