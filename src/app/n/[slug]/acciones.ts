@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { trasReservaFirme } from "@/lib/eventos";
@@ -8,7 +9,7 @@ import { dentroDelLimite } from "@/lib/limites";
 import { crearPagoSena } from "@/lib/mercadopago";
 import { comoAnonimo, comoServidor, sql } from "@/lib/db";
 import { mensajeDeError } from "@/lib/errores";
-import { datosDeForm, erroresDeCampo, esquemaConsultaHorarios, esquemaReserva } from "@/lib/validaciones";
+import { datosDeForm, erroresDeCampo, esquemaConsultaHorarios, esquemaReserva, esquemaResenaLibre } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
 
 // Acciones públicas: cualquiera puede llamarlas, así que todo se valida acá
@@ -113,4 +114,32 @@ export async function reservar(_prev: EstadoAccion, formData: FormData): Promise
 
   trasReservaFirme(fila.turno_id);
   redirect(`/t/${fila.token}?nueva=1`);
+}
+
+/**
+ * Opinión sin turno, desde la página del negocio. Contra el spam: un campo trampa que
+ * una persona no ve, 2 opiniones por día por negocio y 5 por hora en total por IP.
+ * Lo que pase igual, el dueño lo borra desde el panel.
+ */
+export async function opinarSinTurno(slug: string, _prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
+  const datos = esquemaResenaLibre.safeParse(datosDeForm(formData));
+  if (!datos.success) return { errores: erroresDeCampo(datos.error) };
+  const d = datos.data;
+  if (formData.get("sitio")) return { ok: true, mensaje: "¡Gracias por tu opinión!" };
+  if (!(await dentroDelLimite("resena-libre", 5, 3600)) || !(await dentroDelLimite(`resena-libre:${d.negocio_id}`, 2, 86400))) {
+    return { error: "Ya dejaste tu opinión hace poco. Gracias." };
+  }
+  try {
+    await comoServidor((tx) =>
+      tx.ejecutar(sql`
+        select public.dejar_resena_libre(${d.negocio_id}, ${d.nombre}, ${d.estrellas}, ${d.comentario}, ${d.profesional_id ?? null}::uuid)`),
+    );
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+  if (/^[a-z0-9-]{1,80}$/.test(slug)) {
+    revalidatePath(`/n/${slug}`);
+    revalidatePath(`/n/${slug}/opiniones`);
+  }
+  return { ok: true, mensaje: "¡Gracias por tu opinión! Ya se ve en la página." };
 }

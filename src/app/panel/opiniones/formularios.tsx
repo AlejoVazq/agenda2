@@ -7,7 +7,7 @@ import { Estrellas } from "@/components/estrellas";
 import { clasesBoton, cx, Insignia, Textarea } from "@/components/ui";
 import { formatFechaCorta } from "@/lib/fechas";
 import type { EstadoAccion } from "@/lib/tipos";
-import { activarResenas, ocultarComentario, responderResena } from "./acciones";
+import { activarResenas, eliminarResena, ocultarComentario, responderResena } from "./acciones";
 import type { OpinionDelPanel } from "./page";
 
 export function InterruptorOpiniones({ activas, slug }: { activas: boolean; slug: string }) {
@@ -24,8 +24,8 @@ export function InterruptorOpiniones({ activas, slug }: { activas: boolean; slug
                 Se ven en{" "}
                 <Link href={`/n/${slug}#opiniones`} target="_blank" className="text-marca-700 underline">
                   tu página de reservas
-                </Link>{" "}
-                y le pedimos la opinión a cada cliente por mail.
+                </Link>
+                , cualquiera puede dejar la suya ahí y le pedimos la opinión a cada cliente por mail.
               </>
             ) : (
               "Apagadas: no se muestran ni se piden nuevas. Las que ya hay se guardan."
@@ -59,6 +59,7 @@ export function InterruptorOpiniones({ activas, slug }: { activas: boolean; slug
 
 export function OpinionPanel({ opinion: o, zona }: { opinion: OpinionDelPanel; zona: string }) {
   const [respondiendo, setRespondiendo] = useState(false);
+  const [confirmandoBorrar, setConfirmandoBorrar] = useState(false);
   const [estadoOculto, setEstadoOculto] = useState<EstadoAccion>({});
   const [pendiente, iniciar] = useTransition();
   const { estado, accion, valor, intento } = useFormulario(async (prev: EstadoAccion, formData: FormData) => {
@@ -81,7 +82,9 @@ export function OpinionPanel({ opinion: o, zona }: { opinion: OpinionDelPanel; z
             )}
           </p>
           <p className="text-xs text-zinc-500">
-            {o.servicio} con {o.profesional} · turno del {formatFechaCorta(o.turno_inicio, zona)}
+            {o.turno_inicio
+              ? `${o.servicio} con ${o.profesional} · turno del ${formatFechaCorta(o.turno_inicio, zona)}`
+              : `Desde tu página${o.profesional ? ` · sobre ${o.profesional}` : ""} · ${formatFechaCorta(o.created_at, zona)}`}
           </p>
         </div>
         <Estrellas valor={o.estrellas} className="size-4.5" />
@@ -148,6 +151,34 @@ export function OpinionPanel({ opinion: o, zona }: { opinion: OpinionDelPanel; z
               {o.comentario_oculto ? "Mostrar comentario" : "Ocultar comentario"}
             </button>
           ) : null}
+          {confirmandoBorrar ? (
+            <span className="flex flex-wrap items-center gap-2 rounded-xl bg-red-50 px-3 py-1.5 text-sm text-red-800 ring-1 ring-red-100">
+              ¿Eliminarla? No se puede deshacer.
+              <button
+                type="button"
+                disabled={pendiente}
+                onClick={() => iniciar(async () => setEstadoOculto(await eliminarResena(o.id)))}
+                className="rounded-lg bg-red-600 px-2.5 py-1 font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+              >
+                {pendiente ? "Eliminando…" : "Sí, eliminar"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmandoBorrar(false)}
+                className="rounded-lg px-2 py-1 font-semibold text-red-800 hover:bg-red-100"
+              >
+                No
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmandoBorrar(true)}
+              className={cx(clasesBoton("fantasma", "sm"), "text-red-700 hover:bg-red-50")}
+            >
+              Eliminar opinión
+            </button>
+          )}
         </div>
       )}
     </article>

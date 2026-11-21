@@ -12,6 +12,7 @@ import { Estrellas } from "@/components/estrellas";
 import { formatPromedio, ListaOpiniones, ResumenOpiniones, textoCantidad } from "@/components/opiniones";
 import { RUBROS, type Rubro } from "@/lib/tipos";
 import { IconoWhatsApp } from "@/components/icono-whatsapp";
+import { OpinarSinTurno } from "./opinar";
 import { Reserva } from "./reserva";
 
 export async function generateMetadata({ params }: PageProps<"/n/[slug]">): Promise<Metadata> {
@@ -184,10 +185,12 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
             ) : (
               <div className="flex items-center gap-3 rounded-2xl bg-zinc-50 px-4 py-4 ring-1 ring-zinc-100">
                 <Estrellas valor={0} className="size-4" etiqueta="Sin opiniones todavía" />
-                <p className="text-sm text-zinc-600">Todavía no hay opiniones. Después de tu turno vas a poder dejar la tuya.</p>
+                <p className="text-sm text-zinc-600">Todavía no hay opiniones. ¡Contá cómo te fue y sé la primera persona en opinar!</p>
               </div>
             )}
-            <p className="mt-3 text-center text-xs text-zinc-500">Solo opinan clientes que tuvieron un turno acá.</p>
+            <div className="mt-4">
+              <OpinarSinTurno negocioId={negocio.id} slug={negocio.slug} profesionales={negocio.profesionales} />
+            </div>
           </section>
         ) : null}
         <footer className="mt-10 flex justify-center">

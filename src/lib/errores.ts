@@ -22,6 +22,7 @@ const MENSAJES: Record<string, string> = {
   FUERA_DE_PLAZO: "Ya pasó el plazo para cancelar online. Comunicate con el negocio.",
   RESENA_NO_DISPONIBLE: "Podés opinar de un turno que ya pasó, hasta 60 días después.",
   RESENA_DESACTIVADA: "Este negocio no está recibiendo opiniones por ahora.",
+  RESENA_NOMBRE: "Escribí tu nombre (entre 2 y 60 caracteres).",
 };
 
 type ErrorPg = { message?: string; code?: string };

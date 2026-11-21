@@ -9,8 +9,9 @@ import { MENSAJE_SOLO_LECTURA } from "@/lib/suscripcion";
 import { datosDeForm, erroresDeCampo, esquemaRespuestaResena } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
 
-// Opiniones de los clientes: el dueño responde, oculta un comentario o las apaga.
-// RLS limita a su negocio y los grants a respuesta y comentario_oculto (nunca las estrellas).
+// Opiniones de los clientes: el dueño responde, oculta un comentario, borra una
+// opinión basura o las apaga. RLS limita a su negocio y los grants de update a
+// respuesta y comentario_oculto (nunca las estrellas); borrar se puede (0018).
 
 async function sesionDueno() {
   const sesion = await sesionParaAccion({ soloDueno: true });
@@ -60,6 +61,22 @@ export async function ocultarComentario(id: string, ocultar: boolean): Promise<E
   }
   revalidar(s.sesion.negocio.slug);
   return { ok: true, mensaje: ocultar ? "Comentario oculto. El puntaje sigue contando." : "Comentario visible otra vez." };
+}
+
+export async function eliminarResena(id: string): Promise<EstadoAccion> {
+  if (!z.uuid().safeParse(id).success) return { error: "No encontramos esa opinión." };
+  const s = await sesionDueno();
+  if ("error" in s) return { error: s.error };
+  try {
+    const fila = await comoUsuario(s.sesion.userId, (tx) =>
+      tx.uno<{ id: string }>(sql`delete from public.resenas where id = ${id} returning id`),
+    );
+    if (!fila) return { error: "No encontramos esa opinión." };
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+  revalidar(s.sesion.negocio.slug);
+  return { ok: true, mensaje: "Opinión eliminada." };
 }
 
 export async function activarResenas(activas: boolean): Promise<EstadoAccion> {

@@ -19,10 +19,11 @@ export type OpinionDelPanel = {
   comentario: string | null;
   comentario_oculto: boolean;
   respuesta: string | null;
-  profesional: string;
-  servicio: string;
+  profesional: string | null;
+  servicio: string | null;
   cliente_id: string | null;
-  turno_inicio: string;
+  /** Null si se dejó desde la página, sin turno. */
+  turno_inicio: string | null;
   created_at: string;
 };
 
@@ -51,9 +52,9 @@ export default async function PaginaOpiniones({ searchParams }: PageProps<"/pane
       select r.id, r.autor, r.estrellas, r.comentario, r.comentario_oculto, r.respuesta,
              p.nombre as profesional, s.nombre as servicio, t.cliente_id, t.inicio as turno_inicio, r.created_at
       from public.resenas r
-      join public.profesionales p on p.id = r.profesional_id
-      join public.servicios s on s.id = r.servicio_id
-      join public.turnos t on t.id = r.turno_id
+      left join public.profesionales p on p.id = r.profesional_id
+      left join public.servicios s on s.id = r.servicio_id
+      left join public.turnos t on t.id = r.turno_id
       where r.negocio_id = ${negocio.id} and (${profesional}::uuid is null or r.profesional_id = ${profesional}::uuid)
       order by r.created_at desc, r.id
       limit ${POR_PAGINA} offset ${(pagina - 1) * POR_PAGINA}`);
@@ -84,7 +85,7 @@ export default async function PaginaOpiniones({ searchParams }: PageProps<"/pane
     <div className="space-y-6">
       <EncabezadoPagina
         titulo="Opiniones"
-        descripcion="Lo que dicen tus clientes después de su turno. Solo opina quien tuvo un turno, desde el link de su reserva."
+        descripcion="Lo que dicen tus clientes. Opina quien tuvo un turno (desde el link de su reserva) y cualquiera desde tu página. Si alguna es basura, eliminala."
       />
 
       <Tarjeta className="space-y-4">
@@ -116,7 +117,7 @@ export default async function PaginaOpiniones({ searchParams }: PageProps<"/pane
       {cantidad === 0 ? (
         <Vacio
           titulo={profesional ? "Sin opiniones para este profesional" : "Todavía no hay opiniones"}
-          descripcion="Unas horas después de cada turno le mandamos un mail al cliente para que cuente cómo le fue."
+          descripcion="Unas horas después de cada turno le mandamos un mail al cliente para que cuente cómo le fue. También pueden opinar desde tu página."
         />
       ) : (
         <>

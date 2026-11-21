@@ -62,9 +62,19 @@ export function ListaOpiniones({ resenas, negocio, tz }: { resenas: ResenaPublic
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                 <Estrellas valor={r.estrellas} className="size-3.5" />
-                <span className="text-xs text-zinc-500">
-                  {r.servicio} · con {r.profesional}
-                </span>
+                {r.servicio || r.profesional ? (
+                  <span className="text-xs text-zinc-500">
+                    {[r.servicio, r.profesional ? `con ${r.profesional}` : null].filter(Boolean).join(" · ")}
+                  </span>
+                ) : null}
+                {r.verificada ? (
+                  <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-marca-700">
+                    <svg viewBox="0 0 24 24" fill="none" className="size-3.5" aria-hidden>
+                      <path d="m5 12.5 4.5 4.5L19 7.5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Tuvo turno acá
+                  </span>
+                ) : null}
               </div>
               {r.comentario ? (
                 <p className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-zinc-700">{r.comentario}</p>

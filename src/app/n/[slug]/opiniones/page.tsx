@@ -8,6 +8,8 @@ import { getNegocioPublico } from "@/lib/publico";
 import { resenasPublicas, resumenResenas } from "@/lib/resenas";
 import { formatPromedio, ListaOpiniones, ResumenOpiniones, textoCantidad } from "@/components/opiniones";
 
+import { OpinarSinTurno } from "../opinar";
+
 const POR_PAGINA = 20;
 
 export async function generateMetadata({ params }: PageProps<"/n/[slug]/opiniones">): Promise<Metadata> {
@@ -48,11 +50,11 @@ export default async function PaginaOpiniones({ params, searchParams }: PageProp
           Volver a {negocio.nombre}
         </Link>
         <h1 className="mt-4 font-display text-3xl font-bold tracking-tight">Opiniones</h1>
-        <p className="mt-1 text-sm text-zinc-600">De clientes que tuvieron un turno en {negocio.nombre}.</p>
+        <p className="mt-1 text-sm text-zinc-600">Lo que cuentan los clientes de {negocio.nombre}.</p>
 
         <div className="mt-6 rounded-[2rem] bg-white p-5 shadow-suave ring-1 ring-zinc-200/60 sm:p-6">
           {resumen.promedio === null ? (
-            <p className="py-6 text-center text-sm text-zinc-600">Todavía no hay opiniones.</p>
+            <p className="pb-4 pt-2 text-center text-sm text-zinc-600">Todavía no hay opiniones.</p>
           ) : (
             <>
               <ResumenOpiniones resumen={resumen} />
@@ -61,6 +63,9 @@ export default async function PaginaOpiniones({ params, searchParams }: PageProp
               </div>
             </>
           )}
+          <div className={cx(resumen.promedio !== null && "mt-6 border-t border-zinc-100 pt-5")}>
+            <OpinarSinTurno negocioId={negocio.id} slug={negocio.slug} profesionales={negocio.profesionales} />
+          </div>
         </div>
 
         {paginas > 1 ? (

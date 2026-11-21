@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { comoServidor, sql } from "@/lib/db";
 
-// Reseñas (migración 0012). El portal es anónimo y el anónimo no lee tablas: se leen con
+// Reseñas (migraciones 0012 y 0018: también sin turno). El portal es anónimo y el anónimo no lee tablas: se leen con
 // el rol del servidor, y acá se decide qué se muestra (nunca un comentario oculto).
 
 export type PromedioResenas = { promedio: number; cantidad: number };
@@ -22,8 +22,11 @@ export type ResenaPublica = {
   estrellas: number;
   comentario: string | null;
   respuesta: string | null;
-  profesional: string;
-  servicio: string;
+  /** Null en una opinión sin turno que no eligió profesional. */
+  profesional: string | null;
+  servicio: string | null;
+  /** Viene de un turno (se dejó desde /t/[token]). */
+  verificada: boolean;
   created_at: string;
 };
 
@@ -38,7 +41,8 @@ export const resumenResenas = cache(async (negocioId: string): Promise<ResumenRe
              from generate_series(1, 5) e) as estrellas,
           (select jsonb_object_agg(profesional_id, jsonb_build_object('promedio', round(prom, 1), 'cantidad', cant))
              from (select profesional_id, avg(estrellas) as prom, count(*)::int as cant
-                   from public.resenas where negocio_id = n.id group by profesional_id) x) as profesionales
+                   from public.resenas where negocio_id = n.id and profesional_id is not null
+                   group by profesional_id) x) as profesionales
         from public.negocios n where n.id = ${negocioId}`),
     );
     if (!fila || !fila.activas) return VACIO;
@@ -69,11 +73,12 @@ export async function resenasPublicas(
       tx.varios<ResenaPublica>(sql`
         select r.id, r.autor, r.estrellas,
                case when r.comentario_oculto then null else r.comentario end as comentario,
-               r.respuesta, p.nombre as profesional, s.nombre as servicio, r.created_at
+               r.respuesta, p.nombre as profesional, s.nombre as servicio,
+               r.turno_id is not null as verificada, r.created_at
         from public.resenas r
         join public.negocios n on n.id = r.negocio_id and n.resenas_activas
-        join public.profesionales p on p.id = r.profesional_id
-        join public.servicios s on s.id = r.servicio_id
+        left join public.profesionales p on p.id = r.profesional_id
+        left join public.servicios s on s.id = r.servicio_id
         where r.negocio_id = ${negocioId}
           and (not ${soloTexto}::boolean or (r.comentario is not null and not r.comentario_oculto))
         order by r.created_at desc, r.id

@@ -304,6 +304,15 @@ export const esquemaResena = z.object({
   comentario: textoOpcional(600),
 });
 
+/** Opinión sin turno, desde la página del negocio. */
+export const esquemaResenaLibre = z.object({
+  negocio_id: z.uuid(),
+  nombre: texto(2, 60, "Tu nombre"),
+  estrellas: entero(1, 5, "La puntuación"),
+  comentario: textoOpcional(600),
+  profesional_id: z.preprocess((v) => (v === "" ? null : v), z.uuid().nullable().optional()),
+});
+
 export const esquemaRespuestaResena = z.object({
   id: z.uuid(),
   respuesta: textoOpcional(600),
