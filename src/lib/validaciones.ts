@@ -178,6 +178,30 @@ export const esquemaServicio = z
     message: "Poné el WhatsApp de quien hace el servicio",
   });
 
+const precioOpcional = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() !== "" ? parsearPrecio(v.trim()) : null),
+  z.number({ error: "Precio inválido" }).min(0, "El precio no puede ser negativo").max(99_999_999).nullable(),
+);
+
+/**
+ * Quién hace un servicio y con qué precio y duración. Del formulario: `hace_<id>`
+ * (casilla), `precio_<id>` y `duracion_<id>` (vacío = los del servicio).
+ */
+export function profesionalesDelServicio(formData: FormData, profesionalIds: string[]) {
+  const filas: { profesional_id: string; precio: number | null; duracion_min: number | null }[] = [];
+  const errores: Record<string, string[]> = {};
+  for (const id of profesionalIds) {
+    if (!formData.has(`hace_${id}`)) continue;
+    const precio = precioOpcional.safeParse(formData.get(`precio_${id}`));
+    const crudo = String(formData.get(`duracion_${id}`) ?? "").trim();
+    const duracion = crudo === "" ? { success: true as const, data: null } : entero(5, 600, "La duración").safeParse(crudo);
+    if (!precio.success) errores[`precio_${id}`] = [precio.error.issues[0]?.message ?? "Precio inválido"];
+    if (!duracion.success) errores[`duracion_${id}`] = [duracion.error.issues[0]?.message ?? "Duración inválida"];
+    if (precio.success && duracion.success) filas.push({ profesional_id: id, precio: precio.data, duracion_min: duracion.data });
+  }
+  return { filas, errores };
+}
+
 export const esquemaProfesional = z.object({
   nombre: texto(2, 80, "El nombre"),
   email: emailOpcional,

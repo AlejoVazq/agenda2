@@ -11,6 +11,8 @@ export type ServicioPublico = {
   /** Seña que se cobra al reservar (null = sin seña). */
   sena: number | null;
   profesional_ids: string[] | null;
+  /** Precio, duración y seña de cada profesional (los propios o los del servicio). */
+  por_profesional: Record<string, { precio: number | null; duracion_min: number; sena: number | null }> | null;
 };
 
 /** Servicio de emergencia: no se reserva, se coordina por WhatsApp. */

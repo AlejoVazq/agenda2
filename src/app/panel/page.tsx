@@ -46,7 +46,7 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
     pasos = [
       { texto: "Cargá tus servicios con duración y precio", hecho: (conteo?.servicios ?? 0) > 0, href: "/panel/servicios" },
       { texto: "Agregá a las personas que atienden", hecho: (conteo?.profesionales ?? 0) > 0, href: "/panel/profesionales" },
-      { texto: "Asigná qué servicios hace cada profesional", hecho: (conteo?.asignaciones ?? 0) > 0, href: "/panel/profesionales" },
+      { texto: "Elegí quién hace cada servicio", hecho: (conteo?.asignaciones ?? 0) > 0, href: "/panel/servicios" },
       { texto: "Definí los horarios de atención", hecho: (conteo?.horarios ?? 0) > 0, href: "/panel/profesionales" },
     ];
   }

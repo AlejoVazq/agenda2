@@ -42,43 +42,24 @@ export async function guardarProfesional(
 
   let nuevoId: string;
   try {
-    const fila = await comoUsuario(sesion.userId, (tx) =>
-      tx.uno<{ id: string }>(sql`
+    nuevoId = await comoUsuario(sesion.userId, async (tx) => {
+      const fila = await tx.uno<{ id: string }>(sql`
         insert into public.profesionales (negocio_id, nombre, email, color, activo)
         values (${sesion.negocio.id}, ${d.nombre}, ${d.email ?? null}, ${d.color}, ${d.activo})
-        returning id`),
-    );
-    nuevoId = fila!.id;
+        returning id`);
+      // Arranca haciendo todos los servicios activos, con lo general; se ajusta en cada servicio.
+      await tx.ejecutar(sql`
+        insert into public.profesional_servicio (negocio_id, profesional_id, servicio_id)
+        select ${sesion.negocio.id}, ${fila!.id}, s.id from public.servicios s
+        where s.negocio_id = ${sesion.negocio.id} and s.activo and not s.emergencia`);
+      return fila!.id;
+    });
   } catch (e) {
     return { error: mensajeDeError(e) };
   }
 
   revalidatePath("/panel/profesionales");
   redirect(`/panel/profesionales/${nuevoId}?nuevo=1`);
-}
-
-export async function guardarServiciosProfesional(
-  id: string,
-  _prev: EstadoAccion,
-  formData: FormData,
-): Promise<EstadoAccion> {
-  const sesion = await sesionParaAccion({ soloDueno: true });
-  if (!sesion) return SIN_PERMISO;
-  if (!idValido(id)) return { error: "Profesional inválido." };
-
-  const ids = z.array(z.uuid()).max(200).safeParse(formData.getAll("servicio_id"));
-  if (!ids.success) return { error: "Selección inválida." };
-
-  try {
-    await comoUsuario(sesion.userId, (tx) =>
-      tx.ejecutar(sql`select public.guardar_servicios_profesional(${id}, ${ids.data}::uuid[])`),
-    );
-  } catch (e) {
-    return { error: mensajeDeError(e) };
-  }
-
-  revalidatePath(`/panel/profesionales/${id}`);
-  return { ok: true, mensaje: "Servicios actualizados." };
 }
 
 export async function guardarHorarios(id: string, _prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {

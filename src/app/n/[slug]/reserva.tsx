@@ -86,6 +86,7 @@ export function Reserva({
         ? profesionalesDelServicio[0]!
         : CUALQUIERA
       : profesionalId;
+  const elegido = servicio ? valoresDe(servicio, profesionalEfectivo === CUALQUIERA ? null : profesionalEfectivo) : null;
   const serviciosVisibles =
     profesionalId && profesionalId !== CUALQUIERA
       ? negocio.servicios.filter((s) => s.profesional_ids?.includes(profesionalId))
@@ -173,6 +174,7 @@ export function Reserva({
       {(paso === "horario" || paso === "datos") && servicio ? (
         <Resumen
           servicio={servicio}
+          valores={elegido!}
           profesional={profesionalEfectivo === CUALQUIERA ? "Cualquier profesional" : (nombresProf.get(profesionalEfectivo) ?? "")}
           horario={horario}
           tz={tz}
@@ -250,7 +252,9 @@ export function Reserva({
             </p>
           ) : (
             <ul className="space-y-2.5">
-              {serviciosVisibles.map((s) => (
+              {serviciosVisibles.map((s) => {
+                const v = valoresDe(s, profesionalId === CUALQUIERA ? null : profesionalId);
+                return (
                 <li key={s.id}>
                   <button
                     onClick={() => elegirServicio(s)}
@@ -264,12 +268,12 @@ export function Reserva({
                           <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
                           <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                         </svg>
-                        {formatDuracion(s.duracion_min)}
+                        {textoDuracion(v)}
                       </p>
                     </div>
-                    {s.precio !== null ? (
+                    {v.precio !== null ? (
                       <p className="shrink-0 rounded-full bg-marca-50 px-3 py-1 text-sm font-bold tabular-nums text-marca-800">
-                        {formatPrecio(s.precio)}
+                        {textoPrecio(v)}
                       </p>
                     ) : null}
                     <span
@@ -282,7 +286,8 @@ export function Reserva({
                     </span>
                   </button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
           <Emergencias servicios={negocio.emergencias} />
@@ -392,7 +397,7 @@ export function Reserva({
             >
               <Input id="email" name="email" type="email" inputMode="email" autoComplete="email" defaultValue={valor("email")} required />
             </Campo>
-            {servicio.sena ? (
+            {elegido?.sena ? (
               <div className="flex gap-3 rounded-2xl border border-sky-100 bg-sky-50 p-4 text-sm text-sky-950">
                 <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-sky-600 text-white" aria-hidden>
                   <svg viewBox="0 0 24 24" fill="none" className="size-5">
@@ -401,13 +406,13 @@ export function Reserva({
                   </svg>
                 </span>
                 <p>
-                  Para confirmar el turno se pide una <strong>seña de {formatPrecio(servicio.sena)}</strong> con Mercado Pago.
+                  Para confirmar el turno se pide una <strong>seña de {formatPrecio(elegido.sena)}</strong> con Mercado Pago.
                   Te guardamos el horario {negocio.pago_plazo_min} minutos mientras pagás.
                 </p>
               </div>
             ) : null}
-            <BotonEnviar tamano="lg" className="w-full" pendiente={servicio.sena ? "Preparando el pago…" : "Reservando…"}>
-              {servicio.sena ? "Continuar al pago" : "Confirmar turno"}
+            <BotonEnviar tamano="lg" className="w-full" pendiente={elegido?.sena ? "Preparando el pago…" : "Reservando…"}>
+              {elegido?.sena ? "Continuar al pago" : "Confirmar turno"}
             </BotonEnviar>
             <p className="text-center text-xs text-zinc-500">
               {negocio.cancelacion_min_horas > 0
@@ -470,12 +475,14 @@ function Pasos({ paso, pasos: orden }: { paso: Paso; pasos: Paso[] }) {
 
 function Resumen({
   servicio,
+  valores,
   profesional,
   horario,
   tz,
   onCambiar,
 }: {
   servicio: ServicioPublico;
+  valores: ReturnType<typeof valoresDe>;
   profesional: string;
   horario: Horario | null;
   tz: string;
@@ -491,10 +498,10 @@ function Resumen({
       <div className="min-w-0 flex-1 text-sm">
         <p className="font-bold text-marca-950">{servicio.nombre}</p>
         <p className="text-marca-900/80">
-          {formatDuracion(servicio.duracion_min)}
-          {servicio.precio !== null ? ` · ${formatPrecio(servicio.precio)}` : ""} · {profesional}
+          {textoDuracion(valores)}
+          {valores.precio !== null ? ` · ${textoPrecio(valores)}` : ""} · {profesional}
         </p>
-        {servicio.sena ? <p className="text-marca-900/80">Seña: {formatPrecio(servicio.sena)}</p> : null}
+        {valores.sena ? <p className="text-marca-900/80">Seña: {formatPrecio(valores.sena)}</p> : null}
         {horario ? (
           <p className="mt-1 font-semibold text-marca-900 first-letter:uppercase">
             {formatFechaLarga(horario.inicio, tz)} · {formatHora(horario.inicio, tz)} h
@@ -551,4 +558,33 @@ function Cargando() {
       ))}
     </div>
   );
+}
+
+/**
+ * Precio, duración y seña de un servicio con un profesional. Sin profesional
+ * ("cualquiera"), si no todos cobran o tardan lo mismo, lo más bajo con "desde".
+ */
+function valoresDe(s: ServicioPublico, profesionalId: string | null) {
+  const propio = profesionalId ? s.por_profesional?.[profesionalId] : undefined;
+  if (propio) return { ...propio, precioDesde: false, duracionDesde: false };
+  const todos = Object.values(s.por_profesional ?? {});
+  if (todos.length === 0) return { precio: s.precio, duracion_min: s.duracion_min, sena: s.sena, precioDesde: false, duracionDesde: false };
+  const precios = todos.map((v) => v.precio).filter((p): p is number => p !== null);
+  const duraciones = todos.map((v) => v.duracion_min);
+  const precio = precios.length ? Math.min(...precios) : null;
+  return {
+    precio,
+    duracion_min: Math.min(...duraciones),
+    sena: new Set(todos.map((v) => v.sena)).size === 1 ? todos[0]!.sena : s.sena,
+    precioDesde: new Set(todos.map((v) => v.precio)).size > 1,
+    duracionDesde: new Set(duraciones).size > 1,
+  };
+}
+
+function textoPrecio(v: ReturnType<typeof valoresDe>) {
+  return v.precio === null ? null : `${v.precioDesde ? "desde " : ""}${formatPrecio(v.precio)}`;
+}
+
+function textoDuracion(v: ReturnType<typeof valoresDe>) {
+  return `${v.duracionDesde ? "desde " : ""}${formatDuracion(v.duracion_min)}`;
 }

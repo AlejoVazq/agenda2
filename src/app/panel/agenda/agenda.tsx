@@ -27,7 +27,7 @@ type Props = {
   miProfesionalId: string | null;
   profesionales: Pick<Profesional, "id" | "nombre" | "color">[];
   servicios: Pick<Servicio, "id" | "nombre" | "duracion_min">[];
-  asignaciones: { profesional_id: string; servicio_id: string }[];
+  asignaciones: { profesional_id: string; servicio_id: string; duracion_min: number }[];
   abrirNuevo: boolean;
   clienteNuevo?: ValoresIniciales["cliente"];
   nombreNegocio: string;

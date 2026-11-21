@@ -24,7 +24,7 @@ export function FormularioTurno({
 }: {
   profesionales: Pick<Profesional, "id" | "nombre">[];
   servicios: Pick<Servicio, "id" | "nombre" | "duracion_min">[];
-  asignaciones: { profesional_id: string; servicio_id: string }[];
+  asignaciones: { profesional_id: string; servicio_id: string; duracion_min: number }[];
   inicial: ValoresIniciales;
   onListo: (mensaje?: string) => void;
 }) {
@@ -37,7 +37,11 @@ export function FormularioTurno({
   const e = estado.errores ?? {};
 
   // Primero los servicios que hace el profesional elegido.
-  const hace = new Set(asignaciones.filter((a) => a.profesional_id === profesionalId).map((a) => a.servicio_id));
+  // Con su duración: la propia del profesional o la del servicio.
+  const duracionDe = new Map(
+    asignaciones.filter((a) => a.profesional_id === profesionalId).map((a) => [a.servicio_id, a.duracion_min]),
+  );
+  const hace = new Set(duracionDe.keys());
   const ordenados = [...servicios].sort((a, b) => Number(hace.has(b.id)) - Number(hace.has(a.id)));
 
   return (
@@ -60,7 +64,7 @@ export function FormularioTurno({
         <Select id="t-serv" name="servicio_id" defaultValue={valor("servicio_id", ordenados[0]?.id)} required>
           {ordenados.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.nombre} ({formatDuracion(s.duracion_min)}){hace.size && !hace.has(s.id) ? " · no lo hace" : ""}
+              {s.nombre} ({formatDuracion(duracionDe.get(s.id) ?? s.duracion_min)}){hace.size && !hace.has(s.id) ? " · no lo hace" : ""}
             </option>
           ))}
         </Select>

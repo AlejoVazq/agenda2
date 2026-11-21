@@ -30,8 +30,10 @@ export default async function PaginaAgenda({ searchParams }: PageProps<"/panel/a
       tx.varios<Pick<Servicio, "id" | "nombre" | "duracion_min">>(sql`
         select id, nombre, duracion_min from public.servicios
         where negocio_id = ${negocio.id} and activo order by orden, nombre`),
-      tx.varios<{ profesional_id: string; servicio_id: string }>(sql`
-        select profesional_id, servicio_id from public.profesional_servicio where negocio_id = ${negocio.id}`),
+      tx.varios<{ profesional_id: string; servicio_id: string; duracion_min: number }>(sql`
+        select ps.profesional_id, ps.servicio_id, coalesce(ps.duracion_min, s.duracion_min) as duracion_min
+        from public.profesional_servicio ps join public.servicios s on s.id = ps.servicio_id
+        where ps.negocio_id = ${negocio.id}`),
     ]),
   );
 

@@ -673,6 +673,79 @@ await prueba("turnos fijos: semanal y cada 2 semanas, salteos, cron, terminar y 
   await q("delete from public.bloqueos where profesional_id = $1", [profFijo]);
 });
 
+await prueba("servicio por profesional: precio y duración propios en horarios, reservas, panel y portal", async () => {
+  const TZ = "America/Argentina/Buenos_Aires";
+  const fecha = (await uno("select ($1::date + 21)::text as d", [lunes])).d;
+  const enHora = async (h) => (await uno("select (($1::date + $2::time) at time zone $3) as t", [fecha, h, TZ])).t;
+  const minutos = (t) => Math.round((new Date(t.fin) - new Date(t.inicio)) / 60000);
+  const { servX, profX } = await como("ana", async () => {
+    const servX = (await uno("insert into public.servicios (negocio_id, nombre, duracion_min, precio) values ($1, 'Barba', 30, 5000) returning id", [negA])).id;
+    const profX = (await uno("insert into public.profesionales (negocio_id, nombre) values ($1, 'Xavi') returning id", [negA])).id;
+    await q("select public.guardar_horarios($1, $2::jsonb)", [profX, JSON.stringify([{ dia_semana: 1, desde: "09:00", hasta: "18:00" }])]);
+    await q("select public.guardar_profesionales_servicio($1, $2::jsonb)", [
+      servX,
+      JSON.stringify([{ profesional_id: profAna, precio: null, duracion_min: null }, { profesional_id: profX, precio: 7000, duracion_min: 45 }]),
+    ]);
+    return { servX, profX };
+  });
+  const filas = [{ profesional_id: profX, precio: 1, duracion_min: null }];
+  await como("eva", () => falla(q("select public.guardar_profesionales_servicio($1, $2::jsonb)", [servX, JSON.stringify(filas)]), /SIN_PERMISO/, "empleada"));
+  await como("beto", () => falla(q("select public.guardar_profesionales_servicio($1, $2::jsonb)", [servX, JSON.stringify(filas)]), /SIN_PERMISO/, "otro negocio"));
+  await como("ana", () =>
+    falla(q("select public.guardar_profesionales_servicio($1, $2::jsonb)", [servX, JSON.stringify([{ profesional_id: profX, precio: -1 }])]), /check/, "precio negativo"),
+  );
+
+  // Horarios libres: cada uno con su duración.
+  const libres = await como("anon", () => q("select * from public.horarios_libres($1, $2, $3::date)", [negA, servX, fecha]));
+  const deX = libres.filter((h) => h.profesional_id === profX);
+  const deAna = libres.filter((h) => h.profesional_id === profAna);
+  assert.ok(deX.length && deAna.length);
+  assert.ok(deX.every((h) => minutos(h) === 45) && deAna.every((h) => minutos(h) === 30));
+
+  // Reserva con Xavi: su precio y su duración.
+  const r1 = await reservar("select * from public.crear_reserva($1, $2, $3, $4, 'Por Pro', '1166660001', 'porpro1@mail.com')", [negA, servX, profX, await enHora("09:00")]);
+  const t1 = await uno("select precio, inicio, fin from public.turnos where id = $1", [r1.turno_id]);
+  assert.equal(Number(t1.precio), 7000);
+  assert.equal(minutos(t1), 45);
+  // Con "cualquiera", el precio y el fin son los de quien queda asignado.
+  const r2 = await reservar("select * from public.crear_reserva($1, $2, null, $3, 'Por Pro', '1166660002', 'porpro2@mail.com')", [negA, servX, await enHora("16:00")]);
+  const t2 = await uno("select profesional_id, precio, inicio, fin from public.turnos where id = $1", [r2.turno_id]);
+  assert.deepEqual([Number(t2.precio), minutos(t2)], t2.profesional_id === profX ? [7000, 45] : [5000, 30]);
+
+  // Panel: Ana usa el general; Eva no lo tiene asignado y también usa el general.
+  const desdePanel = (prof, h, tel) =>
+    como("ana", async () => (await uno("select public.crear_turno_panel($1, $2, $3, 'Panel', $4) as id", [prof, servX, await enHora(h), tel])).id);
+  const p1 = await uno("select precio, inicio, fin from public.turnos where id = $1", [await desdePanel(profX, "11:00", "1166660003")]);
+  assert.deepEqual([Number(p1.precio), minutos(p1)], [7000, 45]);
+  const p2 = await uno("select precio, inicio, fin from public.turnos where id = $1", [await desdePanel(profEva, "11:00", "1166660004")]);
+  assert.deepEqual([Number(p2.precio), minutos(p2)], [5000, 30]);
+
+  // Turno fijo: la regla toma la duración de Xavi y los turnos su precio.
+  const fijo = await como("ana", async () =>
+    uno("select id, turnos from public.crear_turno_fijo($1, $2, $3, 1, 'Fijo Pro', '1166660005')", [profX, servX, await enHora("13:00")]),
+  );
+  assert.equal((await uno("select duracion_min from public.turnos_fijos where id = $1", [fijo.id])).duracion_min, 45);
+  const precios = await q("select distinct precio from public.turnos where turno_fijo_id = $1", [fijo.id]);
+  assert.deepEqual(precios.map((p) => Number(p.precio)), [7000]);
+
+  // Portal: valores efectivos por profesional.
+  const pub = await como("anon", () => uno("select public.negocio_publico('salon-ana') as d"));
+  const s = pub.d.servicios.find((x) => x.id === servX);
+  assert.equal(s.precio, 5000);
+  assert.deepEqual(s.por_profesional[profX], { precio: 7000, duracion_min: 45, sena: null });
+  assert.deepEqual(s.por_profesional[profAna], { precio: 5000, duracion_min: 30, sena: null });
+
+  // Sin nadie tildado el servicio queda sin asignar (y fuera del portal).
+  await como("ana", () => q("select public.guardar_profesionales_servicio($1, '[]'::jsonb)", [servX]));
+  const pub2 = await como("anon", () => uno("select public.negocio_publico('salon-ana') as d"));
+  assert.ok(!pub2.d.servicios.some((x) => x.id === servX));
+
+  await q("delete from public.turnos where servicio_id = $1", [servX]);
+  await q("delete from public.turnos_fijos where id = $1", [fijo.id]);
+  await q("delete from public.servicios where id = $1", [servX]);
+  await q("delete from public.profesionales where id = $1", [profX]);
+});
+
 await prueba("bug corregido: una empleada no lee la ficha de un cliente aunque conozca su celular", async () => {
   // Lucía ya es clienta (reservó online). La dueña le agrega notas privadas.
   const lucia = await uno("select id from public.clientes where telefono = '1155551234'");

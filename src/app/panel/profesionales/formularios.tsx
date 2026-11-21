@@ -3,9 +3,8 @@
 import { useActionState, useState, useTransition } from "react";
 import { BotonEnviar, MensajeAccion, useFormulario } from "@/components/formularios";
 import { Aviso, Boton, Campo, Casilla, Input, cx } from "@/components/ui";
-import { formatDuracion } from "@/lib/fechas";
-import { DIAS_SEMANA, type EstadoAccion, type Horario, type Profesional, type Servicio } from "@/lib/tipos";
-import { eliminarProfesional, guardarHorarios, guardarProfesional, guardarServiciosProfesional } from "./acciones";
+import { DIAS_SEMANA, type EstadoAccion, type Horario, type Profesional } from "@/lib/tipos";
+import { eliminarProfesional, guardarHorarios, guardarProfesional } from "./acciones";
 
 const COLORES = ["#7434ee", "#0d9488", "#e11d48", "#ea580c", "#2563eb", "#ca8a04", "#9333ea", "#16a34a"];
 
@@ -51,41 +50,6 @@ export function FormularioProfesional({ profesional }: { profesional?: Profesion
       <BotonEnviar tamano="lg" className="w-full sm:w-auto">
         {profesional ? "Guardar datos" : "Crear profesional"}
       </BotonEnviar>
-    </form>
-  );
-}
-
-export function FormularioServiciosProfesional({
-  profesionalId,
-  servicios,
-  asignados,
-}: {
-  profesionalId: string;
-  servicios: Servicio[];
-  asignados: string[];
-}) {
-  const [estado, accion] = useActionState(guardarServiciosProfesional.bind(null, profesionalId), {});
-
-  if (servicios.length === 0) {
-    return <p className="text-sm text-zinc-600">Primero cargá servicios en la sección Servicios.</p>;
-  }
-
-  return (
-    <form action={accion} className="space-y-4">
-      <MensajeAccion estado={estado} />
-      <div className="grid gap-2 sm:grid-cols-2">
-        {servicios.map((s) => (
-          <Casilla
-            key={s.id}
-            name="servicio_id"
-            value={s.id}
-            defaultChecked={asignados.includes(s.id)}
-            etiqueta={s.nombre}
-            descripcion={`${formatDuracion(s.duracion_min)}${s.activo ? "" : " · inactivo"}`}
-          />
-        ))}
-      </div>
-      <BotonEnviar variante="secundario">Guardar servicios</BotonEnviar>
     </form>
   );
 }
