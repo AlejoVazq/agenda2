@@ -157,7 +157,7 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
             </div>
           )}
         </div>
-        {resenas.promedio !== null ? (
+        {resenas.activas ? (
           <section
             id="opiniones"
             aria-labelledby="t-opiniones"
@@ -166,18 +166,27 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
             <h2 id="t-opiniones" className="mb-4 font-display text-xl font-bold">
               Opiniones
             </h2>
-            <ResumenOpiniones resumen={resenas} />
-            {ultimas.length ? (
-              <div className="mt-6 border-t border-zinc-100 pt-5">
-                <ListaOpiniones resenas={ultimas} negocio={negocio.nombre} tz={negocio.zona_horaria} />
+            {resenas.promedio !== null ? (
+              <>
+                <ResumenOpiniones resumen={resenas} />
+                {ultimas.length ? (
+                  <div className="mt-6 border-t border-zinc-100 pt-5">
+                    <ListaOpiniones resenas={ultimas} negocio={negocio.nombre} tz={negocio.zona_horaria} />
+                  </div>
+                ) : null}
+                <Link
+                  href={`/n/${negocio.slug}/opiniones`}
+                  className="mt-5 flex h-11 items-center justify-center rounded-2xl border border-zinc-200 text-sm font-semibold text-marca-800 transition hover:border-marca-300 hover:bg-marca-50/50"
+                >
+                  Ver todas las opiniones
+                </Link>
+              </>
+            ) : (
+              <div className="flex items-center gap-3 rounded-2xl bg-zinc-50 px-4 py-4 ring-1 ring-zinc-100">
+                <Estrellas valor={0} className="size-4" etiqueta="Sin opiniones todavía" />
+                <p className="text-sm text-zinc-600">Todavía no hay opiniones. Después de tu turno vas a poder dejar la tuya.</p>
               </div>
-            ) : null}
-            <Link
-              href={`/n/${negocio.slug}/opiniones`}
-              className="mt-5 flex h-11 items-center justify-center rounded-2xl border border-zinc-200 text-sm font-semibold text-marca-800 transition hover:border-marca-300 hover:bg-marca-50/50"
-            >
-              Ver todas las opiniones
-            </Link>
+            )}
             <p className="mt-3 text-center text-xs text-zinc-500">Solo opinan clientes que tuvieron un turno acá.</p>
           </section>
         ) : null}
