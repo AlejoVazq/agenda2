@@ -183,7 +183,7 @@ export function Reserva({
       ) : null}
 
       {paso === "profesional" ? (
-        <section aria-labelledby="t-prof">
+        <section aria-labelledby="t-prof" className="animate-paso">
           <h2 id="t-prof" className="mb-4 font-display text-xl font-bold">
             ¿Con quién te querés atender?
           </h2>
@@ -232,7 +232,7 @@ export function Reserva({
       ) : null}
 
       {paso === "servicio" ? (
-        <section aria-labelledby="t-servicio">
+        <section aria-labelledby="t-servicio" className="animate-paso">
           {conPasoProfesional ? (
             <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-marca-50/70 px-4 py-2.5 text-sm ring-1 ring-marca-100">
               <p className="min-w-0 truncate text-marca-900">
@@ -295,7 +295,7 @@ export function Reserva({
       ) : null}
 
       {paso === "horario" ? (
-        <section aria-labelledby="t-horario">
+        <section aria-labelledby="t-horario" className="animate-paso">
           <h2 id="t-horario" className="mb-4 font-display text-xl font-bold">
             Elegí día y horario
           </h2>
@@ -319,7 +319,7 @@ export function Reserva({
                         setHorarios(null);
                       }}
                       className={cx(
-                        "flex w-16 flex-col items-center rounded-2xl border py-2.5 transition",
+                        "flex w-16 flex-col items-center rounded-2xl border py-2.5 transition enabled:active:scale-95",
                         activo
                           ? "border-marca-700 bg-marca-700 text-white shadow-[0_8px_18px_-8px_rgb(31_77_58/0.8)]"
                           : disponible
@@ -367,7 +367,7 @@ export function Reserva({
       ) : null}
 
       {paso === "datos" && servicio && horario ? (
-        <section aria-labelledby="t-datos">
+        <section aria-labelledby="t-datos" className="animate-paso">
           <h2 id="t-datos" className="mb-1 font-display text-xl font-bold">
             Tus datos
           </h2>
@@ -525,6 +525,8 @@ function GrillaHorarios({ horarios, tz, onElegir }: { horarios: Horario[]; tz: s
     const hora = Number(formatHora(h.inicio, tz).slice(0, 2));
     grupos[hora < 12 ? 0 : hora < 19 ? 1 : 2].lista.push(h);
   }
+  // Entran escalonados (18 ms cada uno, hasta 280 ms): se lee el orden sin hacer esperar.
+  const orden = new Map(horarios.map((h, i) => [h.inicio, i]));
   return (
     <div className="space-y-4">
       {grupos
@@ -534,7 +536,11 @@ function GrillaHorarios({ horarios, tz, onElegir }: { horarios: Horario[]; tz: s
             <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-zinc-400">{g.titulo}</p>
             <ul className="grid grid-cols-4 gap-2 sm:grid-cols-6">
               {g.lista.map((h) => (
-                <li key={h.inicio}>
+                <li
+                  key={h.inicio}
+                  className="animate-chip"
+                  style={{ animationDelay: `${Math.min((orden.get(h.inicio) ?? 0) * 18, 280)}ms` }}
+                >
                   <button
                     onClick={() => onElegir(h)}
                     className="w-full rounded-xl border border-zinc-200 bg-white py-3 text-sm font-semibold tabular-nums transition hover:border-marca-700 hover:bg-marca-700 hover:text-white active:scale-95"

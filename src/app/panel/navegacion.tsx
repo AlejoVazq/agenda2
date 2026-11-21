@@ -106,7 +106,7 @@ export function BarraInferior({ esDueno }: { esDueno: boolean }) {
             <Icono nombre="mas" />
             Más
           </summary>
-          <div className="absolute bottom-full right-2 mb-2 w-56 rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl">
+          <div className="absolute bottom-full right-2 mb-2 w-56 origin-bottom-right animate-menu rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl">
             {resto.map((i) => (
               <Link
                 key={i.href}

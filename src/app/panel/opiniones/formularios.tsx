@@ -114,7 +114,7 @@ export function OpinionPanel({ opinion: o, zona }: { opinion: OpinionDelPanel; z
       <MensajeAccion estado={estadoOculto} />
 
       {respondiendo ? (
-        <form key={intento} action={accion} className="mt-3 space-y-2">
+        <form key={intento} action={accion} className="mt-3 animate-asomar space-y-2">
           <input type="hidden" name="id" value={o.id} />
           <MensajeAccion estado={estado.ok ? undefined : estado} />
           <Textarea
@@ -152,7 +152,7 @@ export function OpinionPanel({ opinion: o, zona }: { opinion: OpinionDelPanel; z
             </button>
           ) : null}
           {confirmandoBorrar ? (
-            <span className="flex flex-wrap items-center gap-2 rounded-xl bg-red-50 px-3 py-1.5 text-sm text-red-800 ring-1 ring-red-100">
+            <span className="flex animate-asomar flex-wrap items-center gap-2 rounded-xl bg-red-50 px-3 py-1.5 text-sm text-red-800 ring-1 ring-red-100">
               ¿Eliminarla? No se puede deshacer.
               <button
                 type="button"

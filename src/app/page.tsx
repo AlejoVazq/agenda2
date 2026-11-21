@@ -213,7 +213,7 @@ export default function Inicio() {
               {PASOS.map((p, i) => (
                 <li
                   key={p.titulo}
-                  className="group relative overflow-hidden rounded-3xl border border-zinc-200/80 bg-white p-7 shadow-suave transition hover:-translate-y-0.5 hover:shadow-flotante"
+                  className="revelar group relative overflow-hidden rounded-3xl border border-zinc-200/80 bg-white p-7 shadow-suave transition hover:-translate-y-0.5 hover:shadow-flotante"
                 >
                   <span className="pointer-events-none absolute -bottom-10 right-3 font-display text-[9rem] font-bold leading-none text-zinc-100 transition-colors group-hover:text-marca-50">
                     {i + 1}
@@ -307,7 +307,7 @@ export default function Inicio() {
 
         {/* Para la verificación de Google: la home explica para qué se pide acceso al calendario. */}
         <section id="google-calendar" className="scroll-mt-20 px-4 sm:px-6">
-          <div className="mx-auto grid max-w-6xl gap-8 rounded-[2rem] border border-zinc-200/80 bg-white p-7 shadow-suave sm:p-10 md:grid-cols-[auto_1fr] md:items-start">
+          <div className="revelar mx-auto grid max-w-6xl gap-8 rounded-[2rem] border border-zinc-200/80 bg-white p-7 shadow-suave sm:p-10 md:grid-cols-[auto_1fr] md:items-start">
             <span className="grid size-14 place-items-center rounded-2xl bg-marca-50 text-marca-700">
               <Icono nombre="calendario" className="size-7" />
             </span>
@@ -334,7 +334,7 @@ export default function Inicio() {
         <section id="precio" className="scroll-mt-20">
           <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
             <Encabezado etiqueta="Precio" titulo="Un solo plan, con todo incluido" texto="Sin letra chica y sin cobrarte por cada turno." />
-            <div className="mx-auto mt-12 max-w-3xl overflow-hidden rounded-[2rem] border border-zinc-200/80 bg-white shadow-flotante md:grid md:grid-cols-[1fr_1.1fr]">
+            <div className="revelar mx-auto mt-12 max-w-3xl overflow-hidden rounded-[2rem] border border-zinc-200/80 bg-white shadow-flotante md:grid md:grid-cols-[1fr_1.1fr]">
               <div className="relative overflow-hidden bg-gradient-to-br from-marca-700 via-marca-800 to-noche p-8 text-white">
                 <div className="fondo-grano absolute inset-0" aria-hidden />
                 <div className="relative">
@@ -399,7 +399,7 @@ export default function Inicio() {
 
         {/* --- Llamado final --- */}
         <section className="px-4 py-16 sm:px-6 sm:py-24">
-          <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-noche bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_50%_70%_at_100%_100%,rgb(130_180_154/0.14),transparent)] px-6 py-16 text-center text-white sm:px-12 sm:py-24">
+          <div className="revelar relative mx-auto max-w-6xl overflow-hidden rounded-[2.5rem] bg-noche bg-[radial-gradient(ellipse_60%_80%_at_0%_0%,rgb(79_146_114/0.55),transparent),radial-gradient(ellipse_50%_70%_at_100%_100%,rgb(130_180_154/0.14),transparent)] px-6 py-16 text-center text-white sm:px-12 sm:py-24">
             <div className="fondo-grano pointer-events-none absolute inset-0" aria-hidden />
             <div className="relative">
               <h2 className="mx-auto max-w-2xl font-display text-4xl font-bold leading-[1.05] sm:text-6xl">
@@ -462,7 +462,7 @@ function Encabezado({
   alineado?: "centro" | "izquierda";
 }) {
   return (
-    <div className={cx("relative max-w-2xl", alineado === "centro" && "mx-auto text-center")}>
+    <div className={cx("revelar relative max-w-2xl", alineado === "centro" && "mx-auto text-center")}>
       <p className={cx("text-sm font-bold uppercase tracking-[0.16em]", oscuro ? "text-acento-300" : "text-acento-600")}>{etiqueta}</p>
       <h2 className="mt-3 text-4xl font-bold leading-[1.05] sm:text-5xl">{titulo}</h2>
       {texto ? <p className={cx("mt-4 text-lg", oscuro ? "text-white/65" : "text-zinc-600")}>{texto}</p> : null}
@@ -484,7 +484,7 @@ function Bento({
   return (
     <div
       className={cx(
-        "group rounded-3xl bg-white/[0.04] p-7 ring-1 ring-white/10 transition hover:bg-white/[0.07] hover:ring-white/20",
+        "revelar group rounded-3xl bg-white/[0.04] p-7 ring-1 ring-white/10 transition hover:bg-white/[0.07] hover:ring-white/20",
         className,
       )}
     >

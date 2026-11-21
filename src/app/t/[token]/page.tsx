@@ -101,14 +101,23 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
             <span
               className={
                 encabezado.icono === "ok"
-                  ? "mx-auto grid size-18 place-items-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-[0_12px_30px_-10px_rgb(5_150_105/0.7)] ring-8 ring-emerald-100/70"
-                  : "mx-auto grid size-18 place-items-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-white shadow-[0_12px_30px_-10px_rgb(217_119_6/0.6)] ring-8 ring-amber-100/70"
+                  ? "mx-auto grid size-18 animate-sello place-items-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-[0_12px_30px_-10px_rgb(5_150_105/0.7)] ring-8 ring-emerald-100/70"
+                  : "mx-auto grid size-18 animate-sello place-items-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 text-white shadow-[0_12px_30px_-10px_rgb(217_119_6/0.6)] ring-8 ring-amber-100/70"
               }
               aria-hidden
             >
               {encabezado.icono === "ok" ? (
                 <svg viewBox="0 0 24 24" fill="none" className="size-9">
-                  <path d="m5 12 5 5L20 7" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                  <path
+                    d="m5 12 5 5L20 7"
+                    pathLength={1}
+                    strokeDasharray={1}
+                    className="animate-trazo"
+                    stroke="currentColor"
+                    strokeWidth="2.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               ) : (
                 <svg viewBox="0 0 24 24" fill="none" className="size-8">

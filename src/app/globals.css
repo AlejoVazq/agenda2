@@ -63,6 +63,110 @@
   --animate-latido: latido 2.4s ease-in-out infinite;
   --animate-marquesina: marquesina 32s linear infinite;
 
+  /*
+   * Movimiento de la interfaz (2026-11-21). Curvas fuertes y cortas: la UI responde
+   * rápido y se asienta suave. Solo se anima lo que aparece de golpe o confirma algo.
+   */
+  --ease-salida: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-hoja: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-rebote: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-paso: paso 260ms var(--ease-salida) both;
+  --animate-asomar: asomar 200ms var(--ease-salida) both;
+  --animate-chip: chip 240ms var(--ease-salida) both;
+  --animate-menu: menu 160ms var(--ease-salida) both;
+  --animate-fundido: fundido 200ms ease-out both;
+  --animate-hoja: hoja 420ms var(--ease-hoja) both;
+  --animate-ventana: ventana 240ms var(--ease-salida) both;
+  --animate-pop: pop 320ms var(--ease-rebote) both;
+  --animate-sello: sello 560ms var(--ease-rebote) 120ms both;
+  --animate-trazo: trazo 380ms var(--ease-salida) 420ms both;
+
+  /* Cambio de paso en la reserva: llega desde un poco más abajo. */
+  @keyframes paso {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  /* Avisos y bloques que se abren en el lugar. */
+  @keyframes asomar {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.99);
+    }
+  }
+  /* Horarios libres, escalonados con --i. */
+  @keyframes chip {
+    from {
+      opacity: 0;
+      transform: scale(0.94);
+    }
+  }
+  /* Menú "Más" del panel, crece desde su botón. */
+  @keyframes menu {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+  }
+  @keyframes fundido {
+    from {
+      opacity: 0;
+    }
+  }
+  /* Modal en el celular: hoja que sube desde abajo. */
+  @keyframes hoja {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  /* Modal en escritorio. */
+  @keyframes ventana {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  /* Salidas del modal: más cortas y con ease-in (se va acelerando). */
+  --animate-fundido-salida: fundido-salida 180ms ease-in both;
+  --animate-hoja-salida: hoja-salida 200ms ease-in both;
+  --animate-ventana-salida: ventana-salida 160ms ease-in both;
+  @keyframes fundido-salida {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes hoja-salida {
+    to {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes ventana-salida {
+    to {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+  /* Estrella elegida. */
+  @keyframes pop {
+    40% {
+      transform: scale(1.25);
+    }
+  }
+  /* Ícono de "¡Turno reservado!". */
+  @keyframes sello {
+    from {
+      opacity: 0;
+      transform: scale(0.4);
+    }
+  }
+  /* Tilde que se dibuja (stroke-dasharray = 1 con pathLength). */
+  @keyframes trazo {
+    from {
+      stroke-dashoffset: 1;
+    }
+  }
+
   @keyframes aparecer {
     from {
       opacity: 0;
@@ -175,6 +279,26 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.55'/%3E%3C/svg%3E");
   background-size: 180px 180px;
   mix-blend-mode: overlay;
+}
+
+/*
+ * Landing: los bloques se revelan al entrar en pantalla, atados al scroll (sin JS).
+ * Donde el navegador no lo soporta o se pide menos movimiento, se ven quietos.
+ */
+@keyframes revelar {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.98);
+  }
+}
+@utility revelar {
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: revelar linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 70%;
+    }
+  }
 }
 
 /* Retraso para escalonar animaciones de entrada: `retraso-1` … `retraso-6`. */

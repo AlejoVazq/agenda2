@@ -29,7 +29,17 @@ export function SelectorEstrellas({ inicial = 0, error }: { inicial?: number; er
               className="sr-only"
             />
             <span className="sr-only">{n} {n === 1 ? "estrella" : "estrellas"}</span>
-            <svg viewBox="0 0 24 24" className={cx("size-10 transition-colors", n <= mostrada ? "text-amber-400" : "text-zinc-200")} aria-hidden>
+            <svg
+              viewBox="0 0 24 24"
+              // La estrella elegida "salta" (key nueva = la animación vuelve a correr).
+              key={n === estrellas ? `elegida-${estrellas}` : n}
+              className={cx(
+                "size-10 transition-colors",
+                n <= mostrada ? "text-amber-400" : "text-zinc-200",
+                n === estrellas && "animate-pop",
+              )}
+              aria-hidden
+            >
               <path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z" fill="currentColor" />
             </svg>
           </label>

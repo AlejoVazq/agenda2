@@ -43,7 +43,7 @@ export function OpinarSinTurno({
   }
 
   return (
-    <form key={intento} action={accion} className="space-y-4 rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-100" noValidate>
+    <form key={intento} action={accion} className="animate-asomar space-y-4 rounded-2xl bg-zinc-50 p-4 ring-1 ring-zinc-100" noValidate>
       <input type="hidden" name="negocio_id" value={negocioId} />
       {/* Trampa para bots: una persona no lo ve ni lo completa. */}
       <input type="text" name="sitio" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden />

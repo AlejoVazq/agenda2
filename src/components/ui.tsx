@@ -155,7 +155,7 @@ export function Aviso({
     alerta: "bg-amber-50 text-amber-900 border-amber-100",
   }[tipo];
   return (
-    <div role={tipo === "error" ? "alert" : "status"} className={cx("rounded-xl border px-4 py-3 text-sm", estilos, className)}>
+    <div role={tipo === "error" ? "alert" : "status"} className={cx("animate-asomar rounded-xl border px-4 py-3 text-sm", estilos, className)}>
       {children}
     </div>
   );
