@@ -88,7 +88,7 @@ Local: `npm run db:local` en una terminal y `npm run dev` en otra. Variables en 
 - Mail de contacto de `/privacidad`: `vaztechcontact@gmail.com`.
 - Publicado al 2026-11-12: migraciones 0001 a 0006 (suscripciones, `/admin` con admin ya cargado, identidad visual verde pino, logo por negocio) y el 404 real en `/n/[slug]` (082be58). El `revoke connect` en la base de EnSushi ya se hizo.
 - En producción hay **un solo negocio real: el del amigo peluquero** (desde 2026-11-18; cuidar sus datos: backup antes de cada deploy, nada destructivo). Los demás son pruebas del usuario; `pollobarber` **no se borra**, es el que usa para probar. No tocar EnSushi. No agregar otras funciones sin que el usuario lo pida.
-- Publicado al 2026-11-18: todo hasta la migración 0014 (incluye reseñas, profesional primero, servicio de emergencia y teléfonos 2478).
+- Publicado al 2026-11-21: todo hasta la migración 0016 (reseñas, profesional primero, servicio de emergencia, teléfonos 2478, turnos fijos y precio/duración por profesional).
 
 ## Pendiente (rumbo, al 2026-11-18)
 
