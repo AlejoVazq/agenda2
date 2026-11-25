@@ -6,6 +6,7 @@ import { estiloTema } from "@/lib/apariencia";
 import { fechaLocalISO } from "@/lib/fechas";
 import { urlLogo, versionLogo } from "@/lib/logo";
 import { aparienciaNegocio, urlPortada } from "@/lib/portada";
+import { productosPublicos, tiendaPublica } from "@/lib/productos";
 import { getNegocioPublico, linkWhatsApp } from "@/lib/publico";
 import { resenasPublicas, resumenResenas } from "@/lib/resenas";
 import { Estrellas } from "@/components/estrellas";
@@ -13,6 +14,7 @@ import { formatPromedio, ListaOpiniones, ResumenOpiniones, textoCantidad } from 
 import { RUBROS, type Rubro } from "@/lib/tipos";
 import { IconoWhatsApp } from "@/components/icono-whatsapp";
 import { OpinarSinTurno } from "./opinar";
+import { ProductosDestacados } from "./productos-destacados";
 import { Reserva } from "./reserva";
 
 export async function generateMetadata({ params }: PageProps<"/n/[slug]">): Promise<Metadata> {
@@ -30,10 +32,12 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
   const negocio = await getNegocioPublico(slug);
   if (!negocio) notFound();
 
-  const [versionDelLogo, apariencia, resenas] = await Promise.all([
+  const [versionDelLogo, apariencia, resenas, tienda, productos] = await Promise.all([
     versionLogo(negocio.id),
     aparienciaNegocio(negocio.id),
     resumenResenas(negocio.id),
+    tiendaPublica(negocio.id),
+    productosPublicos(negocio.id),
   ]);
   const ultimas = resenas.cantidad ? await resenasPublicas(negocio.id, { limite: 5, soloConComentario: true }) : [];
   const logo = urlLogo(negocio.slug, versionDelLogo);
@@ -173,6 +177,7 @@ export default async function PaginaNegocio({ params }: PageProps<"/n/[slug]">) 
             </div>
           )}
         </div>
+        {tienda?.activa && productos.length ? <ProductosDestacados slug={negocio.slug} productos={productos} /> : null}
         {resenas.activas ? (
           <section
             id="opiniones"

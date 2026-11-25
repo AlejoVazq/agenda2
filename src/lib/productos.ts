@@ -40,14 +40,29 @@ export const productosPublicos = cache(async (negocioId: string): Promise<Produc
 /**
  * Si la tienda está prendida y con qué medios se puede pagar hoy: sin Mercado Pago si la
  * integración no está activa (o el servidor no la ofrece) y sin transferencia si no hay
- * alias ni CBU (los mismos chequeos que hace `crear_pedido`). Null si el negocio no existe.
+ * alias ni CBU (los mismos chequeos que hace `crear_pedido`), y los plazos para pagar.
+ * Null si el negocio no existe.
  */
+export type TiendaPublica = {
+  activa: boolean;
+  medios: MedioPago[];
+  transferencia_plazo_horas: number;
+  efectivo_plazo_dias: number;
+};
+
 export const tiendaPublica = cache(
-  async (negocioId: string): Promise<{ activa: boolean; medios: MedioPago[] } | null> => {
+  async (negocioId: string): Promise<TiendaPublica | null> => {
     const fila = await comoServidor((tx) =>
-      tx.uno<{ activa: boolean; medios: MedioPago[]; transferencia: boolean; mercadopago: boolean }>(sql`
+      tx.uno<{
+        activa: boolean;
+        medios: MedioPago[];
+        transferencia: boolean;
+        mercadopago: boolean;
+        transferencia_plazo_horas: number;
+        efectivo_plazo_dias: number;
+      }>(sql`
         select n.tienda_activa and plataforma.negocio_toma_reservas(n.id) as activa,
-          n.tienda_medios as medios,
+          n.tienda_medios as medios, n.transferencia_plazo_horas, n.efectivo_plazo_dias,
           (n.transferencia_alias is not null or n.transferencia_cbu is not null) as transferencia,
           exists (
             select 1 from public.integraciones ig
@@ -60,7 +75,12 @@ export const tiendaPublica = cache(
     const medios = fila.medios.filter(
       (m) => (m !== "mercadopago" || mpDisponible) && (m !== "transferencia" || fila.transferencia),
     );
-    return { activa: fila.activa && medios.length > 0, medios };
+    return {
+      activa: fila.activa && medios.length > 0,
+      medios,
+      transferencia_plazo_horas: fila.transferencia_plazo_horas,
+      efectivo_plazo_dias: fila.efectivo_plazo_dias,
+    };
   },
 );
 

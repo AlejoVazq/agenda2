@@ -90,3 +90,35 @@ export async function liberarPedidosVencidos(): Promise<number> {
   const fila = await comoServidor((tx) => tx.uno<{ n: number }>(sql`select public.liberar_pedidos_vencidos() as n`));
   return fila?.n ?? 0;
 }
+
+/** Id, negocio y estado guardado de un pedido por su token (para la vuelta del pago y reintentar). */
+export async function pedidoDeToken(token: string): Promise<{ id: string; negocio_id: string; estado: EstadoPedido } | null> {
+  if (!/^[0-9a-f]{64}$/.test(token)) return null;
+  return comoServidor((tx) =>
+    tx.uno<{ id: string; negocio_id: string; estado: EstadoPedido }>(sql`
+      select id, negocio_id, estado from public.pedidos where token = ${token}`),
+  );
+}
+
+export type TurnoParaPedido = { token: string; nombre: string; email: string; telefono: string | null; inicio: string };
+
+/**
+ * Datos del turno de `/n/<slug>/productos?turno=<token>` para precargar el pedido: solo un
+ * turno no cancelado y por venir de ese negocio (la misma regla que usa `crear_pedido`
+ * para estirar el plazo del efectivo hasta el día del turno).
+ */
+export async function turnoParaPedido(token: string, negocioId: string): Promise<TurnoParaPedido | null> {
+  if (!/^[0-9a-f]{64}$/.test(token)) return null;
+  const fila = await comoServidor((tx) =>
+    tx.uno<{ nombre: string; email: string | null; telefono: string | null; inicio: string }>(sql`
+      select t.nombre_reserva as nombre, t.email_reserva as email, t.telefono_reserva as telefono, t.inicio
+      from public.turnos t
+      where t.token_cancelacion = ${token} and t.negocio_id = ${negocioId}
+        and t.estado <> 'cancelado' and t.inicio > now()`),
+  ).catch((e) => {
+    console.error("[pedidos] turnoParaPedido", e);
+    return null;
+  });
+  if (!fila) return null;
+  return { token, nombre: fila.nombre ?? "", email: fila.email ?? "", telefono: fila.telefono, inicio: fila.inicio };
+}
