@@ -7,6 +7,7 @@ import {
   emailConfirmacion,
   emailNuevaReserva,
   emailPagoPedido,
+  emailPedidoCancelado,
   emailPedidoCliente,
   emailPedidoNegocio,
   type DatosPedidoEmail,
@@ -186,9 +187,9 @@ export function notificarCambioTurno(turnoId: string, tipo: "cancelado" | "repro
 
 function leerPedido(pedidoId: string) {
   return comoServidor((tx) =>
-    tx.uno<DatosPedidoEmail & { negocio_id: string; estado: string }>(sql`
+    tx.uno<DatosPedidoEmail & { negocio_id: string; estado: string; pagado: boolean }>(sql`
       select p.id as "pedidoId", p.negocio_id, p.token, p.numero, p.nombre as cliente, p.email, p.telefono,
-             p.medio, p.estado, p.total, p.vence_at,
+             p.medio, p.estado, p.total, p.vence_at, p.pagado_at is not null as pagado,
              (select t.inicio from public.turnos t where t.id = p.turno_id and t.estado <> 'cancelado') as turno_inicio,
              coalesce((
                select json_agg(json_build_object('nombre', i.nombre, 'precio_unitario', i.precio_unitario, 'cantidad', i.cantidad)
@@ -250,5 +251,14 @@ export function notificarPagoPedido(pedidoId: string) {
     if (!d || d.estado !== "pagado") return;
     await enviarEmail(emailPagoPedido(d.email, d, "cliente"));
     for (const { email } of await duenosDe(d.negocio_id)) await enviarEmail(emailPagoPedido(email, d, "negocio"));
+  });
+}
+
+/** El negocio canceló el pedido desde el panel: aviso al cliente. Al vencer no se manda nada. */
+export function notificarPedidoCancelado(pedidoId: string) {
+  after(async () => {
+    const d = await leerPedido(pedidoId);
+    if (!d || d.estado !== "cancelado") return;
+    await enviarEmail(emailPedidoCancelado(d.email, d, d.pagado));
   });
 }

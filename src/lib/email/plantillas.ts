@@ -522,3 +522,22 @@ export function emailPagoPedido(para: string, d: DatosPedidoEmail, destino: "cli
   });
   return { para, asunto: `Pago recibido por Mercado Pago: pedido #${d.numero}, ${formatPrecio(d.total)}`, html, texto };
 }
+
+/** Al cliente: el negocio canceló su pedido (si ya lo había pagado, le avisa que se lo devuelven). */
+export function emailPedidoCancelado(para: string, d: DatosPedidoEmail, pagado: boolean): Email {
+  const { html, texto } = plantillaPedido({
+    d,
+    titulo: `Pedido #${d.numero} cancelado`,
+    intro: `Hola ${d.cliente.split(" ")[0]}, ${d.negocio.nombre} canceló tu pedido.`,
+    filas: [["Pago", NOMBRE_MEDIO[d.medio]]],
+    parrafos: [
+      pagado
+        ? "Como ya lo habías pagado, el negocio se va a comunicar con vos para devolverte la plata."
+        : "No tenés que pagar nada. Si tenés dudas, escribile al negocio.",
+    ],
+    boton: "Ver mi pedido",
+    link: `${env.siteUrl}/p/${d.token}`,
+    pie: "Si querés, podés hacer un pedido nuevo desde su página.",
+  });
+  return { para, asunto: `Pedido #${d.numero} cancelado en ${d.negocio.nombre}`, html, texto };
+}

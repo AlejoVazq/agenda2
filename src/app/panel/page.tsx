@@ -25,8 +25,9 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
   // Checklist de configuración (solo dueño).
   let pasos: { texto: string; hecho: boolean; href: string }[] = [];
   let aDevolver: { id: string; inicio: string; cliente: { nombre: string } | null }[] = [];
+  let pedidos = { pendientes: 0, por_entregar: 0 };
   if (esDueno) {
-    const [conteo, devoluciones] = await comoUsuario(userId, (tx) =>
+    const [conteo, devoluciones, conteoPedidos] = await comoUsuario(userId, (tx) =>
       Promise.all([
         tx.uno<{ servicios: number; profesionales: number; horarios: number; asignaciones: number }>(sql`
           select
@@ -40,9 +41,15 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
           left join public.clientes c on c.id = t.cliente_id
           where t.negocio_id = ${negocio.id} and t.pago_estado = 'reembolsar'
           limit 10`),
+        tx.uno<typeof pedidos>(sql`
+          select count(*) filter (where estado in ('pendiente', 'reembolsar'))::int as pendientes,
+                 count(*) filter (where estado = 'pagado')::int as por_entregar
+          from public.pedidos
+          where negocio_id = ${negocio.id} and estado in ('pendiente', 'reembolsar', 'pagado')`),
       ]),
     );
     aDevolver = devoluciones;
+    if (conteoPedidos) pedidos = conteoPedidos;
     pasos = [
       { texto: "Cargá tus servicios con duración y precio", hecho: (conteo?.servicios ?? 0) > 0, href: "/panel/servicios" },
       { texto: "Agregá a las personas que atienden", hecho: (conteo?.profesionales ?? 0) > 0, href: "/panel/profesionales" },
@@ -83,6 +90,22 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
             ))}
           </ul>
         </Aviso>
+      ) : null}
+
+      {pedidos.pendientes + pedidos.por_entregar > 0 ? (
+        <Link
+          href={pedidos.pendientes > 0 ? "/panel/pedidos" : "/panel/pedidos?ver=por-entregar"}
+          className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-marca-100 bg-marca-50 px-4 py-3 text-sm text-marca-900 hover:bg-marca-100"
+        >
+          <span>
+            <span className="font-semibold">
+              {pedidos.pendientes === 1 ? "1 pedido pendiente" : `${pedidos.pendientes} pedidos pendientes`}
+            </span>
+            {" · "}
+            {pedidos.por_entregar} por entregar
+          </span>
+          <span className="font-semibold">Ver pedidos ›</span>
+        </Link>
       ) : null}
 
       {esDueno && pendientes.length > 0 ? (
