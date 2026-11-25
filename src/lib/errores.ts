@@ -23,6 +23,10 @@ const MENSAJES: Record<string, string> = {
   RESENA_NO_DISPONIBLE: "Podés opinar de un turno que ya pasó, hasta 60 días después.",
   RESENA_DESACTIVADA: "Este negocio no está recibiendo opiniones por ahora.",
   RESENA_NOMBRE: "Escribí tu nombre (entre 2 y 60 caracteres).",
+  SIN_STOCK: "Uno de los productos se quedó sin stock. Revisá el carrito.",
+  LIMITE_PEDIDOS: "Ya tenés 3 pedidos sin pagar en este negocio. Pagá o cancelá alguno para hacer otro.",
+  TIENDA_NO_DISPONIBLE: "Este negocio no está vendiendo con ese medio de pago en este momento.",
+  ESTADO_INVALIDO: "Ese pedido ya cambió de estado. Recargá la página.",
 };
 
 type ErrorPg = { message?: string; code?: string };

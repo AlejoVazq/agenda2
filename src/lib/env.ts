@@ -8,9 +8,10 @@ export const env = {
 };
 
 /**
- * Seña con Mercado Pago: apagada por ahora, sin borrar la función. Con esto en false
- * no se puede conectar Mercado Pago y, sin esa conexión, la base no pide seña y la
- * interfaz no la muestra. Para volver a ofrecerla, alcanza con pasarlo a true.
+ * Seña de turnos con Mercado Pago: apagada, sin borrar la función. Desde 2026-11-24
+ * (tienda de productos) solo oculta la configuración de la seña: Mercado Pago se conecta
+ * igual para cobrar pedidos, y la base no pide seña (`public.monto_sena` devuelve 0).
+ * Para volver a ofrecerla hay que pasarlo a true y devolver `monto_sena` en una migración.
  */
 export const SENA_ACTIVA = false;
 
@@ -25,7 +26,8 @@ export function integracionesDisponibles() {
     /** Se pueden guardar credenciales de terceros (cifradas). */
     cifrado,
     google: cifrado && Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-    mercadopago: SENA_ACTIVA && cifrado,
+    /** Cobrar pedidos de la tienda (y la seña, si algún día se vuelve a prender). */
+    mercadopago: cifrado,
     whatsapp: Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
   };
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { RUBROS } from "@/lib/tipos";
+import { RUBROS, type MedioPago } from "@/lib/tipos";
 import { MENSAJE_TELEFONO, telefonoLocal } from "@/lib/telefono-local";
 import { normalizarTelefono } from "@/lib/whatsapp";
 
@@ -335,4 +335,88 @@ export const esquemaResenaLibre = z.object({
 export const esquemaRespuestaResena = z.object({
   id: z.uuid(),
   respuesta: textoOpcional(600),
+});
+
+// --- Productos y pedidos ----------------------------------------------------------------
+
+const MEDIOS = ["mercadopago", "transferencia", "efectivo"] as const satisfies readonly MedioPago[];
+const medio = z.enum(MEDIOS, { error: "Elegí cómo pagar" });
+
+export const esquemaProducto = z.object({
+  nombre: texto(2, 80, "El nombre"),
+  descripcion: textoOpcional(500),
+  precio: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() !== "" ? parsearPrecio(v.trim()) : typeof v === "number" ? v : undefined),
+    z
+      .number({ error: "Ingresá el precio" })
+      .gt(0, "El precio tiene que ser mayor a 0")
+      .max(99_999_999, "Precio demasiado alto"),
+  ),
+  stock: entero(0, 100_000, "El stock"),
+  activo: checkbox,
+  orden: z.preprocess((v) => (v === "" || v === undefined || v === null ? 0 : v), entero(-100_000, 100_000, "El orden")),
+});
+
+/**
+ * Configuración de la tienda. `tienda_medios` llega como varias casillas con el mismo
+ * nombre: usar `formData.getAll("tienda_medios")` al armar el objeto.
+ */
+export const esquemaTienda = z
+  .object({
+    tienda_activa: checkbox,
+    tienda_medios: z
+      .preprocess((v) => (Array.isArray(v) ? [...new Set(v)] : v === undefined || v === "" ? [] : [v]), z.array(medio))
+      .refine((m) => m.length >= 1, "Elegí al menos un medio de pago"),
+    transferencia_alias: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null),
+      z
+        .string()
+        .regex(/^[A-Za-z0-9.-]{6,20}$/, "El alias tiene entre 6 y 20 letras, números, puntos o guiones")
+        .nullable(),
+    ),
+    transferencia_cbu: z.preprocess(
+      (v) => (typeof v === "string" && v.replace(/\s|-/g, "") !== "" ? v.replace(/\s|-/g, "") : null),
+      z.string().regex(/^\d{22}$/, "El CBU o CVU tiene 22 números").nullable(),
+    ),
+    transferencia_titular: z.preprocess(
+      (v) => (typeof v === "string" && v.trim() !== "" ? v.trim() : null),
+      z.string().min(2, "Mínimo 2 caracteres").max(80, "Máximo 80 caracteres").nullable(),
+    ),
+    transferencia_plazo_horas: entero(1, 168, "El plazo"),
+    efectivo_plazo_dias: entero(1, 14, "El plazo"),
+  })
+  .refine((d) => !d.tienda_medios.includes("transferencia") || d.transferencia_alias !== null || d.transferencia_cbu !== null, {
+    path: ["transferencia_alias"],
+    message: "Para cobrar por transferencia poné el alias o el CBU",
+  });
+
+/** Item del carrito. */
+const itemPedido = z.object({
+  producto_id: z.uuid(),
+  cantidad: z.number().int().min(1).max(20),
+});
+
+export const esquemaPedido = z.object({
+  negocio_id: z.uuid(),
+  /** El carrito, como JSON (`[{"producto_id": "...", "cantidad": 2}]`). */
+  items: z.preprocess(
+    (v) => {
+      if (typeof v !== "string") return v;
+      try {
+        return JSON.parse(v);
+      } catch {
+        return null;
+      }
+    },
+    z
+      .array(itemPedido, { error: "El carrito está vacío" })
+      .min(1, "El carrito está vacío")
+      .max(20, "Máximo 20 productos distintos por pedido")
+      .refine((its) => new Set(its.map((i) => i.producto_id)).size === its.length, "Hay un producto repetido"),
+  ),
+  nombre: texto(2, 80, "Tu nombre"),
+  telefono,
+  email: emailObligatorio,
+  medio,
+  turno_token: z.preprocess((v) => (v === "" || v === null ? undefined : v), token.optional()),
 });

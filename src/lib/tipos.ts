@@ -39,7 +39,51 @@ export interface Negocio {
   /** Color de la página de reservas (#rrggbb); null = el verde de la marca. */
   color: string | null;
   activo: boolean;
+  /** Tienda de productos (migración 0020). */
+  tienda_activa: boolean;
+  tienda_medios: MedioPago[];
+  transferencia_alias: string | null;
+  /** 22 dígitos. */
+  transferencia_cbu: string | null;
+  transferencia_titular: string | null;
+  /** Plazo para pagar por transferencia (1 a 168 horas). */
+  transferencia_plazo_horas: number;
+  /** Plazo para pagar y retirar en efectivo (1 a 14 días). */
+  efectivo_plazo_dias: number;
 }
+
+// --- Productos y pedidos (migraciones 0020 y 0021) ---------------------------------------
+
+export interface Producto {
+  id: string;
+  negocio_id: string;
+  nombre: string;
+  descripcion: string | null;
+  precio: number;
+  /** Disponible (lo apartado por pedidos pendientes o pagados ya está descontado). */
+  stock: number;
+  activo: boolean;
+  orden: number;
+}
+
+export type MedioPago = "mercadopago" | "transferencia" | "efectivo";
+
+export const MEDIOS_PEDIDO: Record<MedioPago, string> = {
+  mercadopago: "Mercado Pago",
+  transferencia: "Transferencia",
+  efectivo: "Efectivo en el local",
+};
+
+export type EstadoPedido = "pendiente" | "pagado" | "entregado" | "cancelado" | "vencido" | "reembolsar";
+
+export const ESTADOS_PEDIDO: Record<EstadoPedido, string> = {
+  pendiente: "Sin pagar",
+  pagado: "Pagado",
+  entregado: "Entregado",
+  cancelado: "Cancelado",
+  vencido: "Vencido",
+  reembolsar: "A devolver",
+};
 
 export interface Perfil {
   id: string;
