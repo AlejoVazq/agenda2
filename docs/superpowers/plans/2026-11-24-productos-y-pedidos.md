@@ -228,6 +228,8 @@ Las tres últimas pruebas se escriben completas con el mismo estilo que la prime
 **Files:**
 - Create: `src/app/panel/productos/page.tsx`, `src/app/panel/productos/nuevo/page.tsx`, `src/app/panel/productos/[id]/page.tsx`, `src/app/panel/productos/[id]/foto.tsx`, `src/app/panel/productos/acciones.ts`, `src/app/panel/productos/formulario.tsx`, `src/app/n/[slug]/productos/[id]/foto/route.ts`
 - Modify: `src/app/panel/navegacion.tsx` (ítems `Productos` y `Pedidos`, `soloDueno: true`, después de Servicios; íconos nuevos `bolsa` y `recibo`)
+- Modify: `db/seed.sql` — productos genéricos con precios inventados para los dos negocios demo, **sin fotos** (las fotos reales se cargan después): p. ej. en `peluqueria-caballeros` "Cera mate" $8.500 stock 6, "Pomada brillo" $7.900 stock 4, "Shampoo anticaspa" $6.200 stock 10, "Aceite para barba" $9.800 stock 0 (para ver "Sin stock"); en `estudio-luna` "Esmalte semipermanente" $5.500 stock 12, "Crema de manos" $4.300 stock 8. Activar la tienda en ambos con `tienda_medios = '{efectivo,transferencia}'`, alias `demo.agenda2` y titular "Demo Agenda2". El seed tiene que seguir pasando la prueba "seed: carga los datos demo…" de `test:db`.
+- Sin foto, el panel y el portal muestran un marcador neutro (inicial del producto sobre fondo `arena`), no una imagen rota.
 
 **Interfaces:**
 - Consumes: `esquemaProducto`, `guardarFotoProducto`, `borrarFotoProducto`, `tipoDeImagen`, `requerirDueno`, `sesionParaAccion({ soloDueno: true })`, `achicarImagen`.
