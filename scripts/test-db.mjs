@@ -783,7 +783,7 @@ await prueba("aislamiento: ninguna tabla con negocio_id deja ver filas de otro n
   assert.ok(tablas.length >= 9, tablas.join(", "));
   for (const t of tablas) {
     const { n: deA } = await uno(`select count(*)::int as n from public.${t} where negocio_id = $1`, [negA]);
-    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones", "negocio_logos", "negocio_portadas", "resenas", "turnos_fijos"].includes(t), `${t} sin datos de prueba`);
+    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones", "negocio_logos", "negocio_portadas", "productos", "resenas", "turnos_fijos"].includes(t), `${t} sin datos de prueba`);
     for (const [u, ajeno] of [["beto", negA], ["nadie", negA], ["ana", negB], ["eva", negB]]) {
       const filas = await como(u, () => q(`select * from public.${t} where negocio_id = $1`, [ajeno]).catch(() => []));
       assert.equal(filas.length, 0, `${u} ve ${t} de otro negocio`);
@@ -1112,6 +1112,25 @@ await prueba("seña: sin Mercado Pago conectado no se pide seña", async () => {
   assert.equal(data.servicios[0].sena, null);
 });
 
+// La seña está apagada en la base (0020: monto_sena devuelve 0). Las tres pruebas siguientes
+// cubren la maquinaria de cobro que sigue en la base (retención, vencimiento, pagos tardíos):
+// para ejercitarla se vuelve a poner temporalmente la versión de 0001_inicial.sql.
+await q(`
+  create or replace function public.monto_sena(p_negocio public.negocios, p_precio numeric)
+  returns numeric language sql stable security definer set search_path = '' as $$
+    select case
+      when not exists (
+        select 1 from public.integraciones i
+        where i.negocio_id = p_negocio.id and i.proveedor = 'mercadopago' and i.estado = 'activa'
+      ) then 0
+      when p_negocio.sena_tipo = 'porcentaje' and coalesce(p_precio, 0) > 0
+        then round(p_precio * p_negocio.sena_valor / 100, 0)
+      when p_negocio.sena_tipo = 'fijo'
+        then case when coalesce(p_precio, 0) > 0 then least(p_negocio.sena_valor, p_precio) else p_negocio.sena_valor end
+      else 0
+    end
+  $$`);
+
 let mpA;
 await prueba("seña: con Mercado Pago, la reserva queda retenida y se confirma al pagar", async () => {
   mpA = (
@@ -1186,6 +1205,11 @@ await prueba("seña: pago tardío con el horario ya tomado queda para reembolsar
   assert.equal((await servicio("select public.registrar_pago($1, 'p5', false, 4000) as r", [otra.turno_id]))[0].r, "ya_procesado");
   await q("update public.negocios set sena_tipo = 'ninguna' where id = $1", [negA]);
 });
+
+// Vuelve la seña apagada de la 0020.
+await q(`
+  create or replace function public.monto_sena(p_negocio public.negocios, p_precio numeric)
+  returns numeric language sql stable security definer set search_path = '' as $$ select 0::numeric $$`);
 
 await prueba("integraciones: secretos inaccesibles; empleada ve solo su Google", async () => {
   const gEva = (
@@ -1622,6 +1646,27 @@ await prueba("logo: solo el servidor lee y escribe los logos; tamaño y tipo aco
   await servicio("delete from public.negocio_logos where negocio_id = $1", [negA]);
 });
 
+// --- Productos y tienda (0020; antes de borrar a Eva, que hace de empleada) ----------------
+
+await prueba("productos: la dueña hace ABM, la empleada solo lee, otro negocio no ve nada, anon nada", async () => {
+  const p = await como("ana", () => uno("insert into public.productos (negocio_id, nombre, precio, stock) values ($1, 'Cera mate', 8500, 5) returning id", [negA]));
+  await como("ana", () => q("update public.productos set stock = 4 where id = $1", [p.id]));
+  assert.equal((await como("eva", () => q("select id from public.productos"))).length, 1);
+  await como("eva", () => falla(q("update public.productos set precio = 1 where id = $1 returning id", [p.id]).then((r) => { if (!r.length) throw new Error("sin filas"); }), /sin filas|permission denied/, "empleada edita"));
+  assert.equal((await como("beto", () => q("select id from public.productos"))).length, 0);
+  await como("anon", () => falla(q("select * from public.productos"), /permission denied/, "anon lee productos"));
+  await como("ana", () => falla(q("select * from public.producto_fotos"), /permission denied/, "dueña lee fotos directo"));
+  await como("ana", () => falla(q("insert into public.productos (negocio_id, nombre, precio, stock) values ($1, 'X', 10, -1)", [negA]), /check/, "stock negativo"));
+});
+
+await prueba("tienda: la dueña configura medios y transferencia; valores inválidos se rechazan", async () => {
+  await como("ana", () => q("update public.negocios set tienda_activa = true, tienda_medios = '{efectivo,transferencia}', transferencia_alias = 'peluqueria.ana', transferencia_titular = 'Ana Test' where id = $1", [negA]));
+  await como("ana", () => falla(q("update public.negocios set tienda_medios = '{bitcoin}' where id = $1", [negA]), /check/, "medio inválido"));
+  await como("ana", () => falla(q("update public.negocios set transferencia_cbu = '123' where id = $1", [negA]), /check/, "cbu inválido"));
+  await como("eva", () => q("update public.negocios set tienda_activa = false where id = $1", [negA]));
+  assert.equal((await uno("select tienda_activa from public.negocios where id = $1", [negA])).tienda_activa, true, "la empleada no cambia la tienda");
+});
+
 await prueba("cuentas: borrar un usuario borra su perfil, sus sesiones y sus accesos", async () => {
   await q(`insert into auth."session" ("expiresAt", "token", "updatedAt", "userId") values (now() + interval '1 day', 'tok-eva', now(), $1)`, [USUARIOS.eva]);
   await q(`insert into public.accesos (usuario_id, tipo, token_hash, expira_at) values ($1, 'recuperacion', repeat('a', 64), now() + interval '1 day')`, [USUARIOS.eva]);
@@ -1953,6 +1998,22 @@ await prueba("reseñas: el cron pide la opinión una sola vez, 2 a 48 h después
   assert.ok(!ids(await servicio("select * from public.reclamar_pedidos_resena(100)")).includes(apagado.id));
   await como("ana", () => q("update public.negocios set resenas_activas = true where id = $1", [negA]));
   await q("delete from public.turnos where id = any($1)", [[listo, reciente, viejo, cancelado, sinMail, opinado, apagado].map((t) => t.id)]);
+});
+
+// --- Productos, tienda y seña apagada (0020) -----------------------------------------
+
+await prueba("seña apagada: con Mercado Pago conectado y seña configurada, la reserva no pide seña", async () => {
+  await q("update public.negocios set sena_tipo = 'porcentaje', sena_valor = 50 where id = $1", [negA]);
+  await q("insert into public.integraciones (negocio_id, proveedor, estado, config) values ($1, 'mercadopago', 'activa', '{}') on conflict do nothing", [negA]);
+  try {
+    const r = await reservarAna(2, "12:00", "Sena Cero", "1155559999", "senacero@test.com");
+    const t = await uno("select estado from public.turnos where id = $1", [r.turno_id]);
+    assert.equal(t.estado, "confirmado", "sin seña el turno no queda retenido");
+    assert.equal(Number(r.sena ?? 0), 0);
+  } finally {
+    await q("update public.negocios set sena_tipo = 'ninguna', sena_valor = 0 where id = $1", [negA]);
+    await q("delete from public.integraciones where negocio_id = $1 and proveedor = 'mercadopago'", [negA]);
+  }
 });
 
 await db.close();
