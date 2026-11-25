@@ -3,12 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { sesionParaAccion } from "@/lib/auth";
 import { comoUsuario, esErrorPg, sql } from "@/lib/db";
+import { integracionesDisponibles } from "@/lib/env";
 import { mensajeDeError } from "@/lib/errores";
+import { buscarIntegracion } from "@/lib/integraciones";
 import { colorLegible } from "@/lib/apariencia";
 import { borrarLogo, guardarLogo, LOGO_MAX_BYTES, tipoDeImagen } from "@/lib/logo";
 import { borrarPortada, guardarPortada, PORTADA_MAX_BYTES } from "@/lib/portada";
 import { MENSAJE_SOLO_LECTURA } from "@/lib/suscripcion";
-import { datosDeForm, erroresDeCampo, esquemaNegocio } from "@/lib/validaciones";
+import { datosDeForm, erroresDeCampo, esquemaNegocio, esquemaTienda } from "@/lib/validaciones";
 import type { EstadoAccion } from "@/lib/tipos";
 
 export async function guardarNegocio(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
@@ -134,4 +136,44 @@ export async function guardarColor(color: string | null): Promise<EstadoAccion> 
   revalidatePath("/panel/negocio");
   revalidatePath(`/n/${sesion.negocio.slug}`, "layout");
   return { ok: true, mensaje: "Color guardado." };
+}
+
+// --- Tienda ----------------------------------------------------------------------------
+
+export async function guardarTienda(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
+  const sesion = await sesionParaAccion({ soloDueno: true });
+  if (!sesion) return { error: "Solo el dueño puede modificar la tienda." };
+  if (!sesion.habilitado) return { error: MENSAJE_SOLO_LECTURA };
+
+  // Los medios llegan como varias casillas con el mismo nombre.
+  const datos = esquemaTienda.safeParse({ ...datosDeForm(formData), tienda_medios: formData.getAll("tienda_medios") });
+  if (!datos.success) return { errores: erroresDeCampo(datos.error) };
+  const d = datos.data;
+
+  if (d.tienda_medios.includes("mercadopago")) {
+    const mp = integracionesDisponibles().mercadopago
+      ? await buscarIntegracion(sesion.negocio.id, "mercadopago").catch(() => null)
+      : null;
+    if (mp?.estado !== "activa") {
+      return { errores: { tienda_medios: ["Primero conectá Mercado Pago en Integraciones."] } };
+    }
+  }
+
+  try {
+    await comoUsuario(sesion.userId, (tx) =>
+      tx.ejecutar(sql`
+        update public.negocios set
+          tienda_activa = ${d.tienda_activa}, tienda_medios = ${d.tienda_medios}::text[],
+          transferencia_alias = ${d.transferencia_alias}, transferencia_cbu = ${d.transferencia_cbu},
+          transferencia_titular = ${d.transferencia_titular},
+          transferencia_plazo_horas = ${d.transferencia_plazo_horas}, efectivo_plazo_dias = ${d.efectivo_plazo_dias}
+        where id = ${sesion.negocio.id}`),
+    );
+  } catch (e) {
+    return { error: mensajeDeError(e) };
+  }
+
+  revalidatePath("/panel", "layout");
+  revalidatePath(`/n/${sesion.negocio.slug}`, "layout");
+  return { ok: true, mensaje: "Tienda guardada." };
 }
