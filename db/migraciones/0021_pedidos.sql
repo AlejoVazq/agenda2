@@ -77,6 +77,8 @@ grant select on public.pedidos, public.pedido_items to agenda2_usuario, agenda2_
 
 -- Devuelve al producto lo apartado por el pedido (los productos borrados se saltean).
 -- Quien la llama tiene bloqueado el pedido y cambia su estado en la misma transacción.
+-- Con tope en 100000 (el máximo de productos.stock): si la dueña subió el stock mientras
+-- tanto, la devolución no rompe el check.
 create or replace function public.devolver_stock_pedido(p_pedido uuid)
 returns void
 language plpgsql
@@ -95,7 +97,7 @@ begin
     group by i.producto_id
     order by i.producto_id
   loop
-    update public.productos set stock = stock + r.n where id = r.producto_id;
+    update public.productos set stock = least(stock + r.n, 100000) where id = r.producto_id;
   end loop;
 end;
 $$;
@@ -144,7 +146,9 @@ $$;
 
 -- Pendientes con el plazo cumplido → vencido, y vuelve su stock. Devuelve cuántos venció.
 -- "skip locked": si otra transacción tiene el pedido (un pago entrando), lo deja para la
--- próxima corrida.
+-- próxima corrida. El stock de todos los vencidos se devuelve en una sola pasada, sumado
+-- por producto y en orden de producto (el mismo orden en que se bloquean productos en
+-- todas partes), así dos corridas o un pedido nuevo no se cruzan los candados.
 create or replace function public.liberar_pedidos_vencidos(p_negocio uuid default null)
 returns integer
 language plpgsql
@@ -153,23 +157,35 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_id       uuid;
-  v_cantidad integer := 0;
+  v_ids uuid[];
+  r     record;
 begin
-  for v_id in
+  select coalesce(array_agg(s.id), '{}') into v_ids
+  from (
     select p.id from public.pedidos p
     where p.estado = 'pendiente' and p.vence_at < now()
       and (p_negocio is null or p.negocio_id = p_negocio)
     order by p.id
     for update skip locked
+  ) s;
+  if cardinality(v_ids) = 0 then
+    return 0;
+  end if;
+
+  for r in
+    select i.producto_id, sum(i.cantidad)::integer as n
+    from public.pedido_items i
+    where i.pedido_id = any(v_ids) and i.producto_id is not null
+    group by i.producto_id
+    order by i.producto_id
   loop
-    perform public.devolver_stock_pedido(v_id);
-    update public.pedidos
-    set estado = 'vencido', cancelado_at = now(), cancelado_por = 'sistema'
-    where id = v_id;
-    v_cantidad := v_cantidad + 1;
+    update public.productos set stock = least(stock + r.n, 100000) where id = r.producto_id;
   end loop;
-  return v_cantidad;
+
+  update public.pedidos
+  set estado = 'vencido', cancelado_at = now(), cancelado_por = 'sistema'
+  where id = any(v_ids);
+  return cardinality(v_ids);
 end;
 $$;
 
@@ -258,6 +274,19 @@ begin
 
   -- Los pedidos de un local se crean de a uno (número correlativo y límite por mail).
   perform pg_advisory_xact_lock(hashtextextended('pedidos:' || p_negocio::text, 0));
+
+  -- Candados de productos, todos juntos y en orden de id: los de este pedido y los de los
+  -- vencidos que se liberan abajo. Así nunca se toma un producto "menor" después de uno
+  -- "mayor" (liberar y apartar, por separado, ya van en orden; juntos no).
+  perform 1 from public.productos pr
+  where pr.id = any(v_ids)
+     or pr.id in (
+       select i.producto_id from public.pedido_items i
+       join public.pedidos p on p.id = i.pedido_id
+       where p.negocio_id = p_negocio and p.estado = 'pendiente' and p.vence_at < now()
+     )
+  order by pr.id
+  for update;
 
   -- Antes de contar y de apartar: lo vencido vuelve al stock.
   perform public.liberar_pedidos_vencidos(p_negocio);
@@ -444,9 +473,11 @@ begin
     return 'confirmado';
   end if;
 
-  -- vencido o cancelado: el stock ya había vuelto. Si alcanza se vuelve a apartar; si no,
-  -- queda para devolver la plata (el dueño lo ve en el panel).
-  if public.apartar_stock_pedido(v.id) then
+  -- Vencido o cancelado por el cliente: el stock ya había vuelto. Si alcanza se vuelve a
+  -- apartar; si no, queda para devolver la plata (el dueño lo ve en el panel). Si lo
+  -- canceló el negocio (o ya marcó la plata como devuelta), manda el negocio: no revive.
+  if (v.estado = 'vencido' or (v.estado = 'cancelado' and v.cancelado_por = 'cliente'))
+     and public.apartar_stock_pedido(v.id) then
     update public.pedidos
     set estado = 'pagado', pago_id = p_pago_id, pagado_at = now(), vence_at = null,
         cancelado_at = null, cancelado_por = null
@@ -454,7 +485,7 @@ begin
     return 'confirmado';
   end if;
 
-  update public.pedidos set estado = 'reembolsar', pago_id = p_pago_id where id = v.id;
+  update public.pedidos set estado = 'reembolsar', pago_id = p_pago_id, vence_at = null where id = v.id;
   return 'reembolsar';
 end;
 $$;
@@ -564,7 +595,7 @@ begin
     raise exception 'ESTADO_INVALIDO' using errcode = 'P0001';
   end if;
   update public.pedidos
-  set estado = 'cancelado', cancelado_at = coalesce(cancelado_at, now()), cancelado_por = coalesce(cancelado_por, 'negocio')
+  set estado = 'cancelado', cancelado_at = coalesce(cancelado_at, now()), cancelado_por = 'negocio'
   where id = v.id;
 end;
 $$;

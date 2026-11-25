@@ -1771,6 +1771,7 @@ await prueba("pedidos: vencer devuelve stock; pago tardío reaparta o queda a re
   assert.equal(await stockDe(prod.id), 0);
   assert.equal(await pagar(pB.pedido_id, "pp2", true, 3000), "reembolsar");
   assert.equal((await pedidoDe(pB.pedido_id)).estado, "reembolsar");
+  assert.equal((await pedidoDe(pB.pedido_id)).vence_at, null, "a reembolsar no tiene plazo");
   assert.equal(await stockDe(prod.id), 0);
   assert.equal(await pagar(pB.pedido_id, "pp2", true, 3000), "ya_procesado");
 
@@ -1789,6 +1790,53 @@ await prueba("pedidos: vencer devuelve stock; pago tardío reaparta o queda a re
   assert.equal(await stockDe(prod.id), 1);
   assert.equal(await pagar("00000000-0000-4000-8000-000000000000", "pp5", true, 1), "rechazado");
   await como("ana", () => falla(q("select public.registrar_pago_pedido($1, 'x', true, 1)", [pC.pedido_id]), /permission denied/, "dueña"));
+});
+
+await prueba("pedidos: pago tardío revive solo lo vencido o cancelado por el cliente; lo cancelado por el negocio va a reembolsar", async () => {
+  const prod = await como("ana", () => uno("insert into public.productos (negocio_id, nombre, precio, stock) values ($1, 'Tónico', 2000, 5) returning id", [negA]));
+  const uno1 = [{ producto_id: prod.id, cantidad: 1 }];
+  const pagar = async (id, pago) =>
+    (await servicio("select public.registrar_pago_pedido($1, $2, true, 2000) as r", [id, pago]))[0].r;
+
+  // Cancelado por el negocio: el pago no lo revive ni toca el stock.
+  const pN = await pedir(uno1, "Nora", "nora@test.com", "transferencia");
+  await como("ana", () => q("select public.pedido_cancelar($1)", [pN.pedido_id]));
+  assert.equal(await stockDe(prod.id), 5);
+  assert.equal(await pagar(pN.pedido_id, "pn1"), "reembolsar");
+  const n = await pedidoDe(pN.pedido_id);
+  assert.deepEqual({ e: n.estado, vence: n.vence_at, pago: n.pago_id }, { e: "reembolsar", vence: null, pago: "pn1" });
+  assert.equal(await stockDe(prod.id), 5, "no aparta stock");
+  // Devuelto por la dueña: un pago nuevo tampoco lo revive.
+  await como("ana", () => q("select public.pedido_marcar_devuelto($1)", [pN.pedido_id]));
+  assert.equal((await pedidoDe(pN.pedido_id)).cancelado_por, "negocio");
+  assert.equal(await pagar(pN.pedido_id, "pn2"), "reembolsar");
+  assert.equal(await stockDe(prod.id), 5);
+
+  // Cancelado por el cliente: el pago tardío lo revive si hay stock.
+  const pK = await pedir(uno1, "Kevin", "kevin@test.com", "transferencia");
+  assert.equal((await servicio("select public.cancelar_pedido_cliente($1) as r", [pK.token]))[0].r, true);
+  assert.equal(await stockDe(prod.id), 5);
+  assert.equal(await pagar(pK.pedido_id, "pk1"), "confirmado");
+  const k = await pedidoDe(pK.pedido_id);
+  assert.deepEqual({ e: k.estado, por: k.cancelado_por }, { e: "pagado", por: null });
+  assert.equal(await stockDe(prod.id), 4);
+});
+
+await prueba("pedidos: el cron devuelve el stock de varios vencidos de una vez, con tope en 100000", async () => {
+  const a = await como("ana", () => uno("insert into public.productos (negocio_id, nombre, precio, stock) values ($1, 'Cepillo', 1000, 10) returning id", [negA]));
+  const b = await como("ana", () => uno("insert into public.productos (negocio_id, nombre, precio, stock) values ($1, 'Toalla', 1000, 10) returning id", [negA]));
+  const p1 = await pedir([{ producto_id: a.id, cantidad: 2 }, { producto_id: b.id, cantidad: 3 }], "Uno", "uno@test.com", "efectivo");
+  const p2 = await pedir([{ producto_id: b.id, cantidad: 1 }, { producto_id: a.id, cantidad: 4 }], "Dos", "dos@test.com", "efectivo");
+  assert.equal(await stockDe(a.id), 4);
+  assert.equal(await stockDe(b.id), 6);
+  // La dueña sube el stock de uno al máximo mientras tanto.
+  await como("ana", () => q("update public.productos set stock = 99999 where id = $1", [b.id]));
+  await q("update public.pedidos set vence_at = now() - interval '1 minute' where id = any($1::uuid[])", [[p1.pedido_id, p2.pedido_id]]);
+  assert.equal((await servicio("select public.liberar_pedidos_vencidos() as n"))[0].n, 2);
+  assert.equal(await stockDe(a.id), 10);
+  assert.equal(await stockDe(b.id), 100000, "con tope");
+  for (const p of [p1, p2]) assert.equal((await pedidoDe(p.pedido_id)).estado, "vencido");
+  await q("delete from public.productos where id = any($1::uuid[])", [[a.id, b.id]]);
 });
 
 await prueba("pedidos: panel solo para dueños; cancelar devuelve stock; cliente cancela por token", async () => {
