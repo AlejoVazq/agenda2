@@ -113,6 +113,24 @@ export const esquemaPassword = z
 
 // --- Negocio ------------------------------------------------------------------------
 
+/** Instagram: acepta "@usuario", "usuario" o el link del perfil; guarda solo el usuario. */
+const instagram = z.preprocess(
+  (v) => {
+    if (typeof v !== "string") return null;
+    const t = v
+      .trim()
+      .replace(/^(https?:\/\/)?(www\.)?instagram\.com\//i, "")
+      .replace(/^@/, "")
+      .replace(/[/?#].*$/, "")
+      .toLowerCase();
+    return t === "" ? null : t;
+  },
+  z
+    .string()
+    .regex(/^[a-z0-9._]{1,30}$/, "Escribí tu usuario de Instagram (por ejemplo, @tunegocio)")
+    .nullable(),
+);
+
 export const esquemaOnboarding = z.object({
   nombre: texto(2, 80, "El nombre"),
   slug,
@@ -129,6 +147,7 @@ export const esquemaNegocio = z.object({
   rubro,
   telefono: telefonoDeLaCiudadObligatorio,
   direccion: textoOpcional(160),
+  instagram,
   descripcion: textoOpcional(500),
   cancelacion_min_horas: entero(0, 168, "Las horas"),
   anticipacion_min_min: entero(0, 10080, "La anticipación mínima"),

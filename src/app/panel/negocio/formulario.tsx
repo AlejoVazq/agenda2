@@ -44,6 +44,17 @@ export function FormularioNegocio({ negocio, siteUrl }: { negocio: Negocio; site
             <Input id="direccion" name="direccion" defaultValue={valor("direccion", negocio.direccion)} />
           </Campo>
         </div>
+        <Campo etiqueta="Instagram" htmlFor="instagram" errores={e.instagram} ayuda="Opcional. Aparece en tu página de reservas.">
+          <Input
+            id="instagram"
+            name="instagram"
+            placeholder="@tunegocio"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            defaultValue={valor("instagram", negocio.instagram ? `@${negocio.instagram}` : null)}
+          />
+        </Campo>
         <Campo etiqueta="Descripción" htmlFor="descripcion" errores={e.descripcion} ayuda="Se muestra en tu página de reservas.">
           <Textarea id="descripcion" name="descripcion" rows={3} defaultValue={valor("descripcion", negocio.descripcion)} />
         </Campo>

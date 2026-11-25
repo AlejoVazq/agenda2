@@ -22,6 +22,8 @@ export interface Negocio {
   rubro: Rubro;
   telefono: string | null;
   direccion: string | null;
+  /** Usuario de Instagram sin @. */
+  instagram: string | null;
   descripcion: string | null;
   zona_horaria: string;
   cancelacion_min_horas: number;

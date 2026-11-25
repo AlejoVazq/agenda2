@@ -25,6 +25,7 @@ export async function guardarNegocio(_prev: EstadoAccion, formData: FormData): P
         update public.negocios set
           nombre = ${d.nombre}, slug = ${d.slug}, rubro = ${d.rubro},
           telefono = ${d.telefono ?? null}, direccion = ${d.direccion ?? null}, descripcion = ${d.descripcion ?? null},
+          instagram = ${d.instagram ?? null},
           cancelacion_min_horas = ${d.cancelacion_min_horas}, anticipacion_min_min = ${d.anticipacion_min_min},
           anticipacion_max_dias = ${d.anticipacion_max_dias}, intervalo_min = ${d.intervalo_min},
           confirmacion_automatica = ${d.confirmacion_automatica}, recordatorio_horas = ${d.recordatorio_horas}
