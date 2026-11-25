@@ -101,3 +101,22 @@ $$;
 -- Los negocios demo quedan pagos por un año (si no, a los 7 días de prueba se bloquean).
 update public.negocios set pagado_hasta = now() + interval '1 year'
 where slug in ('estudio-luna', 'peluqueria-caballeros');
+
+-- Tienda: productos de ejemplo (sin fotos; se cargan desde el panel) y la tienda prendida
+-- con efectivo y transferencia. "Aceite para barba" sin stock, para ver cómo se muestra.
+insert into public.productos (negocio_id, nombre, descripcion, precio, stock, orden)
+select n.id, p.nombre, p.descripcion, p.precio, p.stock, p.orden
+from public.negocios n
+join (values
+  ('peluqueria-caballeros', 'Cera mate', 'Fijación fuerte, acabado natural.', 8500, 6, 1),
+  ('peluqueria-caballeros', 'Pomada brillo', 'Fijación media con brillo.', 7900, 4, 2),
+  ('peluqueria-caballeros', 'Shampoo anticaspa', null, 6200, 10, 3),
+  ('peluqueria-caballeros', 'Aceite para barba', 'Suaviza y perfuma la barba.', 9800, 0, 4),
+  ('estudio-luna', 'Esmalte semipermanente', null, 5500, 12, 1),
+  ('estudio-luna', 'Crema de manos', 'Hidratación para todos los días.', 4300, 8, 2)
+) as p (slug, nombre, descripcion, precio, stock, orden) on p.slug = n.slug;
+
+update public.negocios
+set tienda_activa = true, tienda_medios = '{efectivo,transferencia}',
+    transferencia_alias = 'demo.agenda2', transferencia_titular = 'Demo Agenda2'
+where slug in ('estudio-luna', 'peluqueria-caballeros');

@@ -11,6 +11,8 @@ const ITEMS: Item[] = [
   { href: "/panel/agenda", texto: "Agenda", icono: "agenda", movil: true },
   { href: "/panel/turnos", texto: "Turnos", icono: "lista", movil: true },
   { href: "/panel/servicios", texto: "Servicios", icono: "servicios", soloDueno: true },
+  { href: "/panel/productos", texto: "Productos", icono: "bolsa", soloDueno: true },
+  { href: "/panel/pedidos", texto: "Pedidos", icono: "recibo", soloDueno: true },
   { href: "/panel/profesionales", texto: "Profesionales", icono: "equipo", soloDueno: true },
   { href: "/panel/bloqueos", texto: "Ausencias", icono: "bloqueo" },
   { href: "/panel/clientes", texto: "Clientes", icono: "clientes", soloDueno: true },
@@ -35,6 +37,8 @@ const ICONOS = {
   grafico: "M3 3v18h18M8 17v-5M13 17V8M18 17v-8",
   estrella: "M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z",
   enchufe: "M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0zM12 17v5",
+  bolsa: "M5 8h14l-1 12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1zM9 10V6a3 3 0 0 1 6 0v4",
+  recibo: "M6 2h12v20l-3-2-3 2-3-2-3 2zM9 7h6M9 11h6M9 15h4",
 };
 
 function Icono({ nombre, className }: { nombre: keyof typeof ICONOS; className?: string }) {

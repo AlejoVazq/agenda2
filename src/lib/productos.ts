@@ -109,3 +109,34 @@ export async function guardarFotoProducto(productoId: string, tipo: TipoLogo, da
 export async function borrarFotoProducto(productoId: string): Promise<void> {
   await comoServidor((tx) => tx.ejecutar(sql`delete from public.producto_fotos where producto_id = ${productoId}`));
 }
+
+// --- Panel: fotos de todos los productos del negocio (también los inactivos) ------------
+
+/** Versión de la foto de cada producto del negocio que tiene una (marca de tiempo). */
+export async function versionesFotosProductos(negocioId: string): Promise<Map<string, number>> {
+  const filas = await comoServidor((tx) =>
+    tx.varios<{ id: string; v: string }>(sql`
+      select f.producto_id as id, (extract(epoch from f.actualizado_at) * 1000)::bigint::text as v
+      from public.producto_fotos f join public.productos p on p.id = f.producto_id
+      where p.negocio_id = ${negocioId}`),
+  ).catch((e) => {
+    console.error("[productos] versionesFotosProductos", e);
+    return [];
+  });
+  return new Map(filas.map((f) => [f.id, Number(f.v)]));
+}
+
+/** URL de la foto en el panel (sirve también para productos inactivos). */
+export function urlFotoProductoPanel(productoId: string, version: number | null | undefined): string | null {
+  return version ? `/panel/productos/${productoId}/foto?v=${version}` : null;
+}
+
+/** La foto de un producto de este negocio, activo o no (para el panel). */
+export async function fotoProductoDe(productoId: string, negocioId: string) {
+  return comoServidor((tx) =>
+    tx.uno<{ tipo: TipoLogo; datos: Buffer }>(sql`
+      select f.tipo, f.datos
+      from public.producto_fotos f join public.productos p on p.id = f.producto_id
+      where f.producto_id = ${productoId} and p.negocio_id = ${negocioId}`),
+  );
+}
