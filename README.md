@@ -183,7 +183,7 @@ src/
 
 ### Fase 6: seña con Mercado Pago
 
-> **Hoy está oculta**: `SENA_ACTIVA = false` en `src/lib/env.ts`. El código y la base siguen intactos; para volver a ofrecerla, alcanza con pasarlo a `true`.
+> **Hoy está apagada**: desde la migración 0020, `public.monto_sena` devuelve 0 siempre, y `SENA_ACTIVA = false` en `src/lib/env.ts` oculta su configuración. El resto del flujo sigue en el código; para volver a ofrecerla hay que reponer `monto_sena` en una migración nueva y pasar `SENA_ACTIVA` a `true`. Mercado Pago hoy se usa para cobrar los pedidos de la tienda (abajo).
 1. Necesitás `INTEGRACIONES_CLAVE`. No hay variables de Mercado Pago: cada negocio conecta la suya.
 2. Panel → **Integraciones** → pegá el **Access Token**. Para probar, usá las credenciales de prueba (`TEST-…`) de https://www.mercadopago.com.ar/developers/panel/app y pagá con una [tarjeta de prueba](https://www.mercadopago.com.ar/developers/es/docs/checkout-pro/additional-content/your-integrations/test/cards).
 3. Configurá la seña (porcentaje del precio o monto fijo) y el plazo para pagar.
@@ -214,6 +214,15 @@ src/
 - `/admin`: negocios con filtros y búsqueda; detalle con pagos, configuración en solo lectura (para ayudarlos), contacto, notas internas e historial de todo lo que hizo el admin. No muestra clientes ni lo que factura cada negocio.
 - Se entra con contraseña **y** el código de una app autenticadora (Google Authenticator, etc.).
 - Probar: entrar como `admin@turnos.test`, configurar el segundo factor, registrar un pago a "Peluquería Caballeros", suspenderla y ver `/n/peluqueria-caballeros` y el panel de `barbero@turnos.test`.
+
+### Tienda: productos y pedidos
+- **Configurar** (dueño): Panel → **Productos** (nombre, precio, disponible, foto) y **Mi negocio → Tienda** (activarla, medios de pago, alias/CBU/titular, plazos). El seed deja la tienda prendida en los dos negocios demo, con efectivo y transferencia (alias `demo.agenda2`) y productos genéricos sin foto: 4 en Peluquería Caballeros ("Aceite para barba" sin stock) y 2 en Estudio Luna.
+- **Comprar**: en `/n/estudio-luna` aparece la sección **Productos** → "Ver todos" → `/n/estudio-luna/productos`. Agregá 2 unidades, "Continuar", completá tus datos y elegí efectivo o transferencia. Te lleva a `/p/<token>` (alias/CBU con "Copiar", WhatsApp "Te transferí el pedido #N") y el mail sale en la consola de `npm run dev`.
+- **Stock**: se aparta al crear el pedido (miralo bajar en Panel → Productos). Cancelá desde `/p/<token>` y vuelve. La última unidad no se vende dos veces: el segundo recibe "Sin stock".
+- **Plazos**: Mercado Pago 30 min; transferencia 48 h (configurable 1–168 h); efectivo 3 días (1–14) o hasta el día del turno si el pedido sale de un turno. Al vencer, el cron (`/api/cron`, paso `pedidosVencidos`) lo pasa a vencido y devuelve el stock. Para probarlo: poné `vence_at` en el pasado a un pedido pendiente y corré `curl -H "Authorization: Bearer $CRON_SECRET" localhost:3000/api/cron`.
+- **Desde un turno**: al reservar, `/t/<token>?nueva=1` muestra "¿Querés sumar algo para retirar en tu turno?" con hasta 4 productos; el botón lleva a `/n/<slug>/productos?turno=<token>` con tus datos ya cargados. Si pagás en efectivo, el plazo llega hasta el día del turno.
+- **Panel → Pedidos**: Pendientes / Por entregar / Historial, con "Pago recibido", "Entregado", "Cancelar" (manda mail al cliente) y "Marcar como devuelto". Solo dueños; los empleados no ven productos ni pedidos.
+- **Mercado Pago**: conectalo en Integraciones (Access Token; para probar, credenciales de prueba `TEST-…` y una [tarjeta de prueba](https://www.mercadopago.com.ar/developers/es/docs/checkout-pro/additional-content/your-integrations/test/cards)) y tildalo en Mi negocio → Tienda. El cliente va directo a pagar; al volver a `/p/<token>` se verifica el pago contra la API y queda "Pagado". Un pago que llega tarde reaparta el stock si hay (si no, queda "A devolver"). En local el webhook no llega (`localhost`), pero la vuelta alcanza.
 
 ### Extras
 - **Estadísticas** (dueño): turnos, facturación estimada, cancelaciones, reservas online, servicios y profesionales más pedidos, días con más turnos.

@@ -12,6 +12,7 @@ import { ESTADOS_TURNO } from "@/lib/tipos";
 import { CancelarTurno } from "./cancelar";
 import { PagarSena } from "./pagar";
 import { Opinar } from "./opinar";
+import { Recomendados } from "./recomendados";
 import { resenaDeTurno } from "@/lib/resenas";
 
 // El token del link es secreto: no indexar ni filtrarlo como referrer.
@@ -228,6 +229,8 @@ export default async function PaginaTurno({ params, searchParams }: PageProps<"/
           ) : null}
           </div>
         </div>
+
+        {nueva && activo && !pasado && !esperandoSena ? <Recomendados slug={turno.negocio.slug} token={token} /> : null}
 
         {opinion.puede || opinion.resena ? (
           <Opinar token={token} negocio={turno.negocio.nombre} profesional={turno.profesional} datos={opinion} />

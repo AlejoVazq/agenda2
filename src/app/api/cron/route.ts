@@ -4,6 +4,7 @@ import { integracionesDisponibles } from "@/lib/env";
 import { enviarEmail } from "@/lib/email/enviar";
 import { emailPedidoResena, emailRecordatorio, emailSuscripcion, type AvisoSuscripcion } from "@/lib/email/plantillas";
 import { importarOcupadosTodos, sincronizarPendientes } from "@/lib/google";
+import { liberarPedidosVencidos } from "@/lib/pedidos";
 import { comoServidor, sql } from "@/lib/db";
 import { enviarPlantillaWhatsApp } from "@/lib/whatsapp-api";
 
@@ -12,12 +13,13 @@ import { enviarPlantillaWhatsApp } from "@/lib/whatsapp-api";
 //   Authorization: Bearer <CRON_SECRET>
 //
 //  1. Libera turnos cuya seña no se pagó a tiempo.
-//  2. Recordatorios por mail y por WhatsApp.
-//  3. Google Calendar: reintenta sincronizaciones y trae horarios ocupados.
-//  4. Avisa a los dueños que su suscripción está por vencer, venció o se bloqueó.
-//  5. Pide la opinión de los turnos que terminaron hace unas horas.
-//  6. Completa los turnos fijos para que siempre haya 8 semanas agendadas.
-//  7. Limpia contadores viejos de límites de uso.
+//  2. Libera pedidos vencidos de la tienda (sin pagar a tiempo): vuelve el stock.
+//  3. Recordatorios por mail y por WhatsApp.
+//  4. Google Calendar: reintenta sincronizaciones y trae horarios ocupados.
+//  5. Avisa a los dueños que su suscripción está por vencer, venció o se bloqueó.
+//  6. Pide la opinión de los turnos que terminaron hace unas horas.
+//  7. Completa los turnos fijos para que siempre haya 8 semanas agendadas.
+//  8. Limpia contadores viejos de límites de uso.
 export const maxDuration = 300;
 
 type PendienteMail = {
@@ -184,6 +186,7 @@ export async function GET(request: NextRequest) {
     senasVencidas: await tarea("señas", async () =>
       (await comoServidor((tx) => tx.uno<{ n: number }>(sql`select public.vencer_pagos_pendientes() as n`)))?.n ?? 0,
     ),
+    pedidosVencidos: await tarea("pedidos vencidos", liberarPedidosVencidos),
     mail: await tarea("recordatorios mail", recordatoriosMail),
     whatsapp: await tarea("recordatorios whatsapp", recordatoriosWhatsApp),
     suscripciones: await tarea("avisos de suscripción", avisosSuscripcion),
