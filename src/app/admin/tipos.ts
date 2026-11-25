@@ -103,6 +103,7 @@ export const ACCIONES_AUDITORIA: Record<string, string> = {
   registrar_pago: "Registró un pago",
   anular_pago: "Anuló un pago",
   extender_prueba: "Extendió la prueba",
+  terminar_prueba: "Terminó la prueba",
   suspender: "Dio de baja el negocio",
   reactivar: "Reactivó el negocio",
   eliminar_cuentas: "Eliminó las cuentas del equipo",

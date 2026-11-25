@@ -1540,6 +1540,21 @@ await prueba("admin: pagos encadenados, anulación, prueba, suspensión, notas, 
   await admin("select plataforma.admin_extender_prueba($1, 10)", [negB]);
   assert.ok(msHasta((await negocio()).prueba_hasta) > 16.9 * DIA, "7 + 10 días");
 
+  // Terminar la prueba: el pago que esperaba detrás de la prueba se adelanta a hoy.
+  const p3 = (await admin("select plataforma.admin_registrar_pago($1, 15000, 'efectivo', 1, null) as id", [negB])).id;
+  assert.ok(msHasta((await negocio()).pagado_hasta) > 40 * DIA, "encolado detrás de la prueba");
+  await como("beto", () => falla(q("select plataforma.admin_terminar_prueba($1)", [negB]), /SIN_PERMISO/, "dueño"));
+  await admin("select plataforma.admin_terminar_prueba($1)", [negB]);
+  const trasTerminar = await negocio();
+  assert.ok(msHasta(trasTerminar.prueba_hasta) <= 0, "la prueba terminó");
+  assert.ok(msHasta(trasTerminar.pagado_hasta) > 27 * DIA && msHasta(trasTerminar.pagado_hasta) < 32 * DIA, "un mes desde hoy");
+  const pago3 = await uno("select periodo_desde, periodo_hasta from plataforma.pagos where id = $1", [p3]);
+  assert.ok(Math.abs(msHasta(pago3.periodo_desde)) < 60_000, "el pago arranca hoy");
+  assert.equal((await como("beto", () => uno("select public.mi_suscripcion() as s"))).s.estado, "activa");
+  await como("admin", () => falla(q("select plataforma.admin_terminar_prueba($1)", [negB]), /SIN_PRUEBA/, "ya terminada"));
+  await admin("select plataforma.admin_anular_pago($1, 'prueba')", [p3]);
+  await admin("select plataforma.admin_extender_prueba($1, 10)", [negB]);
+
   await como("admin", () => falla(q("select plataforma.admin_cambiar_slug($1, 'salon-ana')", [negB]), /SLUG_OCUPADO/, "ocupado"));
   await admin("select plataforma.admin_cambiar_slug($1, 'barberia-beto-2')", [negB]);
   await admin("select plataforma.admin_cambiar_slug($1, 'barberia-beto')", [negB]);
@@ -1553,13 +1568,14 @@ await prueba("admin: pagos encadenados, anulación, prueba, suspensión, notas, 
 
   const d = await como("admin", async () => (await uno("select plataforma.admin_negocio($1) as d", [negB])).d);
   assert.equal(d.notas[0].texto, "Llamó por los horarios");
-  assert.equal(d.pagos.length, 2);
+  assert.equal(d.pagos.length, 3);
   assert.ok(d.pagos.every((p) => p.anulado_at));
   assert.deepEqual(
     d.auditoria.map((a) => a.accion).reverse(),
     [
       "registrar_pago", "registrar_pago", "anular_pago", "anular_pago", "suspender", "reactivar",
-      "extender_prueba", "cambiar_slug", "cambiar_slug", "agregar_nota", "link_acceso_dueno", "aviso_whatsapp",
+      "extender_prueba", "registrar_pago", "terminar_prueba", "anular_pago", "extender_prueba",
+      "cambiar_slug", "cambiar_slug", "agregar_nota", "link_acceso_dueno", "aviso_whatsapp",
     ],
   );
   assert.ok(d.auditoria.every((a) => a.admin === "admin"));

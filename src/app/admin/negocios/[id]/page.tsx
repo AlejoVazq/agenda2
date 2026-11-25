@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { EncabezadoPagina, Insignia, Tarjeta, cx } from "@/components/ui";
 import { requerirAdmin } from "@/lib/admin";
 import { comoUsuario, esErrorPg, sql } from "@/lib/db";
-import { formatDuracion, formatFechaCorta, formatFechaHora, formatPrecio } from "@/lib/fechas";
+import { formatDuracion, formatFechaCorta, formatFechaCortaConAnio, formatFechaHora, formatPrecio } from "@/lib/fechas";
 import { DIAS_SEMANA, RUBROS, type Rubro } from "@/lib/tipos";
+import { diasHasta } from "@/lib/suscripcion";
 import { linkWhatsApp } from "@/lib/whatsapp";
 import { InsigniaEstado } from "../../estado";
 import { LineaMembresia } from "../../membresia";
@@ -21,6 +22,7 @@ import {
   FormularioPago,
   FormularioSlug,
   FormularioSuspension,
+  FormularioTerminarPrueba,
 } from "./formularios";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -51,6 +53,8 @@ function textoDetalle(accion: string, d: Record<string, unknown>) {
       return `${formatPrecio(Number(d.monto))} · ${d.motivo}`;
     case "extender_prueba":
       return `${d.dias} días`;
+    case "terminar_prueba":
+      return d.pagado_hasta ? `plan pago hasta el ${formatFechaCortaConAnio(String(d.pagado_hasta))}` : "sin pagos";
     case "suspender":
       return d.motivo ? String(d.motivo) : "";
     case "eliminar_cuentas":
@@ -80,6 +84,8 @@ export default async function PaginaNegocioAdmin({ params }: PageProps<"/admin/n
   }
 
   const dueno = n.equipo.find((u) => u.rol === "dueno");
+  const enPrueba = n.estado !== "suspendida" && diasHasta(n.prueba_hasta) > 0;
+  const tienePago = n.pagos.some((p) => !p.anulado_at);
 
   return (
     <div className="space-y-5">
@@ -106,10 +112,7 @@ export default async function PaginaNegocioAdmin({ params }: PageProps<"/admin/n
             <LineaMembresia n={n} />
             <div className="border-t border-zinc-100 pt-3">
               <h3 className="mb-2 text-sm font-semibold">Registrar pago</h3>
-              <FormularioPago negocioId={n.id} />
-              <p className="mt-2 text-xs text-zinc-500">
-                Suma los meses desde que termina lo que ya tiene (pago anterior o prueba), así pagar antes no le hace perder días.
-              </p>
+              <FormularioPago negocioId={n.id} enPrueba={enPrueba} />
             </div>
           </Seccion>
 
@@ -127,7 +130,7 @@ export default async function PaginaNegocioAdmin({ params }: PageProps<"/admin/n
                       <span className="text-xs text-zinc-500">{formatFechaHora(p.created_at)}</span>
                     </div>
                     <p className="text-xs text-zinc-500">
-                      Cubre del {formatFechaCorta(p.periodo_desde)} al {formatFechaCorta(p.periodo_hasta)}
+                      Cubre del {formatFechaCortaConAnio(p.periodo_desde)} al {formatFechaCortaConAnio(p.periodo_hasta)}
                       {p.nota ? ` · ${p.nota}` : ""}
                     </p>
                     {p.anulado_at ? (
@@ -268,11 +271,18 @@ export default async function PaginaNegocioAdmin({ params }: PageProps<"/admin/n
             </div>
           </Seccion>
 
-          <Seccion titulo="Prueba y baja">
+          <Seccion titulo="Prueba gratis">
             <FormularioExtender negocioId={n.id} />
-            <div className="border-t border-zinc-100 pt-3">
-              <FormularioSuspension negocioId={n.id} suspendido={n.estado === "suspendida"} />
-            </div>
+            {enPrueba ? (
+              <div className="space-y-1 border-t border-zinc-100 pt-3">
+                <FormularioTerminarPrueba negocioId={n.id} tienePago={tienePago} />
+                <p className="text-xs text-zinc-500">Corta la prueba hoy. Para cobrar y arrancar el plan ya, usá «Registrar pago».</p>
+              </div>
+            ) : null}
+          </Seccion>
+
+          <Seccion titulo="Dar de baja el negocio" className="border-red-200">
+            <FormularioSuspension negocioId={n.id} suspendido={n.estado === "suspendida"} />
           </Seccion>
 
           <Seccion titulo="Notas internas">

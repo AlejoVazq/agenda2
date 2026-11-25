@@ -1,5 +1,5 @@
 import { cx } from "@/components/ui";
-import { formatFechaCorta } from "@/lib/fechas";
+import { formatFechaCortaConAnio as formatFechaCorta } from "@/lib/fechas";
 import { calcularMembresia, diasHasta, EFECTO_ESTADO, pasosMembresia, type EstadoSuscripcion, type PeriodoPago } from "@/lib/suscripcion";
 import { InsigniaEstado } from "./estado";
 
@@ -27,7 +27,9 @@ export function LineaMembresia({ n }: { n: Datos }) {
         : n.estado === "vencida"
           ? `Apagado desde el ${formatFechaCorta(m.apagado)}`
           : p
-            ? `Día ${p.dia} de ${p.total} ${p.tipo === "plan" ? "del plan" : "de la prueba"} · vence el ${formatFechaCorta(m.vence)} (${diasHasta(m.vence)} d)`
+            ? `Día ${p.dia} de ${p.total} ${p.tipo === "plan" ? "del plan" : "de la prueba"} · ${
+                p.tipo === "prueba" && m.esPlan ? "después sigue el plan pago hasta el" : "vence el"
+              } ${formatFechaCorta(m.vence)} (${diasHasta(m.vence)} d)`
             : `Vence el ${formatFechaCorta(m.vence)} (${diasHasta(m.vence)} d)`;
 
   return (

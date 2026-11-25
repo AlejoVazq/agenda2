@@ -29,6 +29,7 @@ const MENSAJES: Record<string, string> = {
   SLUG_OCUPADO: "Esa dirección ya la usa otro negocio.",
   CONFIRMACION_INCORRECTA: "El nombre no coincide. Escribilo igual que como figura arriba.",
   NADA_QUE_BORRAR: "Marcá qué querés eliminar.",
+  SIN_PRUEBA: "La prueba ya había terminado.",
 };
 
 function error(e: unknown): EstadoAccion {
@@ -40,6 +41,8 @@ function error(e: unknown): EstadoAccion {
 }
 
 const uuid = z.uuid("Negocio inválido");
+const casilla = z.preprocess((v) => v === "on" || v === "true", z.boolean());
+const soloNegocio = z.object({ negocio_id: uuid });
 const textoOpcional = (max: number) =>
   z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), z.string().trim().max(max).optional());
 
@@ -72,15 +75,31 @@ const esquemaPago = z.object({
   medio: z.enum(Object.keys(MEDIOS_PAGO) as [keyof typeof MEDIOS_PAGO], "Elegí el medio"),
   meses: z.coerce.number().int().min(1).max(24),
   nota: textoOpcional(300),
+  /** Corta la prueba en el momento: el pago arranca hoy (solo se manda mientras está en prueba). */
+  desde_hoy: casilla,
 });
 
 export async function registrarPago(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
   return comoAdmin(formData, esquemaPago, async (admin, d) => {
     const p = d as z.infer<typeof esquemaPago>;
-    await comoUsuario(admin.userId, (tx) =>
-      tx.uno(sql`select plataforma.admin_registrar_pago(${p.negocio_id}, ${p.monto}, ${p.medio}, ${p.meses}, ${p.nota ?? null})`),
+    await comoUsuario(admin.userId, async (tx) => {
+      if (p.desde_hoy) await tx.uno(sql`select plataforma.admin_terminar_prueba(${p.negocio_id})`);
+      await tx.uno(sql`select plataforma.admin_registrar_pago(${p.negocio_id}, ${p.monto}, ${p.medio}, ${p.meses}, ${p.nota ?? null})`);
+    });
+    const meses = p.meses === 1 ? "un mes más" : `${p.meses} meses más`;
+    return p.desde_hoy ? `Prueba terminada y pago registrado: ${meses}, desde hoy.` : `Pago registrado: ${meses}.`;
+  });
+}
+
+/** Termina la prueba ya. Lo que tenía pago se adelanta los días que le quedaban de prueba. */
+export async function terminarPrueba(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
+  return comoAdmin(formData, soloNegocio, async (admin, d) => {
+    const fila = await comoUsuario(admin.userId, (tx) =>
+      tx.uno<{ hasta: string | null }>(sql`select plataforma.admin_terminar_prueba(${d.negocio_id as string}) as hasta`),
     );
-    return p.meses === 1 ? "Pago registrado: un mes más." : `Pago registrado: ${p.meses} meses más.`;
+    return fila?.hasta
+      ? "Prueba terminada: el plan pago arranca hoy."
+      : "Prueba terminada. No tiene pagos: el panel quedó en solo lectura hasta que registres uno.";
   });
 }
 
@@ -118,8 +137,6 @@ export async function suspender(_prev: EstadoAccion, formData: FormData): Promis
   });
 }
 
-const soloNegocio = z.object({ negocio_id: uuid });
-
 export async function reactivar(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {
   return comoAdmin(formData, soloNegocio, async (admin, d) => {
     await comoUsuario(admin.userId, (tx) => tx.uno(sql`select plataforma.admin_reactivar(${d.negocio_id as string})`));
@@ -127,7 +144,6 @@ export async function reactivar(_prev: EstadoAccion, formData: FormData): Promis
   });
 }
 
-const casilla = z.preprocess((v) => v === "on" || v === "true", z.boolean());
 const esquemaEliminar = z.object({
   negocio_id: uuid,
   confirmacion: z.string().trim().min(1, "Escribí el nombre del negocio").max(200),

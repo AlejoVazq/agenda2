@@ -17,6 +17,7 @@ import {
   registrarAvisoWhatsApp,
   registrarPago,
   suspender,
+  terminarPrueba,
 } from "../../acciones";
 import { MEDIOS_PAGO } from "../../tipos";
 
@@ -26,7 +27,7 @@ function Oculto({ negocioId }: { negocioId: string }) {
   return <input type="hidden" name="negocio_id" value={negocioId} />;
 }
 
-export function FormularioPago({ negocioId }: { negocioId: string }) {
+export function FormularioPago({ negocioId, enPrueba }: { negocioId: string; enPrueba: boolean }) {
   const { estado, accion, valor, intento } = useFormulario(registrarPago);
   const e = estado.errores ?? {};
   return (
@@ -59,7 +60,20 @@ export function FormularioPago({ negocioId }: { negocioId: string }) {
       <Campo etiqueta="Nota (opcional)" htmlFor="pago-nota" errores={e.nota}>
         <Input id="pago-nota" name="nota" defaultValue={valor("nota")} placeholder="Ej: noviembre, transferencia del 3/11" />
       </Campo>
+      {enPrueba ? (
+        <Casilla
+          name="desde_hoy"
+          defaultChecked
+          etiqueta="Terminar la prueba: el plan arranca hoy"
+          descripcion="Si no la marcás, el pago empieza cuando termina la prueba (no pierde los días que le quedan)."
+        />
+      ) : null}
       <BotonEnviar pendiente="Registrando…">Registrar pago</BotonEnviar>
+      <p className="text-xs text-zinc-500">
+        {enPrueba
+          ? "Si ya tiene meses pagos, este se suma al final."
+          : "Suma los meses desde que termina lo que ya tiene, así pagar antes no le hace perder días."}
+      </p>
     </form>
   );
 }
@@ -110,6 +124,39 @@ export function FormularioExtender({ negocioId }: { negocioId: string }) {
         <BotonEnviar variante="secundario" pendiente="Extendiendo…">
           Extender prueba
         </BotonEnviar>
+      </div>
+    </form>
+  );
+}
+
+export function FormularioTerminarPrueba({ negocioId, tienePago }: { negocioId: string; tienePago: boolean }) {
+  const [confirmar, setConfirmar] = useState(false);
+  const { estado, accion } = useFormulario(terminarPrueba);
+  if (!confirmar) {
+    return (
+      <div className="space-y-2">
+        <MensajeAccion estado={estado} />
+        <Boton type="button" variante="secundario" onClick={() => setConfirmar(true)}>
+          Terminar prueba…
+        </Boton>
+      </div>
+    );
+  }
+  return (
+    <form action={accion} className="space-y-2" noValidate>
+      <Oculto negocioId={negocioId} />
+      <Aviso tipo={tienePago ? "info" : "error"}>
+        {tienePago
+          ? "Los meses que ya pagó se adelantan: el plan arranca hoy."
+          : "No tiene pagos: el panel queda en solo lectura (y en 5 días se apaga) hasta que registres uno. Para cobrar desde hoy, usá \"Registrar pago\" con la casilla marcada."}
+      </Aviso>
+      <div className="flex gap-2">
+        <BotonEnviar variante={tienePago ? "primario" : "peligro"} pendiente="Terminando…">
+          Terminar prueba
+        </BotonEnviar>
+        <Boton type="button" variante="fantasma" onClick={() => setConfirmar(false)}>
+          Cancelar
+        </Boton>
       </div>
     </form>
   );

@@ -14,6 +14,14 @@ export function formatFechaCorta(iso: string | Date, tz = ZONA_AR) {
   );
 }
 
+/** Como formatFechaCorta, pero suma el año si no es el actual ("dom, 2 ene 2028"). */
+export function formatFechaCortaConAnio(iso: string | Date, tz = ZONA_AR) {
+  const anio = (d: Date) => new Intl.DateTimeFormat(LOCALE, { year: "numeric", timeZone: tz }).format(d);
+  const fecha = new Date(iso);
+  const corta = formatFechaCorta(fecha, tz);
+  return anio(fecha) === anio(new Date()) ? corta : `${corta} ${anio(fecha)}`;
+}
+
 export function formatHora(iso: string | Date, tz = ZONA_AR) {
   return new Intl.DateTimeFormat(LOCALE, { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz }).format(
     new Date(iso),
