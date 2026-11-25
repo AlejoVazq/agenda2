@@ -55,7 +55,7 @@ export default async function PaginaIntegraciones({ searchParams }: PageProps<"/
         titulo="Integraciones"
         descripcion={
           esDueno
-            ? `Conectá tu agenda con Google Calendar${SENA_ACTIVA ? ", cobrá señas" : ""} y avisá por WhatsApp.`
+            ? `Conectá tu agenda con Google Calendar${disponibles.mercadopago ? ", cobrá tus productos con Mercado Pago" : ""}${SENA_ACTIVA ? " y señas" : ""} y avisá por WhatsApp.`
             : "Conectá tu agenda con Google Calendar."
         }
       />
@@ -150,17 +150,15 @@ export default async function PaginaIntegraciones({ searchParams }: PageProps<"/
 
       {esDueno ? (
         <>
-          {/* Mercado Pago --------------------------------------------------------------- */}
-          {SENA_ACTIVA ? (
+          {/* Mercado Pago: cobrar los pedidos de la tienda ------------------------------ */}
+          {disponibles.mercadopago ? (
             <Seccion
               icono={<IconoMercadoPago />}
-              titulo="Seña con Mercado Pago"
-              descripcion="Pedí una seña al reservar online para reducir los faltazos. El dinero va directo a tu cuenta."
+              titulo="Cobrar productos con Mercado Pago"
+              descripcion="Tus clientes pagan los pedidos de la tienda con tarjeta, dinero en cuenta o lo que ofrezca Mercado Pago. El dinero va directo a tu cuenta."
             >
-              {!disponibles.mercadopago ? (
-                <NoConfigurado />
-              ) : mp ? (
-                <div className="space-y-6">
+              {mp ? (
+                <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 p-4">
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold">{mp.config.nickname}</p>
@@ -169,16 +167,28 @@ export default async function PaginaIntegraciones({ searchParams }: PageProps<"/
                     {mp.config.modo === "prueba" ? <Insignia color="ambar">Modo prueba</Insignia> : <Insignia color="verde">Conectado</Insignia>}
                     <DesconectarMercadoPago />
                   </div>
-                  <FormularioSena negocio={negocio} conectado />
+                  <p className="text-sm text-zinc-600">
+                    Para ofrecerlo en la tienda, elegí &quot;Mercado Pago&quot; en los medios de pago de{" "}
+                    <a href="/panel/negocio" className="font-medium text-marca-700 underline">
+                      Mi negocio
+                    </a>
+                    .
+                  </p>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  <FormularioMercadoPago />
-                  <div className="border-t border-zinc-100 pt-5">
-                    <FormularioSena negocio={negocio} conectado={false} />
-                  </div>
-                </div>
+                <FormularioMercadoPago />
               )}
+            </Seccion>
+          ) : null}
+
+          {/* Seña de turnos (apagada: SENA_ACTIVA) -------------------------------------- */}
+          {SENA_ACTIVA && disponibles.mercadopago ? (
+            <Seccion
+              icono={<IconoMercadoPago />}
+              titulo="Seña con Mercado Pago"
+              descripcion="Pedí una seña al reservar online para reducir los faltazos. El dinero va directo a tu cuenta."
+            >
+              <FormularioSena negocio={negocio} conectado={Boolean(mp)} />
             </Seccion>
           ) : null}
 

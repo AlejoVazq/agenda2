@@ -2,7 +2,15 @@ import "server-only";
 import { after } from "next/server";
 import { comoServidor, sql } from "@/lib/db";
 import { enviarEmail } from "./enviar";
-import { emailCambioPorNegocio, emailConfirmacion, emailNuevaReserva } from "./plantillas";
+import {
+  emailCambioPorNegocio,
+  emailConfirmacion,
+  emailNuevaReserva,
+  emailPagoPedido,
+  emailPedidoCliente,
+  emailPedidoNegocio,
+  type DatosPedidoEmail,
+} from "./plantillas";
 
 // Avisos por mail. Leen con el rol del servidor porque quien dispara el aviso es
 // un cliente anónimo o un empleado que no lee fichas: el turno ya pasó por los
@@ -171,5 +179,76 @@ export function notificarCambioTurno(turnoId: string, tipo: "cancelado" | "repro
         tipo,
       ),
     );
+  });
+}
+
+// --- Pedidos de la tienda ---------------------------------------------------------------
+
+function leerPedido(pedidoId: string) {
+  return comoServidor((tx) =>
+    tx.uno<DatosPedidoEmail & { negocio_id: string; estado: string }>(sql`
+      select p.id as "pedidoId", p.negocio_id, p.token, p.numero, p.nombre as cliente, p.email, p.telefono,
+             p.medio, p.estado, p.total, p.vence_at,
+             (select t.inicio from public.turnos t where t.id = p.turno_id and t.estado <> 'cancelado') as turno_inicio,
+             coalesce((
+               select json_agg(json_build_object('nombre', i.nombre, 'precio_unitario', i.precio_unitario, 'cantidad', i.cantidad)
+                               order by i.nombre, i.id)
+               from public.pedido_items i where i.pedido_id = p.id
+             ), '[]'::json) as items,
+             json_build_object(
+               'nombre', n.nombre, 'direccion', n.direccion, 'zona_horaria', n.zona_horaria,
+               'transferencia_alias', n.transferencia_alias, 'transferencia_cbu', n.transferencia_cbu,
+               'transferencia_titular', n.transferencia_titular
+             ) as negocio
+      from public.pedidos p
+      join public.negocios n on n.id = p.negocio_id
+      where p.id = ${pedidoId}`),
+  ).then((d) =>
+    d
+      ? {
+          ...d,
+          total: Number(d.total),
+          items: d.items.map((i) => ({ ...i, precio_unitario: Number(i.precio_unitario), cantidad: Number(i.cantidad) })),
+        }
+      : null,
+  );
+}
+
+/** Los mails de todos los dueños del negocio (como los avisos de la membresía). */
+function duenosDe(negocioId: string) {
+  return comoServidor((tx) =>
+    tx.varios<{ email: string }>(sql`
+      select u."email" as email
+      from public.perfiles p
+      join auth."user" u on u."id" = p.id
+      where p.negocio_id = ${negocioId} and p.rol = 'dueno'`),
+  );
+}
+
+/** "Recibimos tu pedido #N" al cliente, con el link y cómo pagar. */
+export function notificarPedidoCliente(pedidoId: string) {
+  after(async () => {
+    const d = await leerPedido(pedidoId);
+    if (!d || d.estado !== "pendiente") return;
+    await enviarEmail(emailPedidoCliente(d.email, d));
+  });
+}
+
+/** "Nuevo pedido #N" a todos los dueños. */
+export function notificarPedidoNegocio(pedidoId: string) {
+  after(async () => {
+    const d = await leerPedido(pedidoId);
+    if (!d) return;
+    for (const { email } of await duenosDe(d.negocio_id)) await enviarEmail(emailPedidoNegocio(email, d));
+  });
+}
+
+/** Mercado Pago confirmó el pago: comprobante al cliente y aviso a todos los dueños. */
+export function notificarPagoPedido(pedidoId: string) {
+  after(async () => {
+    const d = await leerPedido(pedidoId);
+    if (!d || d.estado !== "pagado") return;
+    await enviarEmail(emailPagoPedido(d.email, d, "cliente"));
+    for (const { email } of await duenosDe(d.negocio_id)) await enviarEmail(emailPagoPedido(email, d, "negocio"));
   });
 }

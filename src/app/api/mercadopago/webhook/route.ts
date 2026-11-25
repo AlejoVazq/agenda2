@@ -4,7 +4,8 @@ import { procesarPagoYAvisar } from "@/lib/eventos";
 // Notificaciones de Mercado Pago (webhooks e IPN). La URL incluye el negocio
 // para saber con qué cuenta consultar el pago. No se confía en el contenido:
 // el pago se vuelve a pedir a la API de Mercado Pago con el token de ese
-// negocio, y solo se registra si es la seña de un turno de ese mismo negocio.
+// negocio, y solo se registra si es la seña de un turno o el pago de un pedido
+// de ese mismo negocio.
 export const maxDuration = 30;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

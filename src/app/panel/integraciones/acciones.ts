@@ -57,7 +57,7 @@ export async function desconectarMercadoPago(): Promise<EstadoAccion> {
   const integracion = await buscarIntegracion(sesion.negocio.id, "mercadopago");
   if (integracion) await borrarIntegracion(integracion.id);
   revalidatePath(RUTA);
-  return { ok: true, mensaje: "Mercado Pago se desconectó. Las reservas ya no piden seña." };
+  return { ok: true, mensaje: "Mercado Pago se desconectó. La tienda ya no ofrece pagar con Mercado Pago." };
 }
 
 export async function guardarSena(_prev: EstadoAccion, formData: FormData): Promise<EstadoAccion> {

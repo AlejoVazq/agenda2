@@ -316,3 +316,209 @@ export function emailGoogleDesconectado(para: string, d: { profesional: string; 
   });
   return { para, asunto: `Volvé a conectar Google Calendar de ${d.profesional}`, html, texto };
 }
+
+// --- Pedidos de la tienda -------------------------------------------------------------
+
+export type DatosPedidoEmail = {
+  pedidoId: string;
+  token: string;
+  numero: number;
+  cliente: string;
+  email: string;
+  telefono: string | null;
+  medio: "mercadopago" | "transferencia" | "efectivo";
+  total: number;
+  vence_at: string | null;
+  /** Inicio del turno asociado (el cliente retira el día del turno). */
+  turno_inicio: string | null;
+  items: { nombre: string; precio_unitario: number; cantidad: number }[];
+  negocio: {
+    nombre: string;
+    direccion: string | null;
+    zona_horaria: string;
+    transferencia_alias: string | null;
+    transferencia_cbu: string | null;
+    transferencia_titular: string | null;
+  };
+};
+
+const NOMBRE_MEDIO = { mercadopago: "Mercado Pago", transferencia: "Transferencia", efectivo: "Efectivo en el local" } as const;
+
+/** Mail de un pedido: items con subtotal, total, filas extra, párrafos y un botón. */
+function plantillaPedido({
+  d,
+  titulo,
+  intro,
+  filas,
+  parrafos,
+  boton,
+  link,
+  pie,
+}: {
+  d: DatosPedidoEmail;
+  titulo: string;
+  intro: string;
+  filas: [string, string][];
+  parrafos: string[];
+  boton: string;
+  link: string;
+  pie: string;
+}) {
+  const items = d.items.map((i) => [`${i.cantidad} × ${i.nombre}`, formatPrecio(i.precio_unitario * i.cantidad) ?? ""] as const);
+  const celda = "padding:9px 0;border-bottom:1px solid #eee";
+  const html = `<!doctype html>
+<html lang="es"><body style="margin:0;background:#f3eee4;font-family:Arial,Helvetica,sans-serif;color:#14231c">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 12px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:20px;padding:28px">
+        <tr><td>
+          <p style="margin:0;font-size:13px;font-weight:bold;color:#1f4d3a">${escapar(d.negocio.nombre)}</p>
+          <h1 style="margin:6px 0 8px;font-size:22px">${escapar(titulo)}</h1>
+          <p style="margin:0 0 20px;font-size:15px;color:#5a544b">${escapar(intro)}</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;border-top:1px solid #eee">
+            ${items
+              .map(([k, v]) => `<tr><td style="${celda}">${escapar(k)}</td><td align="right" style="${celda};white-space:nowrap">${escapar(v)}</td></tr>`)
+              .join("")}
+            <tr><td style="${celda};font-weight:bold">Total</td><td align="right" style="${celda};font-weight:bold;white-space:nowrap">${escapar(formatPrecio(d.total) ?? "")}</td></tr>
+          </table>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;margin-top:12px">
+            ${filas
+              .map(
+                ([k, v]) =>
+                  `<tr><td style="padding:7px 0;color:#776f63;width:110px;vertical-align:top">${escapar(k)}</td><td style="padding:7px 0;font-weight:bold">${escapar(v)}</td></tr>`,
+              )
+              .join("")}
+          </table>
+          ${parrafos.map((p) => `<p style="margin:16px 0 0;font-size:14px;color:#5a544b">${escapar(p)}</p>`).join("")}
+          <p style="margin:24px 0 8px"><a href="${link}" style="display:inline-block;background:#1f4d3a;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:12px">${escapar(boton)}</a></p>
+          <p style="margin:12px 0 0;font-size:12px;color:#776f63">${escapar(pie)}</p>
+        </td></tr>
+      </table>
+      <p style="font-size:11px;color:#a59d94;margin-top:16px">Turnos online con ${escapar(MARCA.nombre)}</p>
+    </td></tr>
+  </table>
+</body></html>`;
+  const texto = [
+    `${d.negocio.nombre} — ${titulo}`,
+    intro,
+    "",
+    ...items.map(([k, v]) => `${k}: ${v}`),
+    `Total: ${formatPrecio(d.total)}`,
+    "",
+    ...filas.map(([k, v]) => `${k}: ${v}`),
+    ...(parrafos.length ? ["", ...parrafos] : []),
+    "",
+    `${boton}: ${link}`,
+    pie,
+  ].join("\n");
+  return { html, texto };
+}
+
+function hastaCuando(d: DatosPedidoEmail) {
+  if (!d.vence_at) return null;
+  const tz = d.negocio.zona_horaria;
+  return `${formatFechaLarga(d.vence_at, tz)} a las ${formatHora(d.vence_at, tz)} h`;
+}
+
+/** Al cliente, apenas hace el pedido: link a /p/<token> e instrucciones según cómo paga. */
+export function emailPedidoCliente(para: string, d: DatosPedidoEmail): Email {
+  const nombre = d.cliente.split(" ")[0];
+  const hasta = hastaCuando(d);
+  const filas: [string, string][] = [["Pago", NOMBRE_MEDIO[d.medio]]];
+  const parrafos: string[] = [];
+  if (d.medio === "transferencia") {
+    if (d.negocio.transferencia_alias) filas.push(["Alias", d.negocio.transferencia_alias]);
+    if (d.negocio.transferencia_cbu) filas.push(["CBU/CVU", d.negocio.transferencia_cbu]);
+    if (d.negocio.transferencia_titular) filas.push(["Titular", d.negocio.transferencia_titular]);
+    filas.push(["Monto", formatPrecio(d.total) ?? ""]);
+    parrafos.push(
+      `Transferí ${formatPrecio(d.total)} y poné "Pedido #${d.numero}" en el concepto.${hasta ? ` Tenés tiempo hasta el ${hasta}; si no, el pedido se cancela solo.` : ""}`,
+    );
+  } else if (d.medio === "efectivo") {
+    parrafos.push(
+      d.turno_inicio
+        ? `Lo pagás y lo retirás en el local el día de tu turno (${formatFechaLarga(d.turno_inicio, d.negocio.zona_horaria)}).`
+        : `Lo pagás y lo retirás en el local${hasta ? ` hasta el ${hasta}` : ""}. Después de esa fecha el pedido se cancela solo.`,
+    );
+  } else {
+    parrafos.push(
+      `Si no terminaste de pagar, entrá al link para pagar con Mercado Pago${hasta ? ` (hasta el ${hasta})` : ""}. Te avisamos por mail cuando se acredite.`,
+    );
+  }
+  if (d.negocio.direccion) filas.push(["Dónde retirás", d.negocio.direccion]);
+  const { html, texto } = plantillaPedido({
+    d,
+    titulo: `Recibimos tu pedido #${d.numero}`,
+    intro: `Hola ${nombre}, ${d.negocio.nombre} recibió tu pedido. Guardá este mail: desde el botón ves cómo pagarlo y podés cancelarlo mientras esté sin pagar.`,
+    filas,
+    parrafos,
+    boton: "Ver mi pedido",
+    link: `${env.siteUrl}/p/${d.token}`,
+    pie: "Los productos se retiran en el local.",
+  });
+  return { para, asunto: `Pedido #${d.numero} en ${d.negocio.nombre}`, html, texto };
+}
+
+/** A los dueños: entró un pedido (transferencia o efectivo; los de Mercado Pago avisan al pagarse). */
+export function emailPedidoNegocio(para: string, d: DatosPedidoEmail): Email {
+  const hasta = hastaCuando(d);
+  const filas: [string, string][] = [
+    ["Cliente", d.cliente],
+    ["Email", d.email],
+  ];
+  if (d.telefono) filas.push(["Celular", d.telefono]);
+  filas.push(["Pago", NOMBRE_MEDIO[d.medio]]);
+  if (d.turno_inicio) filas.push(["Retira", `el día de su turno (${formatFechaHora(d.turno_inicio, d.negocio.zona_horaria)})`]);
+  else if (hasta) filas.push(["Plazo", `hasta el ${hasta}`]);
+  const { html, texto } = plantillaPedido({
+    d,
+    titulo: `Nuevo pedido #${d.numero}`,
+    intro:
+      d.medio === "transferencia"
+        ? `${d.cliente} hizo un pedido y va a pagar por transferencia. Cuando veas la plata, marcalo como "Pago recibido".`
+        : `${d.cliente} hizo un pedido para pagar y retirar en el local. El stock ya quedó apartado.`,
+    filas,
+    parrafos: [],
+    boton: "Ver en el panel",
+    link: `${env.siteUrl}/panel/pedidos/${d.pedidoId}`,
+    pie: `Recibís este mail porque sos dueño de ${d.negocio.nombre}.`,
+  });
+  return { para, asunto: `Nuevo pedido #${d.numero}: ${d.cliente}, ${formatPrecio(d.total)}`, html, texto };
+}
+
+/** Pago confirmado por Mercado Pago: al cliente (comprobante) o a los dueños (para preparar el pedido). */
+export function emailPagoPedido(para: string, d: DatosPedidoEmail, destino: "cliente" | "negocio"): Email {
+  if (destino === "cliente") {
+    const filas: [string, string][] = [["Pago", "Mercado Pago (acreditado)"]];
+    if (d.negocio.direccion) filas.push(["Dónde retirás", d.negocio.direccion]);
+    const { html, texto } = plantillaPedido({
+      d,
+      titulo: `Pago confirmado: pedido #${d.numero}`,
+      intro: `Hola ${d.cliente.split(" ")[0]}, recibimos el pago de tu pedido. Ya está apartado para que lo retires en el local${d.turno_inicio ? ` el día de tu turno (${formatFechaLarga(d.turno_inicio, d.negocio.zona_horaria)})` : ""}.`,
+      filas,
+      parrafos: [],
+      boton: "Ver mi pedido",
+      link: `${env.siteUrl}/p/${d.token}`,
+      pie: "Los productos se retiran en el local.",
+    });
+    return { para, asunto: `Pago confirmado: pedido #${d.numero} en ${d.negocio.nombre}`, html, texto };
+  }
+  const filas: [string, string][] = [
+    ["Cliente", d.cliente],
+    ["Email", d.email],
+  ];
+  if (d.telefono) filas.push(["Celular", d.telefono]);
+  filas.push(["Pago", "Mercado Pago (acreditado)"]);
+  if (d.turno_inicio) filas.push(["Retira", `el día de su turno (${formatFechaHora(d.turno_inicio, d.negocio.zona_horaria)})`]);
+  const { html, texto } = plantillaPedido({
+    d,
+    titulo: `Pago recibido: pedido #${d.numero}`,
+    intro: `${d.cliente} pagó su pedido con Mercado Pago. Preparalo para cuando lo retire y marcalo como "Entregado".`,
+    filas,
+    parrafos: [],
+    boton: "Ver en el panel",
+    link: `${env.siteUrl}/panel/pedidos/${d.pedidoId}`,
+    pie: `Recibís este mail porque sos dueño de ${d.negocio.nombre}.`,
+  });
+  return { para, asunto: `Pago recibido por Mercado Pago: pedido #${d.numero}, ${formatPrecio(d.total)}`, html, texto };
+}
