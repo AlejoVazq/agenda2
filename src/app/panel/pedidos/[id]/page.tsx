@@ -10,7 +10,7 @@ import { env } from "@/lib/env";
 import { formatFechaHora, formatPrecio } from "@/lib/fechas";
 import { MEDIOS_PEDIDO, type EstadoPedido, type MedioPago } from "@/lib/tipos";
 import { linkWhatsApp } from "@/lib/whatsapp";
-import { cancelarPedido, marcarPedidoDevuelto, marcarPedidoEntregado, marcarPedidoPagado } from "../acciones";
+import { cancelarPedido, marcarDuplicadoDevuelto, marcarPedidoDevuelto, marcarPedidoEntregado, marcarPedidoPagado } from "../acciones";
 import { InsigniaPedido } from "../insignia";
 
 export const metadata: Metadata = { title: "Pedido" };
@@ -27,6 +27,7 @@ type Pedido = {
   total: number;
   vence_at: string | null;
   pago_id: string | null;
+  pago_duplicado_id: string | null;
   created_at: string;
   pagado_at: string | null;
   entregado_at: string | null;
@@ -45,7 +46,7 @@ export default async function PaginaPedido({ params }: PageProps<"/panel/pedidos
   const [p, items] = await comoUsuario(userId, (tx) =>
     Promise.all([
       tx.uno<Pedido>(sql`
-        select id, numero, token, nombre, email, telefono, medio, estado, total, vence_at, pago_id, created_at,
+        select id, numero, token, nombre, email, telefono, medio, estado, total, vence_at, pago_id, pago_duplicado_id, created_at,
                pagado_at, entregado_at, cancelado_at, cancelado_por, turno_id
         from public.pedidos where id = ${id} and negocio_id = ${negocio.id}`),
       tx.varios<Item>(sql`
@@ -169,6 +170,17 @@ export default async function PaginaPedido({ params }: PageProps<"/panel/pedidos
           ) : null}
         </dl>
 
+        {p.pago_duplicado_id ? (
+          <Aviso tipo="alerta">
+            <p>
+              <strong>Pago duplicado: devolvelo desde Mercado Pago.</strong> Entró otro pago aprobado (n.º {p.pago_duplicado_id}) con
+              el pedido ya pagado. Buscalo en Mercado Pago (Actividad → el pago → Devolver).
+            </p>
+            <BotonAccion className="mt-2" accion={marcarDuplicadoDevuelto.bind(null, p.id)} confirmar="Sí, ya lo devolví" pendiente="Guardando…">
+              Ya lo devolví
+            </BotonAccion>
+          </Aviso>
+        ) : null}
         {vencioSinLiberar ? (
           <Aviso tipo="alerta">Se venció el plazo para pagar: en breve se cancela solo y el stock vuelve.</Aviso>
         ) : null}

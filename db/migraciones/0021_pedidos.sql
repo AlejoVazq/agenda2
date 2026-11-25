@@ -13,7 +13,10 @@
 --   cancelar_pedido_cliente. Mercado Pago: registrar_pago_pedido (idempotente).
 --   Cron: liberar_pedidos_vencidos.
 -- Del panel (solo dueños, con el negocio habilitado): pedido_marcar_pagado,
---   pedido_marcar_entregado, pedido_cancelar, pedido_marcar_devuelto.
+--   pedido_marcar_entregado, pedido_cancelar, pedido_marcar_devuelto,
+--   pedido_duplicado_devuelto.
+-- Turno cancelado: un pedido en efectivo pendiente atado a ese turno pierde la extensión
+--   hasta el día del turno (trigger tg_turno_cancelado_pedidos).
 -- =============================================================================
 
 create table public.pedidos (
@@ -34,6 +37,9 @@ create table public.pedidos (
   total         numeric(12, 2) not null check (total > 0),
   vence_at      timestamptz,
   pago_id       text,
+  -- Otro pago aprobado que llegó con el pedido ya pagado (el último): hay que devolverlo
+  -- desde Mercado Pago. Lo limpia el dueño con "Ya lo devolví".
+  pago_duplicado_id text,
   pagado_at     timestamptz,
   entregado_at  timestamptz,
   cancelado_at  timestamptz,
@@ -426,9 +432,11 @@ end;
 $$;
 
 -- Pago de Mercado Pago (verificado contra su API) --------------------------------------
--- Devuelve 'confirmado' | 'ya_procesado' | 'rechazado' | 'reembolsar'. Idempotente: con el
--- pedido bloqueado, el segundo aviso del mismo pago (webhook y vuelta del cliente) recibe
--- 'ya_procesado' y no toca el stock.
+-- Devuelve 'confirmado' | 'ya_procesado' | 'rechazado' | 'reembolsar' | 'duplicado'.
+-- Idempotente: con el pedido bloqueado, el segundo aviso del mismo pago (webhook y vuelta
+-- del cliente) recibe 'ya_procesado' y no toca el stock. Otro pago aprobado (otro id) con
+-- el pedido ya pagado, entregado o para devolver queda en pago_duplicado_id y devuelve
+-- 'duplicado' (una sola vez por pago): hay que devolverlo desde Mercado Pago.
 create or replace function public.registrar_pago_pedido(
   p_pedido   uuid,
   p_pago_id  text,
@@ -449,9 +457,15 @@ begin
     return 'rechazado';
   end if;
 
-  if v.estado in ('pagado', 'entregado', 'reembolsar')
-     or (v.pago_id is not null and v.pago_id = p_pago_id) then
+  if p_pago_id = v.pago_id or p_pago_id = v.pago_duplicado_id then
     return 'ya_procesado';
+  end if;
+  if v.estado in ('pagado', 'entregado', 'reembolsar') then
+    if not coalesce(p_aprobado, false) then
+      return 'ya_procesado';
+    end if;
+    update public.pedidos set pago_duplicado_id = p_pago_id where id = v.id;
+    return 'duplicado';
   end if;
   if not coalesce(p_aprobado, false) then
     return 'rechazado';
@@ -600,6 +614,50 @@ begin
 end;
 $$;
 
+-- "Ya lo devolví": el dueño devolvió el pago duplicado desde Mercado Pago.
+create or replace function public.pedido_duplicado_devuelto(p_pedido uuid)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v public.pedidos := public.pedido_para_panel(p_pedido);
+begin
+  if v.pago_duplicado_id is null then
+    raise exception 'ESTADO_INVALIDO' using errcode = 'P0001';
+  end if;
+  update public.pedidos set pago_duplicado_id = null where id = v.id;
+end;
+$$;
+
+-- Turno cancelado (por el cliente, el negocio o el sistema): un pedido en efectivo
+-- pendiente que se retiraba ese día vuelve al plazo común (efectivo_plazo_dias desde que
+-- se hizo); si ya pasó, vence en la próxima pasada. Así no queda stock apartado para un
+-- turno que no va a ocurrir.
+create or replace function public.tg_turno_cancelado_pedidos()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update public.pedidos p
+  set vence_at = least(p.vence_at, p.created_at + make_interval(days => n.efectivo_plazo_dias))
+  from public.negocios n
+  where p.turno_id = new.id and p.estado = 'pendiente' and p.medio = 'efectivo'
+    and n.id = p.negocio_id;
+  return null;
+end;
+$$;
+
+create trigger turnos_cancelado_pedidos
+  after update of estado on public.turnos
+  for each row
+  when (new.estado = 'cancelado' and old.estado is distinct from 'cancelado')
+  execute function public.tg_turno_cancelado_pedidos();
+
 -- Permisos (las internas devolver/apartar_stock_pedido y pedido_para_panel, sin grants).
 grant execute on function public.crear_pedido(uuid, jsonb, text, text, text, text, text) to agenda2_servidor;
 grant execute on function public.ver_pedido(text) to agenda2_servidor;
@@ -610,3 +668,4 @@ grant execute on function public.pedido_marcar_pagado(uuid) to agenda2_usuario;
 grant execute on function public.pedido_marcar_entregado(uuid) to agenda2_usuario;
 grant execute on function public.pedido_cancelar(uuid) to agenda2_usuario;
 grant execute on function public.pedido_marcar_devuelto(uuid) to agenda2_usuario;
+grant execute on function public.pedido_duplicado_devuelto(uuid) to agenda2_usuario;

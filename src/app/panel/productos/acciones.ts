@@ -36,6 +36,11 @@ export async function guardarProducto(id: string | null, _prev: EstadoAccion, fo
   const datos = esquemaProducto.safeParse(datosDeForm(formData));
   if (!datos.success) return { errores: erroresDeCampo(datos.error) };
   const d = datos.data;
+  // Al editar se aplica la diferencia con el disponible que se vio al abrir: si mientras
+  // tanto entró un pedido, sus unidades apartadas no vuelven a aparecer.
+  const original = z.string().regex(/^\d{1,6}$/).transform(Number).pipe(z.number().max(100000)).safeParse(formData.get("stock_original"));
+  if (id && !original.success) return { error: "Recargá la página e intentá de nuevo." };
+  const diferencia = original.success ? d.stock - original.data : 0;
 
   let nuevoId: string | null = null;
   try {
@@ -44,7 +49,7 @@ export async function guardarProducto(id: string | null, _prev: EstadoAccion, fo
         const fila = await tx.uno(sql`
           update public.productos
           set nombre = ${d.nombre}, descripcion = ${d.descripcion ?? null}, precio = ${d.precio},
-              stock = ${d.stock}, activo = ${d.activo}, orden = ${d.orden}
+              stock = greatest(least(stock + ${diferencia}, 100000), 0), activo = ${d.activo}, orden = ${d.orden}
           where id = ${id} and negocio_id = ${sesion.negocio.id}
           returning id`);
         if (!fila) throw new Error("PRODUCTO_INEXISTENTE");

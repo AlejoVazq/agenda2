@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BotonAccion } from "@/components/boton-accion";
 import { cx, EncabezadoPagina, Vacio } from "@/components/ui";
 import { requerirDueno } from "@/lib/auth";
 import { comoUsuario, sql } from "@/lib/db";
 import { formatFechaCorta, formatHora, formatPrecio } from "@/lib/fechas";
 import { MEDIOS_PEDIDO, type EstadoPedido, type MedioPago } from "@/lib/tipos";
+import { marcarDuplicadoDevuelto } from "./acciones";
 import { InsigniaPedido } from "./insignia";
 
 export const metadata: Metadata = { title: "Pedidos" };
@@ -31,6 +33,8 @@ type Fila = {
   pagado_at: string | null;
   entregado_at: string | null;
   cancelado_at: string | null;
+  /** Entró otro pago de Mercado Pago con el pedido ya pagado: hay que devolverlo. */
+  duplicado: boolean;
   /** Pendiente con el plazo cumplido que el cron todavía no liberó. */
   vencio: boolean;
 };
@@ -44,29 +48,29 @@ export default async function PaginaPedidos({ searchParams }: PageProps<"/panel/
   const pagina = ver === "historial" && Number.isInteger(pedida) && pedida >= 1 ? pedida : 1;
 
   const filtro = {
-    pendientes: sql`estado in ('pendiente', 'reembolsar')`,
+    pendientes: sql`(estado in ('pendiente', 'reembolsar') or pago_duplicado_id is not null)`,
     "por-entregar": sql`estado = 'pagado'`,
     historial: sql`estado in ('entregado', 'cancelado', 'vencido')`,
   }[ver];
-  // Pendientes: los que vencen antes, primero (y los "a devolver" arriba). Historial: lo último primero.
+  // Pendientes: los que vencen antes, primero (y los "a devolver" y pagos duplicados arriba). Historial: lo último primero.
   const orden =
     ver === "historial"
       ? sql`coalesce(entregado_at, cancelado_at, vence_at, created_at) desc, numero desc`
       : ver === "pendientes"
-        ? sql`(estado = 'reembolsar') desc, vence_at nulls first, numero`
+        ? sql`(pago_duplicado_id is not null) desc, (estado = 'reembolsar') desc, vence_at nulls first, numero`
         : sql`pagado_at, numero`;
 
   const [filas, cuentas] = await comoUsuario(userId, (tx) =>
     Promise.all([
       tx.varios<Fila>(sql`
         select id, numero, nombre, email, medio, estado, total, vence_at, created_at, pagado_at, entregado_at, cancelado_at,
-               coalesce(vence_at < now(), false) as vencio
+               pago_duplicado_id is not null as duplicado, coalesce(vence_at < now(), false) as vencio
         from public.pedidos
         where negocio_id = ${negocio.id} and ${filtro}
         order by ${orden}
         limit ${POR_PAGINA + 1} offset ${(pagina - 1) * POR_PAGINA}`),
       tx.uno<{ pendientes: number; por_entregar: number }>(sql`
-        select count(*) filter (where estado in ('pendiente', 'reembolsar'))::int as pendientes,
+        select count(*) filter (where estado in ('pendiente', 'reembolsar') or pago_duplicado_id is not null)::int as pendientes,
                count(*) filter (where estado = 'pagado')::int as por_entregar
         from public.pedidos where negocio_id = ${negocio.id}`),
     ]),
@@ -146,6 +150,14 @@ export default async function PaginaPedidos({ searchParams }: PageProps<"/panel/
                   <InsigniaPedido estado={p.estado} />
                 </div>
               </Link>
+              {p.duplicado ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-acento-200 bg-acento-50 px-4 py-2 text-sm">
+                  <p className="flex-1 font-semibold text-acento-700">Pago duplicado: devolvelo desde Mercado Pago</p>
+                  <BotonAccion accion={marcarDuplicadoDevuelto.bind(null, p.id)} confirmar="Sí, ya lo devolví" pendiente="Guardando…">
+                    Ya lo devolví
+                  </BotonAccion>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>

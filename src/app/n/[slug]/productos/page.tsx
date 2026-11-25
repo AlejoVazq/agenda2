@@ -9,11 +9,14 @@ import { productosPublicos, tiendaPublica, urlFotoProducto } from "@/lib/product
 import { getNegocioPublico, linkWhatsApp } from "@/lib/publico";
 import { Tienda, type ProductoTienda } from "./tienda";
 
-export async function generateMetadata({ params }: PageProps<"/n/[slug]/productos">): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: PageProps<"/n/[slug]/productos">): Promise<Metadata> {
   const { slug } = await params;
   const negocio = await getNegocioPublico(slug);
   if (!negocio) return { title: "Negocio no encontrado" };
-  return { title: `Productos de ${negocio.nombre}`, description: `Comprá online y retiralo en ${negocio.nombre}.` };
+  const meta: Metadata = { title: `Productos de ${negocio.nombre}`, description: `Comprá online y retiralo en ${negocio.nombre}.` };
+  // Con ?turno= la URL lleva el token del turno: que no se indexe ni viaje como referer.
+  if ((await searchParams).turno !== undefined) return { ...meta, robots: { index: false }, referrer: "no-referrer" };
+  return meta;
 }
 
 export default async function PaginaProductos({ params, searchParams }: PageProps<"/n/[slug]/productos">) {

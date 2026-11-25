@@ -92,11 +92,13 @@ export async function liberarPedidosVencidos(): Promise<number> {
 }
 
 /** Id, negocio y estado guardado de un pedido por su token (para la vuelta del pago y reintentar). */
-export async function pedidoDeToken(token: string): Promise<{ id: string; negocio_id: string; estado: EstadoPedido } | null> {
+export async function pedidoDeToken(
+  token: string,
+): Promise<{ id: string; negocio_id: string; estado: EstadoPedido; medio: MedioPago } | null> {
   if (!/^[0-9a-f]{64}$/.test(token)) return null;
   return comoServidor((tx) =>
-    tx.uno<{ id: string; negocio_id: string; estado: EstadoPedido }>(sql`
-      select id, negocio_id, estado from public.pedidos where token = ${token}`),
+    tx.uno<{ id: string; negocio_id: string; estado: EstadoPedido; medio: MedioPago }>(sql`
+      select id, negocio_id, estado, medio from public.pedidos where token = ${token}`),
   );
 }
 

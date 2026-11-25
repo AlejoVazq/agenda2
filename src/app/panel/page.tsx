@@ -42,10 +42,10 @@ export default async function InicioPanel({ searchParams }: PageProps<"/panel">)
           where t.negocio_id = ${negocio.id} and t.pago_estado = 'reembolsar'
           limit 10`),
         tx.uno<typeof pedidos>(sql`
-          select count(*) filter (where estado in ('pendiente', 'reembolsar'))::int as pendientes,
+          select count(*) filter (where estado in ('pendiente', 'reembolsar') or pago_duplicado_id is not null)::int as pendientes,
                  count(*) filter (where estado = 'pagado')::int as por_entregar
           from public.pedidos
-          where negocio_id = ${negocio.id} and estado in ('pendiente', 'reembolsar', 'pagado')`),
+          where negocio_id = ${negocio.id} and (estado in ('pendiente', 'reembolsar', 'pagado') or pago_duplicado_id is not null)`),
       ]),
     );
     aDevolver = devoluciones;

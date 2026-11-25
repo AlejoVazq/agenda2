@@ -3,6 +3,7 @@ import {
   notificarConfirmacionCliente,
   notificarNuevaReserva,
   notificarPagoPedido,
+  notificarPedidoAlDueno,
   notificarPedidoCliente,
   notificarPedidoNegocio,
 } from "@/lib/email/notificar";
@@ -46,6 +47,11 @@ export async function procesarPagoYAvisar(negocioId: string, pagoId: string, esp
   if (!r) return null;
   if (r.tipo === "pedido") {
     if (r.resultado === "confirmado") notificarPagoPedido(r.id);
+    if (r.resultado === "reembolsar") notificarPedidoAlDueno(r.id, "reembolsar");
+    if (r.resultado === "duplicado") {
+      console.error("[pago] pago duplicado en el pedido", r.id, "pago", pagoId);
+      notificarPedidoAlDueno(r.id, "duplicado");
+    }
     return r.resultado;
   }
   if (r.resultado === "confirmado" || r.resultado === "pendiente") trasReservaFirme(r.id);

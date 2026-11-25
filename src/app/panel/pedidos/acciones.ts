@@ -48,3 +48,8 @@ export async function cancelarPedido(id: string): Promise<EstadoAccion> {
 export async function marcarPedidoDevuelto(id: string): Promise<EstadoAccion> {
   return ejecutar(id, (p) => sql`select public.pedido_marcar_devuelto(${p})`, "Listo, quedó como devuelto.");
 }
+
+/** El pago duplicado de Mercado Pago ya se devolvió. */
+export async function marcarDuplicadoDevuelto(id: string): Promise<EstadoAccion> {
+  return ejecutar(id, (p) => sql`select public.pedido_duplicado_devuelto(${p})`, "Listo, el pago duplicado quedó como devuelto.");
+}

@@ -24,7 +24,8 @@ export type ConfigMercadoPago = {
 };
 type SecretoMercadoPago = { access_token: string };
 
-export type ResultadoPago = "confirmado" | "pendiente" | "ya_procesado" | "rechazado" | "reembolsar" | "en_proceso";
+/** "duplicado": solo pedidos, otro pago aprobado con el pedido ya pagado (hay que devolverlo). */
+export type ResultadoPago = "confirmado" | "pendiente" | "ya_procesado" | "rechazado" | "reembolsar" | "en_proceso" | "duplicado";
 
 /** Verifica un Access Token y devuelve los datos de la cuenta. */
 export async function verificarTokenMercadoPago(accessToken: string): Promise<ConfigMercadoPago> {

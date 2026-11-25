@@ -1759,8 +1759,24 @@ await prueba("pedidos: vencer devuelve stock; pago tardío reaparta o queda a re
   assert.equal(await stockDe(prod.id), 0);
   // El webhook y la vuelta del cliente: el segundo no descuenta de nuevo.
   assert.equal(await pagar(pA.pedido_id, "pp1", true, 3000), "ya_procesado");
-  assert.equal(await pagar(pA.pedido_id, "pp9", true, 3000), "ya_procesado");
   assert.equal(await stockDe(prod.id), 0);
+
+  // Otro pago aprobado con el pedido ya pagado: queda anotado para devolver, una sola vez.
+  assert.equal(await pagar(pA.pedido_id, "pp9", false, 3000), "ya_procesado", "otro rechazado no importa");
+  assert.equal(await pagar(pA.pedido_id, "pp9", true, 3000), "duplicado");
+  assert.equal((await pedidoDe(pA.pedido_id)).pago_duplicado_id, "pp9");
+  assert.equal(await pagar(pA.pedido_id, "pp9", true, 3000), "ya_procesado", "el mismo duplicado dos veces");
+  const dup = await pedidoDe(pA.pedido_id);
+  assert.deepEqual({ e: dup.estado, pago: dup.pago_id }, { e: "pagado", pago: "pp1" });
+  assert.equal(await stockDe(prod.id), 0);
+  for (const u of ["eva", "beto"]) {
+    await como(u, () => falla(q("select public.pedido_duplicado_devuelto($1)", [pA.pedido_id]), /SIN_PERMISO/, `${u} limpia el duplicado`));
+  }
+  await como("anon", () => falla(q("select public.pedido_duplicado_devuelto($1)", [pA.pedido_id]), /permission denied/, "anon"));
+  await como("servidor", () => falla(q("select public.pedido_duplicado_devuelto($1)", [pA.pedido_id]), /permission denied/, "servidor"));
+  await como("ana", () => q("select public.pedido_duplicado_devuelto($1)", [pA.pedido_id]));
+  assert.equal((await pedidoDe(pA.pedido_id)).pago_duplicado_id, null);
+  await como("ana", () => falla(q("select public.pedido_duplicado_devuelto($1)", [pA.pedido_id]), /ESTADO_INVALIDO/, "sin duplicado"));
 
   // Pago tardío sin stock: a reembolsar, sin tocar el stock.
   await q("update public.productos set stock = 1 where id = $1", [prod.id]);
@@ -1865,6 +1881,9 @@ await prueba("pedidos: panel solo para dueños; cancelar devuelve stock; cliente
   const pagado = await pedidoDe(pP.pedido_id);
   assert.equal(pagado.estado, "pagado");
   assert.equal(pagado.vence_at, null);
+  // Marcado como pagado a mano y después entra un pago de Mercado Pago: duplicado.
+  assert.equal((await servicio("select public.registrar_pago_pedido($1, 'pm1', true, 1500) as r", [pP.pedido_id]))[0].r, "duplicado");
+  assert.equal((await pedidoDe(pP.pedido_id)).pago_duplicado_id, "pm1");
   await como("ana", () => q("select public.pedido_marcar_entregado($1)", [pP.pedido_id]));
   assert.equal((await pedidoDe(pP.pedido_id)).estado, "entregado");
   await como("ana", () => falla(q("select public.pedido_cancelar($1)", [pP.pedido_id]), /ESTADO_INVALIDO/, "cancelar entregado"));
@@ -1998,8 +2017,20 @@ await prueba("pedidos: tienda apagada o negocio que no toma reservas no recibe p
     await q("delete from public.productos where id = $1", [deBeto.id]);
     await q("update public.negocios set tienda_activa = false where id = $1", [negB]);
   }
-  // Un token de un turno cancelado tampoco.
+  // Si el turno se cancela, el pedido en efectivo vuelve al plazo común (3 días desde que se hizo).
   await como("anon", () => q("select public.cancelar_turno_cliente($1)", [turno.token]));
+  const sinExtension = await uno("select round(extract(epoch from vence_at - created_at) / 86400) as d, estado from public.pedidos where id = $1", [conTurno.pedido_id]);
+  assert.deepEqual({ d: Number(sinExtension.d), e: sinExtension.estado }, { d: 3, e: "pendiente" });
+  // Si esos días ya pasaron, el cron lo vence y devuelve el stock.
+  const pT = await pedir(uno1, "Tobías", "tobias@test.com", "efectivo");
+  await q("update public.pedidos set turno_id = $2, vence_at = $3, created_at = now() - interval '4 days' where id = $1", [pT.pedido_id, turno.turno_id, fin.fin]);
+  await q("update public.turnos set estado = 'confirmado' where id = $1", [turno.turno_id]);
+  await q("update public.turnos set estado = 'cancelado' where id = $1", [turno.turno_id]);
+  const antes = await stockDe(prod.id);
+  assert.ok((await servicio("select public.liberar_pedidos_vencidos() as n"))[0].n >= 1);
+  assert.equal((await pedidoDe(pT.pedido_id)).estado, "vencido");
+  assert.equal(await stockDe(prod.id), antes + 1);
+  // Un token de un turno cancelado tampoco se asocia.
   const sinTurno = await pedir(uno1, "Tomás", "tomas@test.com", "efectivo", turno.token);
   assert.equal((await pedidoDe(sinTurno.pedido_id)).turno_id, null);
 });

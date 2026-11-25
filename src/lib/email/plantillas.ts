@@ -541,3 +541,49 @@ export function emailPedidoCancelado(para: string, d: DatosPedidoEmail, pagado: 
   });
   return { para, asunto: `Pedido #${d.numero} cancelado en ${d.negocio.nombre}`, html, texto };
 }
+
+export type AvisoPedidoDueno = "duplicado" | "reembolsar" | "cancelado_cliente";
+
+/**
+ * A los dueños: algo del pedido que tienen que saber o resolver. "duplicado": entró otro
+ * pago aprobado con el pedido ya pagado; "reembolsar": un pago que no se pudo usar (llegó
+ * tarde sin stock, el negocio lo había cancelado o pagó de menos); "cancelado_cliente":
+ * el cliente lo canceló desde su link.
+ */
+export function emailAvisoPedidoDueno(para: string, d: DatosPedidoEmail, tipo: AvisoPedidoDueno, pagoId?: string | null): Email {
+  const filas: [string, string][] = [
+    ["Cliente", d.cliente],
+    ["Email", d.email],
+  ];
+  if (d.telefono) filas.push(["Celular", d.telefono]);
+  filas.push(["Pago", NOMBRE_MEDIO[d.medio]]);
+  if (pagoId) filas.push(["Pago a devolver", `n.º ${pagoId}`]);
+  const textos = {
+    duplicado: {
+      titulo: `Pago duplicado en el pedido #${d.numero}`,
+      asunto: `Pago duplicado en el pedido #${d.numero} — hay que devolverlo desde Mercado Pago`,
+      intro: `${d.cliente} pagó de nuevo con Mercado Pago un pedido que ya estaba pagado. Hay que devolverle ese segundo pago desde Mercado Pago (Actividad → el pago → Devolver) y después tocar "Ya lo devolví" en el panel.`,
+    },
+    reembolsar: {
+      titulo: `Pago para devolver en el pedido #${d.numero}`,
+      asunto: `Pago para devolver en el pedido #${d.numero}`,
+      intro: `${d.cliente} pagó con Mercado Pago, pero el pedido ya no estaba vigente (o el monto no alcanzaba) y no se pudo usar. Devolvele la plata desde Mercado Pago (Actividad → el pago → Devolver) y marcalo como devuelto en el panel.`,
+    },
+    cancelado_cliente: {
+      titulo: `El cliente canceló el pedido #${d.numero}`,
+      asunto: `El cliente canceló el pedido #${d.numero}`,
+      intro: `${d.cliente} canceló su pedido desde el link. El stock apartado ya volvió a estar disponible; no tenés que hacer nada.`,
+    },
+  }[tipo];
+  const { html, texto } = plantillaPedido({
+    d,
+    titulo: textos.titulo,
+    intro: textos.intro,
+    filas,
+    parrafos: [],
+    boton: "Ver en el panel",
+    link: `${env.siteUrl}/panel/pedidos/${d.pedidoId}`,
+    pie: `Recibís este mail porque sos dueño de ${d.negocio.nombre}.`,
+  });
+  return { para, asunto: textos.asunto, html, texto };
+}

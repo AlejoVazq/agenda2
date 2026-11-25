@@ -102,7 +102,7 @@ export function urlFotoProducto(slug: string, productoId: string, version: numbe
   return version ? `/n/${slug}/productos/${productoId}/foto?v=${version}` : null;
 }
 
-/** La foto de un producto activo de un negocio activo, por la dirección pública. */
+/** La foto de un producto activo de un negocio activo con la tienda prendida, por la dirección pública. */
 export async function fotoProductoPorSlug(
   slug: string,
   productoId: string,
@@ -112,7 +112,7 @@ export async function fotoProductoPorSlug(
       select f.tipo, f.datos
       from public.producto_fotos f
       join public.productos p on p.id = f.producto_id and p.activo
-      join public.negocios n on n.id = p.negocio_id and n.activo
+      join public.negocios n on n.id = p.negocio_id and n.activo and n.tienda_activa
       where n.slug = lower(${slug}) and f.producto_id = ${productoId}`),
   );
 }

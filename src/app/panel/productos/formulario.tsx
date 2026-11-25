@@ -12,6 +12,8 @@ export function FormularioProducto({ producto }: { producto?: Producto }) {
   return (
     <form key={intento} action={accion} className="space-y-5" noValidate>
       <MensajeAccion estado={estado} />
+      {/* El disponible que se vio al abrir: se guarda la diferencia, así no pisa lo pedido mientras tanto. */}
+      {producto ? <input type="hidden" name="stock_original" value={producto.stock} /> : null}
       <Campo etiqueta="Nombre" htmlFor="nombre" errores={estado.errores?.nombre}>
         <Input id="nombre" name="nombre" defaultValue={valor("nombre", producto?.nombre)} placeholder="Ej: Cera mate" maxLength={80} required />
       </Campo>
