@@ -162,6 +162,7 @@ await prueba("crear_reserva y las tareas del cron: solo el servidor", async () =
     "crear_reserva", "consumir_limite", "vencer_pagos_pendientes", "registrar_pago", "reclamar_recordatorios",
     "reclamar_recordatorios_whatsapp", "turnos_para_sincronizar", "marcar_sincronizado_google", "reemplazar_bloqueos_google",
     "dejar_resena", "reclamar_pedidos_resena", "dejar_resena_libre",
+    "crear_pedido", "ver_pedido", "cancelar_pedido_cliente", "registrar_pago_pedido", "liberar_pedidos_vencidos",
   ];
   const filas = await q(
     `select p.proname,
@@ -783,7 +784,7 @@ await prueba("aislamiento: ninguna tabla con negocio_id deja ver filas de otro n
   assert.ok(tablas.length >= 9, tablas.join(", "));
   for (const t of tablas) {
     const { n: deA } = await uno(`select count(*)::int as n from public.${t} where negocio_id = $1`, [negA]);
-    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones", "negocio_logos", "negocio_portadas", "productos", "resenas", "turnos_fijos"].includes(t), `${t} sin datos de prueba`);
+    if (t !== "integraciones") assert.ok(deA > 0 || ["bloqueos", "integraciones", "negocio_logos", "negocio_portadas", "pedidos", "productos", "resenas", "turnos_fijos"].includes(t), `${t} sin datos de prueba`);
     for (const [u, ajeno] of [["beto", negA], ["nadie", negA], ["ana", negB], ["eva", negB]]) {
       const filas = await como(u, () => q(`select * from public.${t} where negocio_id = $1`, [ajeno]).catch(() => []));
       assert.equal(filas.length, 0, `${u} ve ${t} de otro negocio`);
@@ -1665,6 +1666,294 @@ await prueba("tienda: la dueña configura medios y transferencia; valores invál
   await como("ana", () => falla(q("update public.negocios set transferencia_cbu = '123' where id = $1", [negA]), /check/, "cbu inválido"));
   await como("eva", () => q("update public.negocios set tienda_activa = false where id = $1", [negA]));
   assert.equal((await uno("select tienda_activa from public.negocios where id = $1", [negA])).tienda_activa, true, "la empleada no cambia la tienda");
+});
+
+// --- Pedidos (0021; también antes de borrar a Eva) -------------------------------------------
+
+const pedir = (items, nombre, email, medio, turnoToken = null, negocio = negA) =>
+  como("servidor", () =>
+    uno("select * from public.crear_pedido($1, $2::jsonb, $3, $4, null, $5, $6)", [negocio, JSON.stringify(items), nombre, email, medio, turnoToken]),
+  );
+const stockDe = async (id) => (await uno("select stock from public.productos where id = $1", [id])).stock;
+const pedidoDe = (id) => uno("select * from public.pedidos where id = $1", [id]);
+
+await prueba("pedidos: crear aparta stock, valida medios, límites y no vende de más", async () => {
+  const prod = await como("ana", () => uno("insert into public.productos (negocio_id, nombre, precio, stock) values ($1, 'Shampoo', 5000, 2) returning id", [negA]));
+  const items = JSON.stringify([{ producto_id: prod.id, cantidad: 2 }]);
+  const p1 = await como("servidor", () => uno("select * from public.crear_pedido($1, $2::jsonb, 'Juan Pérez', 'juan@test.com', '1155550101', 'efectivo')", [negA, items]));
+  assert.equal(Number(p1.total), 10000);
+  assert.equal(p1.numero, 1);
+  assert.match(p1.token, /^[0-9a-f]{64}$/);
+  assert.equal((await uno("select stock from public.productos where id = $1", [prod.id])).stock, 0);
+  const guardado = await pedidoDe(p1.pedido_id);
+  assert.equal(guardado.estado, "pendiente");
+  assert.equal(guardado.telefono, "1155550101");
+  const item = await uno("select nombre, precio_unitario, cantidad from public.pedido_items where pedido_id = $1", [p1.pedido_id]);
+  assert.deepEqual({ ...item, precio_unitario: Number(item.precio_unitario) }, { nombre: "Shampoo", precio_unitario: 5000, cantidad: 2 });
+  await como("servidor", () => falla(q("select * from public.crear_pedido($1, $2::jsonb, 'Otra', 'otra@test.com', null, 'efectivo')", [negA, JSON.stringify([{ producto_id: prod.id, cantidad: 1 }])]), /SIN_STOCK/, "sin stock"));
+  // Mercado Pago habilitado en la tienda pero sin la integración activa.
+  await q("update public.negocios set tienda_medios = '{efectivo,transferencia,mercadopago}' where id = $1", [negA]);
+  await q("update public.integraciones set estado = 'inactiva' where negocio_id = $1 and proveedor = 'mercadopago'", [negA]);
+  await como("servidor", () => falla(q("select * from public.crear_pedido($1, $2::jsonb, 'Juan', 'juan@test.com', null, 'mercadopago')", [negA, items]), /TIENDA_NO_DISPONIBLE/, "MP no conectado"));
+  await como("anon", () => falla(q("select * from public.crear_pedido($1, $2::jsonb, 'X', 'x@test.com', null, 'efectivo')", [negA, items]), /permission denied/, "anon"));
+  await como("ana", () => falla(q("select * from public.crear_pedido($1, $2::jsonb, 'X', 'x@test.com', null, 'efectivo')", [negA, items]), /permission denied/, "panel"));
+  // Datos inválidos: sin items, cantidad fuera de rango, producto repetido, mail malo, medio inexistente.
+  for (const [it, mail, medio] of [
+    [[], "x@test.com", "efectivo"],
+    [[{ producto_id: prod.id, cantidad: 21 }], "x@test.com", "efectivo"],
+    [[{ producto_id: prod.id, cantidad: 1 }, { producto_id: prod.id, cantidad: 1 }], "x@test.com", "efectivo"],
+    [[{ producto_id: "no-es-uuid", cantidad: 1 }], "x@test.com", "efectivo"],
+    [[{ producto_id: prod.id, cantidad: 1 }], "sin-arroba", "efectivo"],
+    [[{ producto_id: prod.id, cantidad: 1 }], "x@test.com", "bitcoin"],
+  ]) {
+    await falla(pedir(it, "Xavier", mail, medio), /DATOS_INVALIDOS/, `inválido ${JSON.stringify(it)} ${mail} ${medio}`);
+  }
+  // Un producto de otro negocio no se vende acá.
+  const deBeto = await uno("insert into public.productos (negocio_id, nombre, precio, stock) values ($1, 'Ajeno', 100, 5) returning id", [negB]);
+  await falla(pedir([{ producto_id: deBeto.id, cantidad: 1 }], "Xavier", "x@test.com", "efectivo"), /SIN_STOCK/, "producto ajeno");
+  assert.equal(await stockDe(deBeto.id), 5);
+  await q("delete from public.productos where id = $1", [deBeto.id]);
+  // vencimiento de efectivo: 3 días
+  const v = await uno("select round(extract(epoch from vence_at - created_at) / 86400) as d from public.pedidos where id = $1", [p1.pedido_id]);
+  assert.equal(Number(v.d), 3);
+  // límite: 3 pendientes por mail (con alias +x cuenta igual)
+  await q("update public.productos set stock = 10 where id = $1", [prod.id]);
+  const uno1 = JSON.stringify([{ producto_id: prod.id, cantidad: 1 }]);
+  for (const mail of ["juan+a@test.com", "juan+b@test.com"]) await como("servidor", () => q("select * from public.crear_pedido($1, $2::jsonb, 'Juan', $3, null, 'efectivo')", [negA, uno1, mail]));
+  await como("servidor", () => falla(q("select * from public.crear_pedido($1, $2::jsonb, 'Juan', 'juan@test.com', null, 'efectivo')", [negA, uno1]), /LIMITE_PEDIDOS/, "4to pendiente"));
+  assert.equal(await stockDe(prod.id), 8, "el pedido rechazado no descuenta");
+  // Con Mercado Pago activo: 30 minutos para pagar.
+  await q("update public.integraciones set estado = 'activa' where negocio_id = $1 and proveedor = 'mercadopago'", [negA]);
+  const mp = await pedir([{ producto_id: prod.id, cantidad: 1 }], "Mia", "mia@test.com", "mercadopago");
+  const m = await uno("select round(extract(epoch from vence_at - created_at) / 60) as min from public.pedidos where id = $1", [mp.pedido_id]);
+  assert.equal(Number(m.min), 30);
+  assert.equal(mp.numero, 4);
+  await q("update public.negocios set tienda_medios = '{efectivo,transferencia}' where id = $1", [negA]);
+});
+
+await prueba("pedidos: vencer devuelve stock; pago tardío reaparta o queda a reembolsar; idempotente", async () => {
+  const prod = await como("ana", () => uno("insert into public.productos (negocio_id, nombre, precio, stock) values ($1, 'Gel', 3000, 1) returning id", [negA]));
+  const uno1 = [{ producto_id: prod.id, cantidad: 1 }];
+  const pA = await pedir(uno1, "Tardío", "tardio@test.com", "transferencia");
+  const h = await uno("select round(extract(epoch from vence_at - created_at) / 3600) as h from public.pedidos where id = $1", [pA.pedido_id]);
+  assert.equal(Number(h.h), 48, "transferencia: 48 horas");
+  assert.equal(await stockDe(prod.id), 0);
+
+  // Vence: vuelve el stock, una sola vez.
+  await q("update public.pedidos set vence_at = now() - interval '1 minute' where id = $1", [pA.pedido_id]);
+  await como("anon", () => falla(q("select public.liberar_pedidos_vencidos()"), /permission denied/, "anon libera"));
+  assert.equal((await servicio("select public.liberar_pedidos_vencidos() as n"))[0].n, 1);
+  assert.equal((await servicio("select public.liberar_pedidos_vencidos() as n"))[0].n, 0);
+  const vencido = await pedidoDe(pA.pedido_id);
+  assert.deepEqual({ estado: vencido.estado, por: vencido.cancelado_por }, { estado: "vencido", por: "sistema" });
+  assert.equal(await stockDe(prod.id), 1);
+
+  // Pago tardío con stock: se vuelve a apartar y queda pagado.
+  const pagar = async (id, pago, aprobado, monto) =>
+    (await servicio("select public.registrar_pago_pedido($1, $2, $3, $4) as r", [id, pago, aprobado, monto]))[0].r;
+  assert.equal(await pagar(pA.pedido_id, "pp1", true, 3000), "confirmado");
+  const pagado = await pedidoDe(pA.pedido_id);
+  assert.equal(pagado.estado, "pagado");
+  assert.equal(pagado.pago_id, "pp1");
+  assert.ok(pagado.pagado_at);
+  assert.equal(await stockDe(prod.id), 0);
+  // El webhook y la vuelta del cliente: el segundo no descuenta de nuevo.
+  assert.equal(await pagar(pA.pedido_id, "pp1", true, 3000), "ya_procesado");
+  assert.equal(await pagar(pA.pedido_id, "pp9", true, 3000), "ya_procesado");
+  assert.equal(await stockDe(prod.id), 0);
+
+  // Pago tardío sin stock: a reembolsar, sin tocar el stock.
+  await q("update public.productos set stock = 1 where id = $1", [prod.id]);
+  const pB = await pedir(uno1, "Lento", "lento@test.com", "transferencia");
+  await q("update public.pedidos set vence_at = now() - interval '1 minute' where id = $1", [pB.pedido_id]);
+  const pC = await pedir(uno1, "Rápido", "rapido@test.com", "transferencia"); // libera el vencido y se lo queda
+  assert.equal((await pedidoDe(pB.pedido_id)).estado, "vencido");
+  assert.equal(await stockDe(prod.id), 0);
+  assert.equal(await pagar(pB.pedido_id, "pp2", true, 3000), "reembolsar");
+  assert.equal((await pedidoDe(pB.pedido_id)).estado, "reembolsar");
+  assert.equal(await stockDe(prod.id), 0);
+  assert.equal(await pagar(pB.pedido_id, "pp2", true, 3000), "ya_procesado");
+
+  // Rechazado: sin cambios. Monto menor: a reembolsar y el stock vuelve.
+  assert.equal(await pagar(pC.pedido_id, "pp3", false, 3000), "rechazado");
+  assert.equal((await pedidoDe(pC.pedido_id)).estado, "pendiente");
+  assert.equal(await pagar(pC.pedido_id, "pp4", true, 100), "reembolsar");
+  assert.equal((await pedidoDe(pC.pedido_id)).estado, "reembolsar");
+  assert.equal(await stockDe(prod.id), 1);
+
+  // La dueña lo marca como devuelto: cancelado, el stock no cambia, y el mismo pago no lo revive.
+  await como("ana", () => q("select public.pedido_marcar_devuelto($1)", [pC.pedido_id]));
+  assert.equal((await pedidoDe(pC.pedido_id)).estado, "cancelado");
+  assert.equal(await stockDe(prod.id), 1);
+  assert.equal(await pagar(pC.pedido_id, "pp4", true, 3000), "ya_procesado");
+  assert.equal(await stockDe(prod.id), 1);
+  assert.equal(await pagar("00000000-0000-4000-8000-000000000000", "pp5", true, 1), "rechazado");
+  await como("ana", () => falla(q("select public.registrar_pago_pedido($1, 'x', true, 1)", [pC.pedido_id]), /permission denied/, "dueña"));
+});
+
+await prueba("pedidos: panel solo para dueños; cancelar devuelve stock; cliente cancela por token", async () => {
+  const prod = await como("ana", () => uno("insert into public.productos (negocio_id, nombre, precio, stock) values ($1, 'Peine', 1500, 3) returning id", [negA]));
+  const uno1 = [{ producto_id: prod.id, cantidad: 1 }];
+  const pP = await pedir(uno1, "Pablo", "pablo@test.com", "efectivo");
+  assert.equal(await stockDe(prod.id), 2);
+
+  for (const u of ["eva", "beto", "nadie"]) {
+    await como(u, async () => {
+      assert.equal((await q("select * from public.pedidos")).length, 0, `${u} ve pedidos`);
+      assert.equal((await q("select * from public.pedido_items")).length, 0, `${u} ve items`);
+      await falla(q("select public.pedido_marcar_pagado($1)", [pP.pedido_id]), /SIN_PERMISO/, `${u} marca pagado`);
+      await falla(q("select public.pedido_cancelar($1)", [pP.pedido_id]), /SIN_PERMISO/, `${u} cancela`);
+    });
+  }
+  await como("ana", async () => {
+    assert.ok((await q("select * from public.pedidos")).length > 0);
+    assert.ok((await q("select * from public.pedido_items where pedido_id = $1", [pP.pedido_id])).length === 1);
+    await falla(q("update public.pedidos set estado = 'pagado' where id = $1", [pP.pedido_id]), /permission denied/, "update directo");
+    await falla(q("delete from public.pedidos where id = $1", [pP.pedido_id]), /permission denied/, "delete directo");
+  });
+
+  // Pagado → entregado; el stock ya se había descontado.
+  await como("ana", () => q("select public.pedido_marcar_pagado($1)", [pP.pedido_id]));
+  const pagado = await pedidoDe(pP.pedido_id);
+  assert.equal(pagado.estado, "pagado");
+  assert.equal(pagado.vence_at, null);
+  await como("ana", () => q("select public.pedido_marcar_entregado($1)", [pP.pedido_id]));
+  assert.equal((await pedidoDe(pP.pedido_id)).estado, "entregado");
+  await como("ana", () => falla(q("select public.pedido_cancelar($1)", [pP.pedido_id]), /ESTADO_INVALIDO/, "cancelar entregado"));
+  assert.equal(await stockDe(prod.id), 2);
+
+  // Entregado directo desde pendiente: queda con pagado_at.
+  const pE = await pedir(uno1, "Eli", "eli@test.com", "efectivo");
+  await como("ana", () => q("select public.pedido_marcar_entregado($1)", [pE.pedido_id]));
+  const entregado = await pedidoDe(pE.pedido_id);
+  assert.ok(entregado.pagado_at && entregado.entregado_at);
+  assert.equal(await stockDe(prod.id), 1);
+
+  // Cancelar uno pagado devuelve el stock.
+  const pQ = await pedir(uno1, "Quique", "quique@test.com", "efectivo");
+  assert.equal(await stockDe(prod.id), 0);
+  await como("ana", () => q("select public.pedido_marcar_pagado($1)", [pQ.pedido_id]));
+  await como("ana", () => q("select public.pedido_cancelar($1)", [pQ.pedido_id]));
+  const cancelado = await pedidoDe(pQ.pedido_id);
+  assert.deepEqual({ e: cancelado.estado, por: cancelado.cancelado_por }, { e: "cancelado", por: "negocio" });
+  assert.equal(await stockDe(prod.id), 1);
+  await como("ana", () => falla(q("select public.pedido_cancelar($1)", [pQ.pedido_id]), /ESTADO_INVALIDO/, "cancelar dos veces"));
+  assert.equal(await stockDe(prod.id), 1);
+
+  // Vencido marcado como pagado: lo vuelve a apartar, o SIN_STOCK si no hay.
+  const pV = await pedir(uno1, "Vero", "vero@test.com", "efectivo");
+  await q("update public.pedidos set vence_at = now() - interval '1 minute' where id = $1", [pV.pedido_id]);
+  // ver_pedido muestra 'vencido' aunque el cron todavía no pasó.
+  const visto = (await servicio("select public.ver_pedido($1) as d", [pV.token]))[0].d;
+  assert.equal(visto.estado, "vencido");
+  assert.equal(visto.numero, pV.numero);
+  assert.equal(visto.items.length, 1);
+  assert.equal(visto.items[0].nombre, "Peine");
+  assert.equal(visto.negocio.slug, "salon-ana");
+  assert.equal(visto.negocio.transferencia_alias, "peluqueria.ana");
+  assert.ok(!("pago_id" in visto), "no muestra el pago");
+  assert.equal(visto.turno, null);
+  assert.equal((await servicio("select public.ver_pedido('no-existe') as d"))[0].d, null);
+  await como("anon", () => falla(q("select public.ver_pedido($1)", [pV.token]), /permission denied/, "anon ve pedido"));
+  await servicio("select public.liberar_pedidos_vencidos()");
+  assert.equal(await stockDe(prod.id), 1);
+  await q("update public.productos set stock = 0 where id = $1", [prod.id]);
+  await como("ana", () => falla(q("select public.pedido_marcar_pagado($1)", [pV.pedido_id]), /SIN_STOCK/, "vencido sin stock"));
+  assert.equal((await pedidoDe(pV.pedido_id)).estado, "vencido");
+  await q("update public.productos set stock = 1 where id = $1", [prod.id]);
+  await como("ana", () => q("select public.pedido_marcar_pagado($1)", [pV.pedido_id]));
+  assert.equal((await pedidoDe(pV.pedido_id)).estado, "pagado");
+  assert.equal(await stockDe(prod.id), 0);
+
+  // El cliente cancela un pendiente por su token; uno entregado, no.
+  await q("update public.productos set stock = 1 where id = $1", [prod.id]);
+  const pR = await pedir(uno1, "Rita", "rita@test.com", "efectivo");
+  assert.equal(await stockDe(prod.id), 0);
+  await como("anon", () => falla(q("select public.cancelar_pedido_cliente($1)", [pR.token]), /permission denied/, "anon cancela"));
+  assert.equal((await servicio("select public.cancelar_pedido_cliente($1) as r", [pR.token]))[0].r, true);
+  assert.equal((await servicio("select public.cancelar_pedido_cliente($1) as r", [pR.token]))[0].r, false);
+  const porCliente = await pedidoDe(pR.pedido_id);
+  assert.deepEqual({ e: porCliente.estado, por: porCliente.cancelado_por }, { e: "cancelado", por: "cliente" });
+  assert.equal(await stockDe(prod.id), 1);
+  assert.equal((await servicio("select public.cancelar_pedido_cliente($1) as r", [pP.token]))[0].r, false);
+  assert.equal((await pedidoDe(pP.pedido_id)).estado, "entregado");
+
+  // Panel con el negocio apagado: solo lectura.
+  const pS = await pedir(uno1, "Sara", "sara@test.com", "efectivo");
+  await q("update public.negocios set suspendido_at = now() where id = $1", [negA]);
+  try {
+    await como("ana", () => falla(q("select public.pedido_marcar_pagado($1)", [pS.pedido_id]), /NEGOCIO_NO_HABILITADO/, "apagado"));
+    // El cliente sigue pudiendo cancelar.
+    assert.equal((await servicio("select public.cancelar_pedido_cliente($1) as r", [pS.token]))[0].r, true);
+  } finally {
+    await q("update public.negocios set suspendido_at = null where id = $1", [negA]);
+  }
+});
+
+await prueba("pedidos: tienda apagada o negocio que no toma reservas no recibe pedidos; con turno, efectivo hasta el día del turno", async () => {
+  const prod = await como("ana", () => uno("insert into public.productos (negocio_id, nombre, precio, stock) values ($1, 'Aceite', 4000, 10) returning id", [negA]));
+  const uno1 = [{ producto_id: prod.id, cantidad: 1 }];
+
+  await q("update public.negocios set tienda_activa = false where id = $1", [negA]);
+  await falla(pedir(uno1, "Tomás", "tomas@test.com", "efectivo"), /TIENDA_NO_DISPONIBLE/, "tienda apagada");
+  await q("update public.negocios set tienda_activa = true where id = $1", [negA]);
+
+  await q("update public.negocios set suspendido_at = now() where id = $1", [negA]);
+  try {
+    await falla(pedir(uno1, "Tomás", "tomas@test.com", "efectivo"), /NEGOCIO_NO_DISPONIBLE/, "dado de baja");
+  } finally {
+    await q("update public.negocios set suspendido_at = null where id = $1", [negA]);
+  }
+
+  // Transferencia sin alias ni CBU: no se ofrece.
+  await q("update public.negocios set transferencia_alias = null where id = $1", [negA]);
+  await falla(pedir(uno1, "Tomás", "tomas@test.com", "transferencia"), /TIENDA_NO_DISPONIBLE/, "sin alias");
+  await q("update public.negocios set transferencia_alias = 'peluqueria.ana' where id = $1", [negA]);
+  assert.equal(await stockDe(prod.id), 10);
+
+  // Un turno de un lunes (más de 3 días adelante): el efectivo vence al terminar ese día.
+  let turno;
+  for (const semanas of [1, 2, 3]) {
+    const fecha = (await uno("select ($1::date + $2::int * 7)::text as d", [lunes, semanas])).d;
+    const libre = (await como("anon", () => q("select * from public.horarios_libres($1, $2, $3::date, $4)", [negA, servA, fecha, profAna])))[0];
+    if (libre) {
+      turno = await reservar("select * from public.crear_reserva($1, $2, $3, $4, 'Tomás', '1166660000', 'tomas@test.com')", [negA, servA, profAna, libre.inicio]);
+      break;
+    }
+  }
+  assert.ok(turno?.token, "hay un horario libre");
+  const conTurno = await pedir(uno1, "Tomás", "tomas@test.com", "efectivo", turno.token);
+  const p = await pedidoDe(conTurno.pedido_id);
+  assert.equal(p.turno_id, turno.turno_id);
+  const fin = await uno(
+    `select ((t.inicio at time zone 'America/Argentina/Buenos_Aires')::date + 1)::timestamp at time zone 'America/Argentina/Buenos_Aires' as fin
+     from public.turnos t where t.id = $1`,
+    [turno.turno_id],
+  );
+  assert.equal(+p.vence_at, +fin.fin);
+  assert.ok(+p.vence_at > Date.now() + 3 * DIA);
+  const visto = (await servicio("select public.ver_pedido($1) as d", [conTurno.token]))[0].d;
+  assert.ok(visto.turno?.inicio, "ver_pedido muestra el turno");
+
+  // Un token de turno de otro negocio se ignora.
+  await q("update public.negocios set tienda_activa = true where id = $1", [negB]);
+  const deBeto = await uno("insert into public.productos (negocio_id, nombre, precio, stock) values ($1, 'Navaja', 9000, 2) returning id", [negB]);
+  try {
+    const ajeno = await pedir([{ producto_id: deBeto.id, cantidad: 1 }], "Tomás", "tomas@test.com", "efectivo", turno.token, negB);
+    const pa = await pedidoDe(ajeno.pedido_id);
+    assert.equal(pa.turno_id, null);
+    assert.equal(ajeno.numero, 1, "la numeración es por negocio");
+    const d = await uno("select round(extract(epoch from vence_at - created_at) / 86400) as d from public.pedidos where id = $1", [ajeno.pedido_id]);
+    assert.equal(Number(d.d), 3);
+  } finally {
+    await q("delete from public.pedidos where negocio_id = $1", [negB]);
+    await q("delete from public.productos where id = $1", [deBeto.id]);
+    await q("update public.negocios set tienda_activa = false where id = $1", [negB]);
+  }
+  // Un token de un turno cancelado tampoco.
+  await como("anon", () => q("select public.cancelar_turno_cliente($1)", [turno.token]));
+  const sinTurno = await pedir(uno1, "Tomás", "tomas@test.com", "efectivo", turno.token);
+  assert.equal((await pedidoDe(sinTurno.pedido_id)).turno_id, null);
 });
 
 await prueba("cuentas: borrar un usuario borra su perfil, sus sesiones y sus accesos", async () => {
